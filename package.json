@@ -1,0 +1,101 @@
+{
+  "name": "tassello",
+  "version": "0.1.0",
+  "description": "Web dashboard for ROS 2 robots: panels of widgets arranged in the browser, on any device, extensible with plugins",
+  "keywords": [
+    "ros",
+    "ros2",
+    "robot",
+    "robotics",
+    "dashboard",
+    "web",
+    "widgets",
+    "teleoperation",
+    "navigation",
+    "rclnodejs",
+    "plugins"
+  ],
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Antonio Brandi",
+    "email": "antonio.brandi@outlook.it"
+  },
+  "homepage": "https://github.com/AntoBrandi/tassello#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AntoBrandi/tassello.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AntoBrandi/tassello/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "tassello": "dist/server/cli.js"
+  },
+  "exports": {
+    "./sdk": {
+      "types": "./dist/types/client/sdk/index.d.ts"
+    },
+    "./server": {
+      "types": "./dist/server/api.d.ts",
+      "default": "./dist/server/api.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "default": "./dist/vite/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "panels",
+    "template",
+    "docs",
+    "CHANGELOG.md",
+    "!**/*.test.*"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "server": "node src/server/cli.ts",
+    "build": "npm run build:page && npm run build:node",
+    "build:page": "vite build",
+    "build:node": "node scripts/clean.ts dist/server dist/shared dist/vite dist/types && tsc -p tsconfig.build.json && tsc -p tsconfig.sdk.json",
+    "typecheck": "tsc -p src/client && tsc -p src/server",
+    "test": "node --test 'src/**/*.test.ts'",
+    "prepack": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "rclnodejs": "^2.3.0",
+    "sharp": "^0.35.5",
+    "ws": "^8.22.0"
+  },
+  "peerDependencies": {
+    "vite": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.186.1",
+    "typescript": "^7.0.2",
+    "urdf-loader": "^0.13.1",
+    "vite": "^8.3.4"
+  },
+  "allowScripts": {
+    "rclnodejs": true,
+    "es5-ext": false
+  }
+}

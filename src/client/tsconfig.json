@@ -1,0 +1,19 @@
+{
+  // Type checking only: Vite builds the page
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../shared/**/*.ts"],
+  // Run by node --test (npm test), typed by the server's configuration
+  "exclude": ["**/*.test.ts"]
+}

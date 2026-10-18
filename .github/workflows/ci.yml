@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # rclnodejs's install generates the ROS messages' JavaScript: it needs ROS
+    container: ros:jazzy
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: source /opt/ros/jazzy/setup.bash && npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # The template, against the package as it would be published
+      - name: Plugin template
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          npm pack --ignore-scripts --pack-destination /tmp
+          node dist/server/cli.js create-plugin /tmp/plugin
+          cd /tmp/plugin
+          npm install --no-audit --no-fund --save-dev /tmp/tassello-*.tgz
+          npm run typecheck
+          npm run build

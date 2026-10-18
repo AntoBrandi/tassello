@@ -1,0 +1,27 @@
+/* The page's classes (button, primary, widget-message, ...) and colours
+   (var(--accent), var(--text-muted), ...) are there to use. Prefix the
+   plugin's own, as they apply to the whole page. */
+
+.hello {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 12px;
+}
+
+.hello-message {
+  flex: 1;
+  overflow: auto;
+  font-size: 18px;
+}
+
+.hello-time {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.hello-actions {
+  display: flex;
+  gap: 8px;
+}

@@ -1,0 +1,31 @@
+name: Release
+
+# Publishes the package to npm when a version tag (v1.2.3) is pushed, through
+# npm's trusted publishing: set it up for this repository and workflow on
+# npmjs.com first (or add an NPM_TOKEN secret and pass it as NODE_AUTH_TOKEN)
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    container: ros:jazzy
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: source /opt/ros/jazzy/setup.bash && npm ci
+      - name: The tag is the package's version
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      # prepack type checks, tests and builds
+      - run: npm publish --provenance --access public

@@ -1,0 +1,37 @@
+{
+  "name": "Navigation",
+  "widgets": [
+    {
+      "id": "map",
+      "type": "navigation",
+      "title": "",
+      "x": 0,
+      "y": 0,
+      "w": 10,
+      "h": 8,
+      "config": {}
+    },
+    {
+      "id": "drive",
+      "type": "teleop",
+      "title": "",
+      "x": 10,
+      "y": 0,
+      "w": 5,
+      "h": 4,
+      "config": {}
+    },
+    {
+      "id": "camera",
+      "type": "camera",
+      "title": "",
+      "x": 10,
+      "y": 4,
+      "w": 5,
+      "h": 4,
+      "config": {
+        "topic": "/camera/image_raw"
+      }
+    }
+  ]
+}

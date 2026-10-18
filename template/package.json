@@ -1,0 +1,40 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "0.1.0",
+  "description": "A Tassello plugin",
+  "keywords": [
+    "tassello-plugin",
+    "ros2"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "tassello": {
+    "client": "dist/client/index.js",
+    "styles": [
+      "dist/client/index.css"
+    ],
+    "server": "dist/server/index.js"
+  },
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json --noEmit",
+    "prepack": "npm run typecheck && npm run build"
+  },
+  "peerDependencies": {
+    "tassello": "^__TASSELLO_VERSION__"
+  },
+  "peerDependenciesMeta": {
+    "tassello": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "tassello": "^__TASSELLO_VERSION__",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}

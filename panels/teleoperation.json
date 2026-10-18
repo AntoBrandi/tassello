@@ -1,0 +1,51 @@
+{
+  "name": "Teleoperation",
+  "widgets": [
+    {
+      "id": "drive",
+      "type": "teleop",
+      "title": "Drive",
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "config": {}
+    },
+    {
+      "id": "camera",
+      "type": "camera",
+      "title": "Camera",
+      "x": 6,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "topic": "/camera/image_raw"
+      }
+    },
+    {
+      "id": "model",
+      "type": "robot-model",
+      "title": "Robot",
+      "x": 12,
+      "y": 0,
+      "w": 6,
+      "h": 6,
+      "config": {}
+    },
+    {
+      "id": "nodes",
+      "type": "button",
+      "title": "",
+      "x": 0,
+      "y": 4,
+      "w": 6,
+      "h": 3,
+      "config": {
+        "label": "List ROS nodes",
+        "command": "ros2 node list",
+        "showOutput": true
+      }
+    }
+  ]
+}
