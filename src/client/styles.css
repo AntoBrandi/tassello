@@ -3493,3 +3493,641 @@ textarea {
   line-height: 18px;
   cursor: pointer;
 }
+
+/* ── Logs ──────────────────────────────────────────────────────────────────── */
+
+/* The levels' colours (--level of each), and their tints */
+.logs {
+  --log-debug: #5fb3a1;
+  --log-info: var(--accent);
+  --log-warn: var(--warning);
+  --log-error: var(--danger);
+  --log-fatal: #d56cff;
+  --log-warn-soft: rgb(240 160 32 / 9%);
+  --log-error-soft: rgb(240 82 82 / 11%);
+  --log-fatal-soft: rgb(213 108 255 / 16%);
+  container-type: inline-size;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Short, a message's details take the place of the list, kept as it was */
+.logs.cramped .logs-main {
+  display: none;
+}
+
+.logs.cramped .logs-details {
+  flex: 1 1 auto;
+  max-height: none;
+  border-top: 0;
+}
+
+/* Darker on white, to be read */
+@media (prefers-color-scheme: light) {
+  .logs {
+    --log-debug: #2c8270;
+    --log-warn: #a86400;
+    --log-error: #cf2f2f;
+    --log-fatal: #9327c4;
+    --log-warn-soft: rgb(240 160 32 / 11%);
+    --log-error-soft: rgb(240 82 82 / 10%);
+    --log-fatal-soft: rgb(147 39 196 / 12%);
+  }
+}
+
+.logs .debug {
+  --level: var(--log-debug);
+}
+
+.logs .info {
+  --level: var(--log-info);
+}
+
+.logs .warn {
+  --level: var(--log-warn);
+  --level-soft: var(--log-warn-soft);
+}
+
+.logs .error {
+  --level: var(--log-error);
+  --level-soft: var(--log-error-soft);
+}
+
+.logs .fatal {
+  --level: var(--log-fatal);
+  --level-soft: var(--log-fatal-soft);
+}
+
+.logs-toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logs-toolbar-end {
+  flex: 1;
+}
+
+.logs-levels {
+  display: flex;
+  gap: 3px;
+}
+
+.logs-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.logs-level:hover {
+  background: var(--surface-3);
+}
+
+.logs-level[aria-pressed='true'] {
+  border-color: var(--level);
+  color: var(--text);
+}
+
+.logs-level-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--level);
+}
+
+.logs-level[aria-pressed='true'] .logs-level-dot {
+  background: var(--level);
+}
+
+.logs-level-count {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.logs-level-letter {
+  display: none;
+}
+
+/* The text filters and the actions: beside the levels, or on a row of their
+   own, together */
+.logs-tools {
+  display: flex;
+  flex: 1 1 300px;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.logs-tools .overlay-separator {
+  margin-left: auto;
+}
+
+.logs-search {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  min-width: 60px;
+  max-width: 240px;
+}
+
+.logs-search svg {
+  position: absolute;
+  left: 8px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.logs-search input {
+  height: 28px;
+  padding: 0 6px 0 27px;
+  font-size: 12.5px;
+}
+
+.logs-search.invalid input {
+  border-color: var(--danger);
+  outline-color: var(--danger-soft);
+}
+
+.logs-regex {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  font: 700 12px var(--mono);
+}
+
+/* Three rows at least: a message's details give way first */
+.logs-main {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 66px;
+}
+
+.logs-nodes {
+  display: flex;
+  flex: 0 0 210px;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+/* Narrow: over the messages */
+.logs-nodes.overlay {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 2;
+  width: min(260px, 88%);
+  box-shadow: var(--shadow);
+  animation: fade-in 0.12s ease-out;
+}
+
+.logs-nodes-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 0 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.logs-nodes-header > span {
+  flex: 1;
+}
+
+.logs-nodes-header .link-button {
+  padding: 0 4px;
+  font-size: 11.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.logs-nodes-header .link-button:disabled {
+  color: var(--text-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.logs-nodes-header .overlay-button {
+  width: 26px;
+  height: 26px;
+}
+
+.logs-nodes ul {
+  flex: 1;
+  margin: 0;
+  padding: 0 4px 6px;
+  overflow: auto;
+  list-style: none;
+}
+
+.logs-nodes-empty {
+  margin: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.logs-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.logs-node:hover {
+  background: var(--surface-3);
+}
+
+.logs-node[aria-pressed='true'] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.logs-node-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.logs-node.gone .logs-node-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+
+.logs-node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logs-node.gone .logs-node-name {
+  color: var(--text-muted);
+}
+
+.logs-node-badge {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--level-soft);
+  color: var(--level);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.logs-node-count {
+  flex: none;
+  min-width: 3ch;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rows are placed by LogList.tsx, at --log-row */
+.logs-list {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  font: 12px var(--mono);
+  overscroll-behavior: contain;
+}
+
+.logs-list:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.logs-rows {
+  position: relative;
+}
+
+.logs-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 12px;
+  color: var(--text-muted);
+  font: 13px var(--font);
+  text-align: center;
+}
+
+.log-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--log-row);
+  padding: 0 8px 0 7px;
+  border-left: 3px solid transparent;
+  background: var(--level-soft, none);
+  line-height: var(--log-row);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.log-row:hover {
+  background: var(--surface-2);
+}
+
+.log-row.selected {
+  background: var(--accent-soft);
+}
+
+.log-row.warn,
+.log-row.error,
+.log-row.fatal {
+  border-left-color: var(--level);
+}
+
+.log-time {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-level {
+  flex: none;
+  width: 5ch;
+  color: var(--level);
+  font-weight: 700;
+}
+
+.log-node {
+  flex: none;
+  width: var(--log-node);
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+}
+
+.log-msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-row.debug .log-msg {
+  color: var(--text-muted);
+}
+
+.log-row.warn .log-msg,
+.log-row.error .log-msg,
+.log-row.fatal .log-msg {
+  color: var(--level);
+}
+
+.log-row.fatal .log-msg {
+  font-weight: 700;
+}
+
+.log-more {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+/* Two lines: its level, node and time, then its text */
+.logs-list.compact .log-row {
+  display: grid;
+  grid-template-areas:
+    'level node more time'
+    'msg msg msg msg';
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-content: center;
+  gap: 1px 8px;
+  border-bottom: 1px solid var(--border);
+  line-height: 16px;
+}
+
+.logs-list.compact .log-level {
+  grid-area: level;
+  width: auto;
+  font-size: 10.5px;
+}
+
+.logs-list.compact .log-node {
+  grid-area: node;
+  width: auto;
+  font-size: 11px;
+}
+
+.logs-list.compact .log-more {
+  grid-area: more;
+}
+
+.logs-list.compact .log-time {
+  grid-area: time;
+  font-size: 10.5px;
+}
+
+.logs-list.compact .log-msg {
+  grid-area: msg;
+}
+
+.logs-details {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  max-height: 45%;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.logs-details-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 4px 3px 10px;
+}
+
+.logs-pill {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--level-soft, var(--surface-3));
+  color: var(--level);
+  font: 700 10.5px/18px var(--mono);
+}
+
+.logs-details-node {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logs-details-msg {
+  flex: 0 1 auto;
+  min-height: 24px;
+  margin: 0 10px;
+  padding: 6px 8px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--level);
+  border-radius: 6px;
+  background: var(--bg);
+  font: 12px/1.45 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.logs-details-facts {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 6px 10px 8px;
+  font-size: 11.5px;
+}
+
+.logs-details-facts div {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.logs-details-facts dt {
+  color: var(--text-muted);
+}
+
+.logs-details-facts dd {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.logs-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.logs-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logs-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.logs-status.streaming .logs-dot {
+  background: var(--success);
+}
+
+.logs-status.paused {
+  color: var(--text);
+}
+
+.logs-status.paused .logs-dot {
+  background: var(--warning);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.logs-status.error {
+  color: var(--danger);
+}
+
+.logs-status.error .logs-dot {
+  background: var(--danger);
+}
+
+@container (max-width: 560px) {
+  .logs-level-name {
+    display: none;
+  }
+
+  /* The letter in the level's colour, for the dot */
+  .logs-level-letter {
+    display: inline;
+    color: var(--level);
+  }
+
+  .logs-level-dot {
+    display: none;
+  }
+
+  .logs-level {
+    gap: 4px;
+    padding: 0 6px;
+  }
+
+  .logs-level[aria-pressed='false'] .logs-level-letter {
+    color: var(--text-muted);
+  }
+
+  .logs-tools .overlay-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .logs-tools .overlay-separator {
+    display: none;
+  }
+}

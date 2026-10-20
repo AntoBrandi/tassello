@@ -14,6 +14,7 @@ import { behaviorTreeWidget } from './behavior_tree/BehaviorTreeWidget.tsx';
 import { buttonWidget } from './ButtonWidget.tsx';
 import { cameraWidget } from './CameraWidget.tsx';
 import { imageWidget } from './ImageWidget.tsx';
+import { logsWidget } from './logs/LogsWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
@@ -33,6 +34,7 @@ const CORE: RegisteredWidget[] = [
   applicationsWidget,
   behaviorTreeWidget,
   behaviorTreeEditorWidget,
+  logsWidget,
 ];
 
 const registry = new WidgetRegistry(CORE);

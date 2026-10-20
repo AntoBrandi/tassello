@@ -84,7 +84,7 @@ async function listScope(scope: ServiceScope, glob: string): Promise<ServiceInfo
   }
   const shown = await systemctl(scope, [
     'show',
-    '--timestamp=unix',
+    '--timestamp=utc',
     '--property=Id,Description,LoadState,ActiveState,SubState,Result,UnitFileState,StateChangeTimestamp',
     ...units,
   ]);

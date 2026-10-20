@@ -217,3 +217,36 @@ export const FilmIcon = icon(
     <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
   </>,
 );
+// Lines of a log, the last ones of note: the logs widget
+export const LogsIcon = icon(
+  <>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M7 8h10M7 12h6M7 16h8" />
+    <circle cx="17.5" cy="16" r="1" fill="currentColor" stroke="none" />
+  </>,
+);
+// Nodes of the ROS graph
+export const NodesIcon = icon(
+  <>
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="18" cy="9" r="2.5" />
+    <circle cx="9" cy="18" r="2.5" />
+    <path d="M8.4 6.7 15.6 8.4M16.5 11.1l-5.6 5.1M6.6 8.4l1.8 7.1" />
+  </>,
+);
+export const SearchIcon = icon(
+  <>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.3-4.3" />
+  </>,
+);
+export const BanIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="m6 6 12 12" />
+  </>,
+);
+export const FilterIcon = icon(<path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5Z" />);
+export const DownloadIcon = icon(<path d="M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />);
+// To the newest, at the bottom
+export const ArrowDownToLineIcon = icon(<path d="M12 4v12M7 11l5 5 5-5M5 20h14" />);

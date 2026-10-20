@@ -300,6 +300,18 @@ export interface BehaviorTreeFileSave {
   create: boolean;
 }
 
+// The ROS log: the rcl_interfaces/msg/Log every node's logger publishes on
+// /rosout. The messages the server keeps (the latest ROSOUT_HISTORY), then the
+// new ones, at most ROSOUT_RATE times a second, and the nodes of the ROS graph
+// whenever they change, as rosout updates. The server follows the log for
+// every page at once, and for a while after the last one: a page opened later
+// sees what was logged before. Its status comes as stream.status.
+export interface RosoutSubscribe {
+  type: 'rosout.subscribe';
+  id: number;
+  topic: string;
+}
+
 export type ClientMessage =
   | TwistCommand
   | ImageSubscribe
@@ -326,7 +338,8 @@ export type ClientMessage =
   | BehaviorTreePlaybackSubscribe
   | BehaviorTreePlaybackControl
   | BehaviorTreeFileSubscribe
-  | BehaviorTreeFileSave;
+  | BehaviorTreeFileSave
+  | RosoutSubscribe;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -646,6 +659,44 @@ export interface BehaviorTreeSaved {
   conflict: boolean;
 }
 
+// A message of the ROS log (rcl_interfaces/msg/Log)
+export interface LogEntry {
+  // Numbered by the server as they come, from 1: what the page knows them by
+  seq: number;
+  // On the clock of its node (ms since the epoch; since the simulation's
+  // start on sim time)
+  stamp: number;
+  // DEBUG 10, INFO 20, WARN 30, ERROR 40, FATAL 50
+  level: number;
+  // Its logger: the node's name after its namespace, dots for slashes
+  // (robot1.amcl for /robot1/amcl), then its child loggers' (robot1.amcl.x)
+  name: string;
+  msg: string;
+  // Where it was logged
+  file: string;
+  function: string;
+  line: number;
+}
+
+// Of a rosout subscription
+export interface RosoutUpdate {
+  type: 'rosout';
+  id: number;
+  // entries are the messages the server keeps, which replace those of before,
+  // instead of following them
+  reset: boolean;
+  // When the server started keeping this log, on its clock: another one
+  // numbers its messages from 1 again
+  started: number;
+  // Oldest first
+  entries: LogEntry[];
+  // Messages left out before entries: too many came at once
+  skipped: number;
+  // The nodes of the ROS graph (/robot1/amcl), with every reset and when they
+  // change; null: as before. Hidden nodes (_name) are left out.
+  nodes: string[] | null;
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -666,6 +717,7 @@ export type ServerMessage =
   | BehaviorTreePlaybackState
   | BehaviorTreeFile
   | BehaviorTreeModels
+  | RosoutUpdate
   | PanelsChanged
   | ErrorMessage;
 
@@ -697,6 +749,9 @@ export interface GridInfo {
 export const TELEOP_WATCHDOG_MS = 500;
 export const ARM_STATE_RATE = 10;
 export const BT_RATE = 10;
+export const ROSOUT_RATE = 10;
+// Messages of the ROS log kept by the server, and by the page
+export const ROSOUT_HISTORY = 10_000;
 export const DASHBOARD_CLIENT_HEADER = 'X-Dashboard-Client';
 
 // A plugin, as GET /api/plugins lists them

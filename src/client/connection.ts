@@ -29,6 +29,8 @@ import {
   type PathSubscribe,
   type PathUpdate,
   type PluginSubscribe,
+  type RosoutSubscribe,
+  type RosoutUpdate,
   type ServerMessage,
   type ServiceScope,
   type ServicesSubscribe,
@@ -54,6 +56,7 @@ export type BehaviorTreeOptions = Omit<BehaviorTreeSubscribe, 'type' | 'id'>;
 export type BehaviorTreePlaybackOptions = Omit<BehaviorTreePlaybackSubscribe, 'type' | 'id'>;
 export type BehaviorTreePlaybackRequest = Omit<BehaviorTreePlaybackControl, 'type' | 'id'>;
 export type BehaviorTreeFileOptions = Omit<BehaviorTreeFileSubscribe, 'type' | 'id'>;
+export type RosoutOptions = Omit<RosoutSubscribe, 'type' | 'id'>;
 
 export interface TopicHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
@@ -76,6 +79,12 @@ export interface BehaviorTreeFileHandlers {
   file: (file: BehaviorTreeFile) => void;
   // The nodes it can use
   models: (models: BehaviorTreeModels) => void;
+}
+
+export interface RosoutHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // The messages, and the nodes of the graph when they change
+  update: (update: RosoutUpdate) => void;
 }
 
 // A frame's source size (see FRAME_HEADER_BYTES) and metadata, e.g. GridInfo
@@ -111,7 +120,8 @@ type Request =
   | Omit<PluginSubscribe, 'id'>
   | Omit<BehaviorTreeSubscribe, 'id'>
   | Omit<BehaviorTreePlaybackSubscribe, 'id'>
-  | Omit<BehaviorTreeFileSubscribe, 'id'>;
+  | Omit<BehaviorTreeFileSubscribe, 'id'>
+  | Omit<RosoutSubscribe, 'id'>;
 
 interface Subscription {
   request: Request;
@@ -125,6 +135,7 @@ interface Subscription {
   plugin?: PluginStreamHandlers;
   behaviorTree?: BehaviorTreeHandlers;
   behaviorTreeFile?: BehaviorTreeFileHandlers;
+  rosout?: RosoutHandlers;
 }
 
 const MIN_RETRY_MS = 500;
@@ -282,6 +293,13 @@ export class Connection {
     return this.result<BehaviorTreeSaved>(id, sent, REQUEST_TIMEOUT_MS);
   }
 
+  // The ROS log (rcl_interfaces/msg/Log, /rosout): the messages the server
+  // keeps, then the new ones, and the nodes of the graph. Renewed on every
+  // connection with a reset update.
+  subscribeRosout(options: RosoutOptions, handlers: RosoutHandlers): () => void {
+    return this.subscribe({ type: 'rosout.subscribe', ...options }, { rosout: handlers });
+  }
+
   // Resolves with systemctl's error, or null once done
   serviceAction(unit: string, scope: ServiceScope, verb: ServiceVerb): Promise<string | null> {
     const id = this.nextId++;
@@ -411,7 +429,10 @@ export class Connection {
         break;
       case 'stream.status': {
         const subscription = this.subscriptions.get(message.id);
-        (subscription?.stream ?? subscription?.topic ?? subscription?.behaviorTree)?.status(message.state, message.message);
+        (subscription?.stream ?? subscription?.topic ?? subscription?.behaviorTree ?? subscription?.rosout)?.status(
+          message.state,
+          message.message,
+        );
         subscription?.plugin?.status?.(message.state, message.message);
         break;
       }
@@ -467,6 +488,9 @@ export class Connection {
         break;
       case 'bt.models':
         this.subscriptions.get(message.id)?.behaviorTreeFile?.models(message);
+        break;
+      case 'rosout':
+        this.subscriptions.get(message.id)?.rosout?.update(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

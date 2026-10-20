@@ -24,6 +24,7 @@ import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
 import type { Ros } from './ros.ts';
+import type { Rosout } from './rosout.ts';
 import type { FrameStreams } from './streams.ts';
 import type { SystemdServices } from './systemd.ts';
 import type { Teleop } from './teleop.ts';
@@ -42,6 +43,7 @@ export interface SessionServices {
   systemd: SystemdServices;
   arm: Arm;
   ros: Ros;
+  rosout: Rosout;
   behaviorTrees: BehaviorTrees;
   behaviorTreeFiles: BehaviorTreeFiles;
   plugins: PluginHost;
@@ -340,6 +342,19 @@ export class Session implements FrameSink, PluginSession {
           ),
         );
         return;
+
+      case 'rosout.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.rosout.watch(string(message.topic, 'topic'), {
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onUpdate: (update) => this.send({ type: 'rosout', id, ...update }),
+          }),
+        );
+        return;
+      }
 
       case 'arm.subscribe': {
         const id = subscriptionId(message.id);

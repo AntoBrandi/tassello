@@ -43,7 +43,25 @@ export function loadedUnits(output: string): string[] {
     .filter((unit) => unit?.endsWith('.service'));
 }
 
-// systemctl show --timestamp=unix: a block of key=value lines per unit
+// A timestamp of systemctl show, in ms: --timestamp=utc's "Tue 2026-10-20
+// 10:46:16 UTC" (systemd 244 on, as Ubuntu 22.04's 249: --timestamp=unix's
+// "@1792500000" needs 251), or --timestamp=unix's; null if none ("", "n/a")
+export function showTimestamp(value: string | undefined): number | null {
+  const unix = /^@(\d+)$/.exec(value ?? '');
+  if (unix) {
+    return Number(unix[1]) * 1000;
+  }
+  const utc = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))? UTC$/.exec(value ?? '');
+  if (!utc) {
+    return null;
+  }
+  const [year, month, day, hours, minutes, seconds] = utc.slice(1, 7).map(Number);
+  // us+utc's microseconds
+  const ms = Math.floor(Number(`0.${utc[7] ?? '0'}`) * 1000);
+  return Date.UTC(year, month - 1, day, hours, minutes, seconds, ms);
+}
+
+// systemctl show --timestamp=utc: a block of key=value lines per unit
 export function shownServices(output: string, scope: ServiceScope, self: string | null): ServiceInfo[] {
   return output
     .split(/\n\s*\n/)
@@ -59,7 +77,6 @@ export function shownServices(output: string, scope: ServiceScope, self: string 
     })
     .filter((properties) => properties.has('Id'))
     .map((p) => {
-      const since = /^@(\d+)/.exec(p.get('StateChangeTimestamp') ?? '');
       return {
         unit: p.get('Id')!,
         scope,
@@ -69,7 +86,7 @@ export function shownServices(output: string, scope: ServiceScope, self: string 
         sub: p.get('SubState') ?? '',
         result: p.get('Result') ?? '',
         enabled: p.get('UnitFileState') ?? '',
-        since: since ? Number(since[1]) * 1000 : null,
+        since: showTimestamp(p.get('StateChangeTimestamp')),
         self: p.get('Id') === self,
       };
     });

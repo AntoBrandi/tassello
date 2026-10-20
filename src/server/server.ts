@@ -25,6 +25,7 @@ import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
 import { Poses } from './poses.ts';
 import { Ros } from './ros.ts';
+import { Rosout } from './rosout.ts';
 import { Session } from './session.ts';
 import { FrameStreams } from './streams.ts';
 import { SystemdServices } from './systemd.ts';
@@ -114,6 +115,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const systemd = new SystemdServices(logger);
   const arm = new Arm(node, topics, logger);
   const ros = new Ros(node);
+  const rosout = new Rosout(node, logger);
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
   const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
@@ -164,6 +166,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       systemd,
       arm,
       ros,
+      rosout,
       behaviorTrees,
       behaviorTreeFiles,
       plugins: host,

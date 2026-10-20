@@ -10,8 +10,8 @@ and plugins add more.
 - **Panels of widgets** on a grid: add, move and resize them in the browser, no code or config files.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
-  images, command buttons, a systemd application manager, and a behavior tree inspector and
-  editor.
+  images, command buttons, a systemd application manager, a behavior tree inspector and
+  editor, and the ROS log of every node.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -116,6 +116,7 @@ after the others on the devices already arranged.
 | **Application Manager** | The robot's systemd services matching a name: their state, whether they start at boot, buttons to start, stop and restart them, and their journal |
 | **Behavior Tree Inspector** | What a BT.CPP behavior tree is doing, from its log (Nav2's `/behavior_tree_log`): the tree of its XML file with the running branch lit, each node's status, last result, counts and ports, and the latest transitions. As a graph (pan, zoom, follow the running nodes) or a list. Records the log into rosbags, and plays rosbags back at any speed |
 | **Behavior Tree Editor** | Edits a BT.CPP behavior tree's XML file of the robot as a graph: nodes from a palette (BT.CPP's, Nav2's, your libraries'), dragged where they go, moved with their children, their names and ports edited in a side panel. Subtrees, undo and redo, copy and paste, an XML view. Saves only what changed, never over changes made meanwhile |
+| **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -194,6 +195,20 @@ Notes on some of them:
   editor asks which to keep, and a save over a file changed since it was read is refused.
   Uploads, and files the server cannot write, are saved elsewhere with *Save as*. The editor keeps
   its changes while the page is open, and the page asks before closing with changes not saved.
+- **Logs** follows `/rosout` (`rcl_interfaces/msg/Log`), on which every node's logger publishes.
+  Its list of nodes has those running in the ROS graph and those that logged, with their
+  warnings and errors: choose some to see only theirs. A node's logger is named after it, dots
+  for slashes (`robot1.amcl` for `/robot1/amcl`). The level buttons show and hide each level
+  (Shift+click: that level only); *Include* and *Exclude* keep or drop the messages containing any
+  of their terms, separated by `;`, or matching a regular expression. Pausing holds the list while
+  the new messages wait; clearing empties it for this page. A message clicked shows whole, with its
+  file, line and function; the arrow keys go through the list. *Download* saves the messages shown
+  as ROS prints them (`[WARN] [1729435407.512346] [robot1.amcl]: ...`). The widget's properties
+  set its nodes (names or globs, e.g. `amcl, *_server`: one widget per subsystem), the levels and
+  filters it opens with, and the time shown: the clock, ROS stamps, or none. The server follows the
+  log for every page, keeping its latest 10,000 messages, and for 10 minutes after the last page
+  closes: a page opened later sees what was logged meanwhile, and when first opened, what each
+  node logged in its last 10 seconds (rosout's own history).
 
 ## Plugins
 
@@ -252,6 +267,9 @@ Safety and bandwidth are the server's concern:
   publishers; TF only while a page shows the robot.
 - Behavior tree logs, streams of transitions, are followed whole, none dropped: each page gets
   the nodes that changed, at most 10 times a second, however fast the tree ticks.
+- The ROS log is followed once for every page: each gets the new messages at most 10 times a
+  second, at most 500 at a time (a node logging faster has some skipped, which the page shows).
+  Only the rows in sight are drawn.
 - A button runs the command saved in its panel, never one sent by the page.
 
 ## Developing

@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { checkUnit, journalLine, loadedUnits, ownUnit, serviceGlob, shownServices, unitFiles } from './systemd_format.ts';
+import {
+  checkUnit,
+  journalLine,
+  loadedUnits,
+  ownUnit,
+  serviceGlob,
+  showTimestamp,
+  shownServices,
+  unitFiles,
+} from './systemd_format.ts';
 
 test('names and globs become service globs', () => {
   assert.equal(serviceGlob('dieletrikbot'), 'dieletrikbot*.service');
@@ -38,11 +47,11 @@ test('systemctl show blocks become services', () => {
     'ActiveState=failed',
     'SubState=failed',
     'UnitFileState=enabled',
-    'StateChangeTimestamp=@1791900000',
+    'StateChangeTimestamp=Fri 2026-10-16 10:40:00 UTC',
     '',
     'Id=dieletrikbot-web.service',
     'ActiveState=active',
-    'StateChangeTimestamp=',
+    'StateChangeTimestamp=n/a',
   ].join('\n');
   const [laser, web] = shownServices(output, 'system', 'dieletrikbot-web.service');
   assert.deepEqual(laser, {
@@ -54,7 +63,7 @@ test('systemctl show blocks become services', () => {
     sub: 'failed',
     result: 'exit-code',
     enabled: 'enabled',
-    since: 1791900000000,
+    since: 1792147200000,
     self: false,
   });
   assert.equal(web.since, null);
@@ -77,4 +86,17 @@ test('journal lines lose their date, host and process', () => {
     '08:31:02 [INFO] [1.2] [node]: up: ok',
   );
   assert.equal(journalLine('-- No entries --'), '-- No entries --');
+});
+
+test('systemctl show timestamps: utc (systemd 244 on), unix (251 on), none', () => {
+  assert.equal(showTimestamp('Tue 2026-10-20 10:46:16 UTC'), Date.UTC(2026, 9, 20, 10, 46, 16));
+  // Whatever the locale's day names
+  assert.equal(showTimestamp('Di 2026-10-20 10:46:16 UTC'), Date.UTC(2026, 9, 20, 10, 46, 16));
+  assert.equal(showTimestamp('Tue 2026-10-20 10:46:16.123456 UTC'), Date.UTC(2026, 9, 20, 10, 46, 16, 123));
+  assert.equal(showTimestamp('@1792500000'), 1792500000000);
+  assert.equal(showTimestamp('n/a'), null);
+  assert.equal(showTimestamp(''), null);
+  assert.equal(showTimestamp(undefined), null);
+  // Not UTC: not guessed
+  assert.equal(showTimestamp('Tue 2026-10-20 12:46:16 CEST'), null);
 });

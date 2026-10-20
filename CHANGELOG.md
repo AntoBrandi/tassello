@@ -21,6 +21,13 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   `recordBehaviorTree`, `subscribeBehaviorTreePlayback`, `controlBehaviorTreePlayback`,
   `subscribeBehaviorTreeFile`, `saveBehaviorTreeFile`.
 - Uploads take behavior trees (XML) as well as images.
+- Logs widget: the ROS log (`/rosout`), as rqt_console and swri_console show it: every node's
+  messages coloured by level, the nodes running and those that logged with their counts, filters
+  by node, level and text (terms or regular expressions, to show or to hide), pause, follow,
+  clear, download, and a message's details. A widget can be for some nodes only (`amcl,
+  *_server`). The server follows the log for every page and keeps its latest 10,000 messages.
+- Plugins: `connection.subscribeRosout`, and the `LogsIcon`, `NodesIcon`, `SearchIcon`,
+  `BanIcon`, `FilterIcon`, `DownloadIcon` and `ArrowDownToLineIcon` icons.
 
 ## 0.1.0
 
