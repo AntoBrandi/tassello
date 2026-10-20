@@ -157,6 +157,7 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `subscribeBehaviorTreePlayback({ bag, topic, tree }, handlers)` | A rosbag's log played back, as `subscribeBehaviorTree` follows a live one, with `playback(state)`: returns `{ id, unsubscribe }` |
 | `controlBehaviorTreePlayback(id, { playing?, speed?, time? })` | Plays, pauses, sets the speed of, or seeks the playback |
 | `subscribeRosout({ topic }, { update, status })` | The ROS log (`rcl_interfaces/msg/Log`, `topic` usually `/rosout`): the messages the server keeps, then the new ones, and the nodes of the ROS graph (see `RosoutUpdate` in `src/shared/protocol.ts`). Returns the unsubscribe function |
+| `subscribeDiagnostics({ topic }, { update, status })` | The robot's diagnostics (`diagnostic_msgs/msg/DiagnosticArray`, `topic` usually `/diagnostics` or `/diagnostics_agg`): the statuses the server keeps, the latest of each name, stale once no longer received, and their latest changes of level, then those that changed (see `DiagnosticsUpdate` in `src/shared/protocol.ts`). Returns the unsubscribe function |
 | `subscribeBehaviorTreeFile({ path, libraries }, { file, models })` | A behavior tree's XML file: its text and version, again whenever it changes, and the node models it can use (Nav2's, its includes', the libraries') |
 | `saveBehaviorTreeFile(path, text, base, create?)` | Saves a behavior tree's XML file if still of the version `base` (`null`: whatever it is), or as a new file: resolves with `{ version, conflict }` |
 | `serverNow()` | Now, on the robot's clock |

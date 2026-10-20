@@ -11,7 +11,7 @@ and plugins add more.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
-  editor, and the ROS log of every node.
+  editor, the ROS log of every node, and the robot's diagnostics.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -117,6 +117,7 @@ after the others on the devices already arranged.
 | **Behavior Tree Inspector** | What a BT.CPP behavior tree is doing, from its log (Nav2's `/behavior_tree_log`): the tree of its XML file with the running branch lit, each node's status, last result, counts and ports, and the latest transitions. As a graph (pan, zoom, follow the running nodes) or a list. Records the log into rosbags, and plays rosbags back at any speed |
 | **Behavior Tree Editor** | Edits a BT.CPP behavior tree's XML file of the robot as a graph: nodes from a palette (BT.CPP's, Nav2's, your libraries'), dragged where they go, moved with their children, their names and ports edited in a side panel. Subtrees, undo and redo, copy and paste, an XML view. Saves only what changed, never over changes made meanwhile |
 | **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
+| **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -209,6 +210,24 @@ Notes on some of them:
   log for every page, keeping its latest 10,000 messages, and for 10 minutes after the last page
   closes: a page opened later sees what was logged meanwhile, and when first opened, what each
   node logged in its last 10 seconds (rosout's own history).
+- **Diagnostics** follows a `diagnostic_msgs/msg/DiagnosticArray` topic: `/diagnostics`, on which
+  every node's `diagnostic_updater` publishes its statuses (named `node: task`, grouped by node),
+  or `/diagnostics_agg`, the aggregator's tree of them (`/Robot/Sensors/Lidar`). A group shows the
+  worst level under it; one the aggregator puts in error only because some statuses under it are
+  stale shows as stale. A status not received for 5 s, or for 3 of its periods if it is slower, is
+  stale: what published it stopped. The level buttons show and hide each level (Shift+click: that
+  level only), counting the statuses, not the groups that sum them up; *Filter* keeps the statuses
+  whose name, message or hardware ID contain any of its terms, separated by `;`, or match a
+  regular expression, and a group's with all those under it. The groups with problems unfold, and
+  stay unfolded once these are gone, until folded; the arrow keys go through the tree and fold
+  and unfold it. A status clicked shows its message, hardware ID, values and latest changes of
+  level. Pausing holds the statuses as they are; *Forget* hides those no longer published, until
+  they are again; *Download* saves the statuses shown, the worst first, with their values (or the
+  changes shown). The widget's properties set its statuses (names, paths or globs, e.g.
+  `Sensors, motor_*`: from the root if they start with `/`, else at any depth), and the levels,
+  filter and view it opens with. The server follows the diagnostics for every page, and for 10
+  minutes after the last page closes, keeping the latest status of each name and their latest
+  1,000 changes of level.
 
 ## Plugins
 
@@ -270,6 +289,9 @@ Safety and bandwidth are the server's concern:
 - The ROS log is followed once for every page: each gets the new messages at most 10 times a
   second, at most 500 at a time (a node logging faster has some skipped, which the page shows).
   Only the rows in sight are drawn.
+- Diagnostics are followed once for every page: each gets the statuses that changed, at most 4
+  times a second, not those received the same again. Subscribed best effort, they come from
+  every publisher, whatever its QoS.
 - A button runs the command saved in its panel, never one sent by the page.
 
 ## Developing

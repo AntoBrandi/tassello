@@ -250,3 +250,12 @@ export const FilterIcon = icon(<path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5Z" />);
 export const DownloadIcon = icon(<path d="M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />);
 // To the newest, at the bottom
 export const ArrowDownToLineIcon = icon(<path d="M12 4v12M7 11l5 5 5-5M5 20h14" />);
+// A pulse, in a frame: the diagnostics widget
+export const DiagnosticsIcon = icon(
+  <>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M6.5 12.5h2.5l1.8-4.5 2.6 8 1.8-3.5h2.3" />
+  </>,
+);
+// Chevrons apart: every group unfolded
+export const UnfoldIcon = icon(<path d="m7 15 5 5 5-5M7 9l5-5 5 5" />);

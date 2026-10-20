@@ -28,6 +28,14 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   *_server`). The server follows the log for every page and keeps its latest 10,000 messages.
 - Plugins: `connection.subscribeRosout`, and the `LogsIcon`, `NodesIcon`, `SearchIcon`,
   `BanIcon`, `FilterIcon`, `DownloadIcon` and `ArrowDownToLineIcon` icons.
+- Diagnostics widget: the robot's diagnostics (`diagnostic_msgs/msg/DiagnosticArray`), from every
+  node's `diagnostic_updater` (`/diagnostics`, by node) or the aggregator's tree
+  (`/diagnostics_agg`): each status's level, message, hardware ID and values, the groups with the
+  worst under them, as a tree, as a list or as the latest changes of level, filtered by level and
+  text. A widget can be for some statuses only (`Sensors, motor_*`). The server follows the
+  diagnostics for every page, marks stale the statuses no longer received, and keeps their changes
+  of level.
+- Plugins: `connection.subscribeDiagnostics`, and the `DiagnosticsIcon` and `UnfoldIcon` icons.
 
 ## 0.1.0
 

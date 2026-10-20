@@ -19,6 +19,7 @@ import { Arm } from './arm.ts';
 import { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import { BehaviorTrees } from './behavior_trees.ts';
 import { CommandRunner } from './commands.ts';
+import { Diagnostics } from './diagnostics.ts';
 import { createRequestHandler } from './http.ts';
 import { PanelStore } from './panels.ts';
 import { Paths } from './paths.ts';
@@ -116,6 +117,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const arm = new Arm(node, topics, logger);
   const ros = new Ros(node);
   const rosout = new Rosout(node, logger);
+  const diagnostics = new Diagnostics(node, logger);
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
   const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
@@ -167,6 +169,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       arm,
       ros,
       rosout,
+      diagnostics,
       behaviorTrees,
       behaviorTreeFiles,
       plugins: host,

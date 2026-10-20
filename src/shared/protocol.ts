@@ -312,6 +312,19 @@ export interface RosoutSubscribe {
   topic: string;
 }
 
+// The robot's diagnostics: the diagnostic_msgs/msg/DiagnosticArray of a topic,
+// /diagnostics (every node's diagnostic_updater) or /diagnostics_agg (the
+// aggregator's tree). The statuses the server keeps, the latest of each name,
+// and their latest changes of level (DIAGNOSTICS_CHANGES), then those that
+// changed, at most DIAGNOSTICS_RATE times a second, as diagnostics updates.
+// The server follows the topic for every page at once, and for a while after
+// the last one. Its status comes as stream.status.
+export interface DiagnosticsSubscribe {
+  type: 'diagnostics.subscribe';
+  id: number;
+  topic: string;
+}
+
 export type ClientMessage =
   | TwistCommand
   | ImageSubscribe
@@ -339,7 +352,8 @@ export type ClientMessage =
   | BehaviorTreePlaybackControl
   | BehaviorTreeFileSubscribe
   | BehaviorTreeFileSave
-  | RosoutSubscribe;
+  | RosoutSubscribe
+  | DiagnosticsSubscribe;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -697,6 +711,57 @@ export interface RosoutUpdate {
   nodes: string[] | null;
 }
 
+// A status of the robot's diagnostics (diagnostic_msgs/msg/DiagnosticStatus):
+// the latest of its name
+export interface DiagnosticEntry {
+  // Numbered by the server as they first come, from 1: what the changes refer
+  // to them by
+  id: number;
+  // A path of the aggregator's (/Robot/Sensors/Lidar), or as diagnostic_updater
+  // names them: its node, then its task (amcl: Localization)
+  name: string;
+  // OK 0, WARN 1, ERROR 2, STALE 3, as published
+  level: number;
+  message: string;
+  hardwareId: string;
+  values: { key: string; value: string }[];
+  // Not received for a while: what published it stopped
+  stale: boolean;
+  // On the server's clock: when it was last received (as of when it was last
+  // sent: unchanged, it is not sent again), and since when it is at its level,
+  // STALE if stale
+  updated: number;
+  since: number;
+}
+
+// A status went to another level: STALE if it went stale
+export interface DiagnosticChange {
+  // Numbered by the server as they come, from 1
+  seq: number;
+  // On the server's clock
+  time: number;
+  // Of the status (DiagnosticEntry.id)
+  status: number;
+  level: number;
+  message: string;
+}
+
+// Of a diagnostics subscription
+export interface DiagnosticsUpdate {
+  type: 'diagnostics';
+  id: number;
+  // statuses and changes are all those the server keeps, which replace those
+  // of before, instead of following them
+  reset: boolean;
+  // When the server started following the topic, on its clock: another one
+  // numbers its statuses and changes from 1 again
+  started: number;
+  // New or changed since the last update
+  statuses: DiagnosticEntry[];
+  // Oldest first
+  changes: DiagnosticChange[];
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -718,6 +783,7 @@ export type ServerMessage =
   | BehaviorTreeFile
   | BehaviorTreeModels
   | RosoutUpdate
+  | DiagnosticsUpdate
   | PanelsChanged
   | ErrorMessage;
 
@@ -752,6 +818,10 @@ export const BT_RATE = 10;
 export const ROSOUT_RATE = 10;
 // Messages of the ROS log kept by the server, and by the page
 export const ROSOUT_HISTORY = 10_000;
+// Diagnostics come about once a second
+export const DIAGNOSTICS_RATE = 4;
+// Changes of level kept by the server, and by the page
+export const DIAGNOSTICS_CHANGES = 1000;
 export const DASHBOARD_CLIENT_HEADER = 'X-Dashboard-Client';
 
 // A plugin, as GET /api/plugins lists them

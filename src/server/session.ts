@@ -19,6 +19,7 @@ import type { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import type { BehaviorTreePlayback } from './behavior_tree_playback.ts';
 import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
+import type { Diagnostics } from './diagnostics.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
 import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
@@ -44,6 +45,7 @@ export interface SessionServices {
   arm: Arm;
   ros: Ros;
   rosout: Rosout;
+  diagnostics: Diagnostics;
   behaviorTrees: BehaviorTrees;
   behaviorTreeFiles: BehaviorTreeFiles;
   plugins: PluginHost;
@@ -351,6 +353,19 @@ export class Session implements FrameSink, PluginSession {
           services.rosout.watch(string(message.topic, 'topic'), {
             onStatus: (state, text) => this.sendStreamStatus(id, state, text),
             onUpdate: (update) => this.send({ type: 'rosout', id, ...update }),
+          }),
+        );
+        return;
+      }
+
+      case 'diagnostics.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.diagnostics.watch(string(message.topic, 'topic'), {
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onUpdate: (update) => this.send({ type: 'diagnostics', id, ...update }),
           }),
         );
         return;

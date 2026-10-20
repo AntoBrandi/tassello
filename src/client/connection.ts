@@ -22,6 +22,8 @@ import {
   type BehaviorTreeUpdate,
   type ClientMessage,
   type CommandState,
+  type DiagnosticsSubscribe,
+  type DiagnosticsUpdate,
   type GridSubscribe,
   type ImageSubscribe,
   type LogsSubscribe,
@@ -57,6 +59,7 @@ export type BehaviorTreePlaybackOptions = Omit<BehaviorTreePlaybackSubscribe, 't
 export type BehaviorTreePlaybackRequest = Omit<BehaviorTreePlaybackControl, 'type' | 'id'>;
 export type BehaviorTreeFileOptions = Omit<BehaviorTreeFileSubscribe, 'type' | 'id'>;
 export type RosoutOptions = Omit<RosoutSubscribe, 'type' | 'id'>;
+export type DiagnosticsOptions = Omit<DiagnosticsSubscribe, 'type' | 'id'>;
 
 export interface TopicHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
@@ -85,6 +88,12 @@ export interface RosoutHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The messages, and the nodes of the graph when they change
   update: (update: RosoutUpdate) => void;
+}
+
+export interface DiagnosticsHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // The statuses that changed, and their changes of level
+  update: (update: DiagnosticsUpdate) => void;
 }
 
 // A frame's source size (see FRAME_HEADER_BYTES) and metadata, e.g. GridInfo
@@ -121,7 +130,8 @@ type Request =
   | Omit<BehaviorTreeSubscribe, 'id'>
   | Omit<BehaviorTreePlaybackSubscribe, 'id'>
   | Omit<BehaviorTreeFileSubscribe, 'id'>
-  | Omit<RosoutSubscribe, 'id'>;
+  | Omit<RosoutSubscribe, 'id'>
+  | Omit<DiagnosticsSubscribe, 'id'>;
 
 interface Subscription {
   request: Request;
@@ -136,6 +146,7 @@ interface Subscription {
   behaviorTree?: BehaviorTreeHandlers;
   behaviorTreeFile?: BehaviorTreeFileHandlers;
   rosout?: RosoutHandlers;
+  diagnostics?: DiagnosticsHandlers;
 }
 
 const MIN_RETRY_MS = 500;
@@ -300,6 +311,14 @@ export class Connection {
     return this.subscribe({ type: 'rosout.subscribe', ...options }, { rosout: handlers });
   }
 
+  // The robot's diagnostics (diagnostic_msgs/msg/DiagnosticArray, /diagnostics
+  // or /diagnostics_agg): the statuses the server keeps and their latest
+  // changes of level, then those that changed. Renewed on every connection
+  // with a reset update.
+  subscribeDiagnostics(options: DiagnosticsOptions, handlers: DiagnosticsHandlers): () => void {
+    return this.subscribe({ type: 'diagnostics.subscribe', ...options }, { diagnostics: handlers });
+  }
+
   // Resolves with systemctl's error, or null once done
   serviceAction(unit: string, scope: ServiceScope, verb: ServiceVerb): Promise<string | null> {
     const id = this.nextId++;
@@ -429,10 +448,13 @@ export class Connection {
         break;
       case 'stream.status': {
         const subscription = this.subscriptions.get(message.id);
-        (subscription?.stream ?? subscription?.topic ?? subscription?.behaviorTree ?? subscription?.rosout)?.status(
-          message.state,
-          message.message,
-        );
+        (
+          subscription?.stream ??
+          subscription?.topic ??
+          subscription?.behaviorTree ??
+          subscription?.rosout ??
+          subscription?.diagnostics
+        )?.status(message.state, message.message);
         subscription?.plugin?.status?.(message.state, message.message);
         break;
       }
@@ -491,6 +513,9 @@ export class Connection {
         break;
       case 'rosout':
         this.subscriptions.get(message.id)?.rosout?.update(message);
+        break;
+      case 'diagnostics':
+        this.subscriptions.get(message.id)?.diagnostics?.update(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));
