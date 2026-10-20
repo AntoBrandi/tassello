@@ -36,6 +36,23 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   diagnostics for every page, marks stale the statuses no longer received, and keeps their changes
   of level.
 - Plugins: `connection.subscribeDiagnostics`, and the `DiagnosticsIcon` and `UnfoldIcon` icons.
+- File Manager widget: the robot's files, in the behavior tree editor's look. Folders listed with
+  their entries' sizes and times, unfolded in place, sorted and filtered; places (home, the ROS
+  workspaces sourced, bookmarks) and the disks with their free space; an entry's details, its
+  permissions changed there; an overview of the disks and of what takes a folder's space (its
+  largest entries, its files by type, the largest and latest files). Entries made, renamed in
+  place, cut, copied and pasted, moved or copied by dragging them onto folders, deleted,
+  downloaded (folders as `.tar.gz`), uploaded by dropping files and folders onto the widget, with
+  their progress; names taken are asked about. Text files are edited in tabs, as gedit does: line
+  numbers, syntax highlighting (YAML, XML, Python, C++, CMake, JSON, shell, INI, Markdown, ROS
+  interfaces), search and replace, indentation, line ends kept, undo and redo, never saved over
+  changes made on the robot since they were read. Images are shown, PGM maps too. A widget can
+  stay in its folder, or be read-only. The server polls the folders and files shown.
+- Plugins: `fsApi` and `ApiError`, the `Fs*` types, and the `FolderIcon`, `FolderPlusIcon`,
+  `FileIcon`, `FileTextIcon`, `FilePlusIcon`, `UploadIcon`, `ArrowUpIcon`, `ArrowLeftIcon`,
+  `HomeIcon`, `HardDriveIcon`, `BookmarkIcon`, `SidebarIcon`, `PieChartIcon`, `InfoIcon`,
+  `WrapIcon`, `LinkIcon`, `LockIcon` and `ArchiveIcon` icons.
+- REST errors of the API reject with an `ApiError`, which has the HTTP status.
 
 ## 0.1.0
 

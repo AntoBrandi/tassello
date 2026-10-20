@@ -4715,3 +4715,1202 @@ textarea {
     display: none;
   }
 }
+
+/* ── File manager ──────────────────────────────────────────────────────────── */
+
+/* The editor's highlighting, its marks and its caret's line */
+.fm {
+  --fm-comment: #7f8a9c;
+  --fm-string: #98c379;
+  --fm-number: #d19a66;
+  --fm-keyword: #c678dd;
+  --fm-type: #e5c07b;
+  --fm-function: #61afef;
+  --fm-variable: #e06c75;
+  --fm-tag: #e06c75;
+  --fm-attribute: #d19a66;
+  --fm-key: #61afef;
+  --fm-meta: #56b6c2;
+  --fm-punctuation: #8b95a7;
+  --fm-match: rgb(240 160 32 / 28%);
+  --fm-match-current: rgb(240 160 32 / 62%);
+  --fm-caret-line: rgb(255 255 255 / 4%);
+  --fm-selection: rgb(79 140 255 / 32%);
+}
+
+/* Darker on white, to be read */
+@media (prefers-color-scheme: light) {
+  .fm {
+    --fm-comment: #7a7f8a;
+    --fm-string: #3f8f3e;
+    --fm-number: #986801;
+    --fm-keyword: #a626a4;
+    --fm-type: #a86f00;
+    --fm-function: #3366d6;
+    --fm-variable: #d03f32;
+    --fm-tag: #d03f32;
+    --fm-attribute: #986801;
+    --fm-key: #3366d6;
+    --fm-meta: #0177a8;
+    --fm-punctuation: #6b7280;
+    --fm-match: rgb(240 160 32 / 30%);
+    --fm-match-current: rgb(240 160 32 / 65%);
+    --fm-caret-line: rgb(15 23 42 / 4%);
+    --fm-selection: rgb(47 111 237 / 24%);
+  }
+}
+
+.fm .drop-into {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.fm-toolbar {
+  flex-wrap: nowrap;
+}
+
+/* The folders of the path: the middle ones give way first */
+.fm-crumbs {
+  display: flex;
+  flex: 1 1 120px;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 48px;
+  height: 30px;
+  margin: 0 4px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+  cursor: text;
+}
+
+.fm-crumbs button {
+  flex: 0 1 auto;
+  min-width: 1.6em;
+  overflow: hidden;
+  border-radius: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-crumbs button.current {
+  flex-shrink: 0;
+  max-width: 60%;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fm-address {
+  display: flex;
+  flex: 1 1 120px;
+  min-width: 48px;
+  margin: 0 4px;
+}
+
+.fm-address input {
+  height: 30px;
+  font: 12.5px var(--mono);
+}
+
+.fm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 60px;
+}
+
+.fm-search svg {
+  position: absolute;
+  left: 8px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.fm-search input {
+  height: 28px;
+  padding: 0 6px 0 27px;
+  font-size: 12.5px;
+}
+
+.fm-search.invalid input {
+  border-color: var(--danger);
+  outline-color: var(--danger-soft);
+}
+
+.fm-filter {
+  flex: 0 1 150px;
+  margin-right: 2px;
+}
+
+@container (max-width: 520px) {
+  .fm-filter {
+    flex-basis: 90px;
+  }
+}
+
+/* The open files */
+.fm-tabs {
+  display: flex;
+  flex: none;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  scrollbar-width: thin;
+}
+
+.fm-tab {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fm-tab:hover {
+  color: var(--text);
+}
+
+.fm-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.fm-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-dirty {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.fm-tab-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.fm-tab-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* The places, as the editor's palette */
+.fm-sidebar-header {
+  align-items: center;
+}
+
+.fm-sidebar-title {
+  flex: 1;
+  padding-left: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fm-place-item {
+  display: flex;
+  align-items: center;
+}
+
+.fm-place {
+  flex: 1;
+  cursor: pointer;
+}
+
+.fm-place .bte-palette-name {
+  font-weight: 500;
+}
+
+.fm-place.active {
+  background: var(--accent-soft);
+}
+
+.fm-place-remove {
+  width: 26px;
+  height: 26px;
+}
+
+.fm-disk {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  height: auto;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.fm-disk-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* A disk's use */
+.fm-usage {
+  display: block;
+  flex: none;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+
+.fm-usage > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.fm-usage.warn > span {
+  background: var(--warning);
+}
+
+.fm-usage.full > span {
+  background: var(--danger);
+}
+
+.fm-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.fm-icon.folder {
+  color: var(--accent);
+}
+
+.fm-icon.bag {
+  color: var(--warning);
+}
+
+.fm-icon.image {
+  color: var(--success);
+}
+
+.fm-icon.archive {
+  color: #a78bfa;
+}
+
+/* The files, and beside them (wide) or over them the details */
+.fm-main.beside > .fm-details {
+  position: static;
+  flex: none;
+  margin: 8px 8px 8px 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.fm-files,
+.fm-list-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fm-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 26px;
+  padding: 0 4px 0 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fm-head button {
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.fm-head button:hover,
+.fm-head button[aria-sort] {
+  color: var(--text);
+}
+
+.fm-head .fm-head-name {
+  flex: 1;
+  padding-left: 23px;
+  text-align: left;
+}
+
+.fm-list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 2px 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.fm-list:focus {
+  outline: none;
+}
+
+.fm-list.drop-into {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.fm-rows {
+  position: relative;
+}
+
+/* Its height is FileList.tsx's ROW_PX */
+.fm-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 28px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fm-row:hover:not(.selected) {
+  background: var(--surface-2);
+}
+
+.fm-list:focus-visible .fm-row.focused {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.fm-row.cut {
+  opacity: 0.5;
+}
+
+.fm-row.special .fm-name {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.fm-row-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-left: 2px;
+}
+
+.fm-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-link {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.fm-rename {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 13px;
+}
+
+.fm-size,
+.fm-date {
+  flex: none;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.fm-size {
+  width: 76px;
+}
+
+.fm-date {
+  width: 96px;
+}
+
+.fm-head .fm-size,
+.fm-head .fm-date {
+  text-align: right;
+}
+
+.fm-row-more {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fm-head .fm-row-more {
+  height: 0;
+}
+
+.fm-row:hover .fm-row-more,
+.fm-row.selected .fm-row-more {
+  opacity: 1;
+}
+
+.fm-row-more:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@media (hover: none) {
+  .fm-row-more {
+    opacity: 1;
+  }
+}
+
+@container (max-width: 520px) {
+  .fm .fm-date {
+    display: none;
+  }
+}
+
+@container (max-width: 360px) {
+  .fm .fm-size {
+    display: none;
+  }
+}
+
+/* What an unfolded folder says instead of its entries */
+.fm-note {
+  position: absolute;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 28px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-note.error {
+  color: var(--danger);
+}
+
+.fm-empty p {
+  margin: 0 0 10px;
+}
+
+.fm-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.fm-inline-button {
+  padding: 0;
+  font-size: inherit;
+  font-weight: 500;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+/* Long paths and names wrap */
+.fm-details .bt-facts {
+  align-items: start;
+}
+
+.fm-details .bt-facts dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-inline-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The details */
+.fm-preview {
+  display: grid;
+  place-items: center;
+  max-height: 200px;
+  padding: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: repeating-conic-gradient(var(--surface-2) 0 25%, var(--surface-3) 0 50%) 0 0 / 16px 16px;
+  cursor: zoom-in;
+}
+
+.fm-preview img {
+  max-width: 100%;
+  max-height: 186px;
+  object-fit: contain;
+}
+
+.fm-perms {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.fm-perms th {
+  padding: 2px 10px 2px 0;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+}
+
+.fm-perms thead th {
+  font-size: 11px;
+  text-align: center;
+}
+
+.fm-perms td {
+  padding: 2px 10px;
+  text-align: center;
+}
+
+.fm-perms input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.fm-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fm-details-actions .button {
+  height: 30px;
+  padding: 0 10px;
+}
+
+/* The menus of the entries, where the pointer is */
+.fm-menu {
+  position: fixed;
+  right: auto;
+  min-width: 200px;
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+}
+
+.fm-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.fm-menu button.separated {
+  position: relative;
+  margin-top: 7px;
+}
+
+.fm-menu button.separated::before {
+  position: absolute;
+  top: -4px;
+  right: 6px;
+  left: 6px;
+  height: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.fm-menu kbd {
+  color: var(--text-muted);
+  font: 11px var(--mono);
+}
+
+.fm-choices {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+/* The overview */
+.fm-overview {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px 16px;
+  overflow: auto;
+  font-size: 12.5px;
+}
+
+.fm-overview h3 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fm-overview h4 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.fm-overview section + section {
+  margin-top: 16px;
+}
+
+.fm-heading-button {
+  width: 24px;
+  height: 24px;
+}
+
+.fm-disks,
+.fm-bars,
+.fm-file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-disks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.fm-disk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fm-disk-card:hover {
+  border-color: var(--border-strong);
+}
+
+.fm-disk-card.warn {
+  border-color: rgb(240 160 32 / 50%);
+}
+
+.fm-disk-card.full {
+  border-color: var(--danger);
+}
+
+.fm-disk-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fm-disk-head svg {
+  flex: none;
+  align-self: center;
+  color: var(--text-muted);
+}
+
+.fm-disk-head .bt-muted {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-disk-card .fm-usage {
+  height: 7px;
+}
+
+.fm-disk-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-disk-numbers strong {
+  color: var(--text);
+}
+
+.fm-analyze {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.fm-overview-hint {
+  margin: 0 0 10px;
+}
+
+.fm-overview-path {
+  margin: -4px 0 8px;
+  font: 600 12.5px var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.fm-summary {
+  margin: 4px 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-bar-row,
+.fm-file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fm-bar-row:disabled {
+  cursor: default;
+}
+
+.fm-bar-row:hover:not(:disabled),
+.fm-file-row:hover {
+  background: var(--surface-2);
+}
+
+.fm-bar-label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-bar-size {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fm-bar-note {
+  min-width: 7em;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fm-bar {
+  display: block;
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface-3);
+}
+
+.fm-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.fm-file-where {
+  min-width: 0;
+  max-width: 24ch;
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+/* An image: fitted, or at its size, its pixels square (the maps) */
+.fm-image {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: repeating-conic-gradient(var(--surface-2) 0 25%, var(--surface-3) 0 50%) 0 0 / 16px 16px;
+  cursor: zoom-out;
+}
+
+.fm-image img {
+  margin: auto;
+  image-rendering: pixelated;
+}
+
+.fm-image.fit {
+  cursor: zoom-in;
+}
+
+.fm-image.fit img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+/* A map's cells, scaled up: square */
+.fm-image.map img {
+  image-rendering: pixelated;
+}
+
+/* The editor: its sizes are TextEditor.tsx's, 20 px a line */
+.fm-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fm-find {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.fm-find-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fm-find-input {
+  flex: 1;
+  margin-right: 4px;
+}
+
+.fm-find-input input {
+  padding-left: 9px;
+  padding-right: 70px;
+}
+
+.fm-find-count {
+  position: absolute;
+  right: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.fm-find .overlay-button {
+  width: 28px;
+  height: 28px;
+}
+
+.fm-find-option {
+  font: 700 12px var(--mono);
+}
+
+.fm-find-button {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.fm-text {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--surface);
+  font: 13px/20px var(--mono);
+  font-variant-ligatures: none;
+  tab-size: var(--fm-tab);
+}
+
+.fm-gutter {
+  position: relative;
+  flex: none;
+  width: calc(var(--fm-gutter) + 8px);
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fm-gutter-lines,
+.fm-overlay-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.fm-gutter-lines {
+  right: 0;
+}
+
+.fm-number {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 20px;
+  padding-right: 8px;
+  font-size: 11.5px;
+  text-align: right;
+  cursor: pointer;
+}
+
+.fm-number.current {
+  color: var(--text);
+}
+
+.fm-code {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fm-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fm-line {
+  position: absolute;
+  left: 10px;
+  height: 20px;
+  white-space: pre;
+}
+
+.fm-caret-line {
+  position: absolute;
+  left: 0;
+  width: 1000000px;
+  height: 20px;
+  background: var(--fm-caret-line);
+}
+
+/* Its text is the overlay's, drawn under it: it keeps the caret and the
+   selection */
+.fm-area,
+.fm-area:focus {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  font: inherit;
+  font-variant-ligatures: none;
+  letter-spacing: normal;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: inherit;
+  outline: none;
+  resize: none;
+}
+
+.fm-area::selection {
+  background: var(--fm-selection);
+  color: transparent;
+}
+
+.fm-text.wrap .fm-area {
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fm-text.wrap .fm-area::selection {
+  color: inherit;
+}
+
+.fm-match {
+  border-radius: 2px;
+  background: var(--fm-match);
+}
+
+.fm-match.current {
+  background: var(--fm-match-current);
+  box-shadow: 0 0 0 1px var(--warning);
+}
+
+.fm-t-comment {
+  color: var(--fm-comment);
+  font-style: italic;
+}
+
+.fm-t-string {
+  color: var(--fm-string);
+}
+
+.fm-t-number,
+.fm-t-atom {
+  color: var(--fm-number);
+}
+
+.fm-t-keyword {
+  color: var(--fm-keyword);
+}
+
+.fm-t-type {
+  color: var(--fm-type);
+}
+
+.fm-t-function,
+.fm-t-heading {
+  color: var(--fm-function);
+}
+
+.fm-t-heading,
+.fm-t-emphasis {
+  font-weight: 700;
+}
+
+.fm-t-variable {
+  color: var(--fm-variable);
+}
+
+.fm-t-tag {
+  color: var(--fm-tag);
+}
+
+.fm-t-attribute {
+  color: var(--fm-attribute);
+}
+
+.fm-t-key {
+  color: var(--fm-key);
+}
+
+.fm-t-meta,
+.fm-t-link {
+  color: var(--fm-meta);
+}
+
+.fm-t-link {
+  text-decoration: underline;
+}
+
+.fm-t-punctuation {
+  color: var(--fm-punctuation);
+}
+
+/* The status line: the space left, or the editor's caret and settings */
+.fm-status-space {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-status-space.warn {
+  color: var(--warning);
+}
+
+.fm-status-space.full {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.fm-status-action {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  font-size: 12px;
+}
+
+.fm-status-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.fm-status-caret {
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fm-status-select {
+  width: auto;
+  height: 22px;
+  padding: 0 4px;
+  border-color: transparent;
+  background: none;
+  color: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.fm-status-select:hover {
+  border-color: var(--border);
+}
+
+@container (max-width: 520px) {
+  .fm-status-select {
+    display: none;
+  }
+}

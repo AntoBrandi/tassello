@@ -14,6 +14,7 @@ import { behaviorTreeWidget } from './behavior_tree/BehaviorTreeWidget.tsx';
 import { buttonWidget } from './ButtonWidget.tsx';
 import { cameraWidget } from './CameraWidget.tsx';
 import { diagnosticsWidget } from './diagnostics/DiagnosticsWidget.tsx';
+import { fileManagerWidget } from './file_manager/FileManagerWidget.tsx';
 import { imageWidget } from './ImageWidget.tsx';
 import { logsWidget } from './logs/LogsWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
@@ -37,6 +38,7 @@ const CORE: RegisteredWidget[] = [
   behaviorTreeEditorWidget,
   logsWidget,
   diagnosticsWidget,
+  fileManagerWidget,
 ];
 
 const registry = new WidgetRegistry(CORE);

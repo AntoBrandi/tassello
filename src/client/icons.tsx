@@ -259,3 +259,53 @@ export const DiagnosticsIcon = icon(
 );
 // Chevrons apart: every group unfolded
 export const UnfoldIcon = icon(<path d="m7 15 5 5 5-5M7 9l5-5 5 5" />);
+// The file manager widget
+export const FolderIcon = icon(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />);
+export const FolderPlusIcon = icon(
+  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7ZM12 10.5v5M9.5 13h5" />,
+);
+export const FileIcon = icon(<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5ZM14 3v5h5" />);
+export const FileTextIcon = icon(<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5ZM14 3v5h5M9 13h6M9 17h6" />);
+export const FilePlusIcon = icon(<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5ZM14 3v5h5M12 11.5v6M9 14.5h6" />);
+export const UploadIcon = icon(<path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />);
+export const ArrowUpIcon = icon(<path d="M12 20V5M6 11l6-6 6 6" />);
+export const ArrowLeftIcon = icon(<path d="M20 12H5M11 6l-6 6 6 6" />);
+export const HomeIcon = icon(<path d="m3 11 9-8 9 8M5 9.5V20h5v-6h4v6h5V9.5" />);
+export const HardDriveIcon = icon(
+  <>
+    <rect x="2.5" y="13" width="19" height="8" rx="2" />
+    <path d="M5.5 13 8 4h8l2.5 9M6.5 17h.01M10 17h.01" />
+  </>,
+);
+export const BookmarkIcon = icon(<path d="M6 3h12v18l-6-4.5L6 21V3Z" />);
+export const SidebarIcon = icon(
+  <>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  </>,
+);
+// What takes the space
+export const PieChartIcon = icon(<path d="M21 12A9 9 0 1 1 12 3v9h9ZM15 3.5A9 9 0 0 1 20.5 9H15V3.5Z" />);
+export const InfoIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5.5M12 7.5h.01" />
+  </>,
+);
+// Long lines wrapped
+export const WrapIcon = icon(<path d="M3 6h18M3 12h15a3 3 0 0 1 0 6h-4M3 18h7M16 16l-2 2 2 2" />);
+export const LinkIcon = icon(
+  <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />,
+);
+export const LockIcon = icon(
+  <>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </>,
+);
+export const ArchiveIcon = icon(
+  <>
+    <rect x="3" y="4" width="18" height="5" rx="1" />
+    <path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" />
+  </>,
+);

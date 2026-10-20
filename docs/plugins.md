@@ -162,6 +162,21 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `saveBehaviorTreeFile(path, text, base, create?)` | Saves a behavior tree's XML file if still of the version `base` (`null`: whatever it is), or as a new file: resolves with `{ version, conflict }` |
 | `serverNow()` | Now, on the robot's clock |
 
+The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see
+`src/shared/file_manager.ts`): `fsApi`. Reads resolve with what the server says, changes with
+`{ paths, conflicts }`, and failures reject with an `ApiError`, which has the HTTP `status`.
+
+| | |
+|---|---|
+| `fsApi.list(path, known?)` | A folder's entries (`FsListing`); `undefined` while still the `known` version, for polling |
+| `fsApi.details(path)` | An entry's kind, size, times, owner, permissions, link and disk (`FsDetails`) |
+| `fsApi.disks()` | The robot's file systems, their size and free space (`FsDisk[]`) |
+| `fsApi.analyze(path)` | What takes a folder's space (`FsAnalysis`) |
+| `fsApi.readText(path, stamp?)` / `fsApi.saveText(path, text, base, create?)` | A text file and its version; saved only if still of the version `base` (`null`: whatever it is), else `{ conflict: true }` |
+| `fsApi.operate(operation)` | `mkdir`, `create`, `rename`, `move`, `copy`, `delete`, `chmod` (`FsOperation`). Moves and copies with `conflict: 'ask'` do nothing while names are taken, and say which |
+| `fsApi.upload(folder, name, file, conflict, onProgress)` | Uploads a `Blob`: `{ result, abort }` |
+| `fsApi.downloadUrl(paths)` / `fsApi.viewUrl(path)` | A file to download (folders, and several entries, as a `.tar.gz`); an image to show (PGM maps as PNG) |
+
 Messages are JSON as rclnodejs has them: fields by name, numeric arrays as arrays, 64 bit
 integers as numbers. Subscriptions survive reconnections: they are renewed when the page
 reconnects. Requests and calls reject when the page is not connected.

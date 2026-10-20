@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -67,4 +68,27 @@ export function toJson(value: unknown): unknown {
     return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, toJson(v)]));
   }
   return value;
+}
+
+// Of a file's content
+export function contentVersion(text: string): string {
+  return createHash('sha256').update(text).digest('hex').slice(0, 16);
+}
+
+// Writes the file anew, at once: a temporary file renamed over it, keeping
+// its mode; in place if that cannot be (a folder the server cannot write in,
+// a file of another user's)
+export async function replaceFile(file: string, text: string): Promise<void> {
+  const stat = await fs.stat(file);
+  if (stat.uid === process.getuid?.()) {
+    const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(4).toString('hex')}.tmp`);
+    try {
+      await fs.writeFile(temporary, text, { mode: stat.mode & 0o7777, flag: 'wx' });
+      await fs.rename(temporary, file);
+      return;
+    } catch {
+      await fs.rm(temporary, { force: true });
+    }
+  }
+  await fs.writeFile(file, text);
 }

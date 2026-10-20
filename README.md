@@ -118,6 +118,7 @@ after the others on the devices already arranged.
 | **Behavior Tree Editor** | Edits a BT.CPP behavior tree's XML file of the robot as a graph: nodes from a palette (BT.CPP's, Nav2's, your libraries'), dragged where they go, moved with their children, their names and ports edited in a side panel. Subtrees, undo and redo, copy and paste, an XML view. Saves only what changed, never over changes made meanwhile |
 | **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
+| **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -228,6 +229,43 @@ Notes on some of them:
   filter and view it opens with. The server follows the diagnostics for every page, and for 10
   minutes after the last page closes, keeping the latest status of each name and their latest
   1,000 changes of level.
+- **File Manager** opens its *folder* (`~` by default; `/…`, `~/…`, `package://…`) and lists it
+  with its entries' sizes and times, sorted by name (naturally: `run_2` before `run_10`), size or
+  time, folders first; the chevrons unfold folders in place. Its places are home, the root, the
+  ROS installations and workspaces sourced (`AMENT_PREFIX_PATH`), its *bookmarks* (the widget's,
+  and those made in the page, kept by the browser) and the disks, with their free space. Click to
+  select (Ctrl, Shift: several), double click (on touch screens tap) to open: folders, text files
+  into the editor, images (PNG, JPEG, SVG…, and PGM maps, converted on the robot) into a viewer.
+  Right click, or the ⋯ of a row, for the rest: download (a folder, or several entries, as one
+  `.tar.gz`), cut, copy and paste (between file managers too), duplicate, move or copy to a folder
+  picked, rename (F2, in place), copy the path, details, delete (there is no trash: it asks
+  first). Drag entries onto a folder, a place or the address bar's folders to move them (Ctrl:
+  copy them); drop files or folders from the computer to upload them, with their progress. Where
+  names are taken, it asks: replace, keep both (`map (2).yaml`) or skip. *Details* show an entry's
+  kind, size (a folder's computed on demand), times, owner, mode, link and disk, an image's
+  preview, and change its permissions; *what takes the space* shows the disks (size, use, free
+  space, inodes when short) and analyzes the folder: its largest entries, its files by type, the
+  largest and the latest files under it, on its disk only, for 15 s at most. Keys: the arrows
+  (Left and Right fold), Enter, Backspace, Alt+arrows (up, back, forward), Delete, F2, Ctrl+A,
+  Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+F (filter), Ctrl+L (type a path), Ctrl+H (hidden files), and typing
+  a name's first letters.
+
+  Text files (UTF-8, 5 MB at most) open in tabs, edited as with gedit: line numbers, the line of
+  the cursor lit, syntax highlighting (YAML, XML for URDF, xacro, launch and SDF, Python, C and
+  C++, CMake, JSON, shell, INI, TOML and systemd units, Markdown, ROS interfaces), search and
+  replace (case, whole words, regular expressions with `$1`), Tab and Shift+Tab indenting the lines
+  selected, new lines indented as the one before, Ctrl+/ commenting lines out, go to line (Ctrl+I),
+  undo and redo a word at a time, long lines wrapped on demand (then not highlighted). The status
+  line shows the cursor's line and column, and switches the highlighting, the indentation and the
+  line ends (kept as the file has them, LF or CRLF). As the behavior tree editor, it saves only
+  over the version read: a file changed on the robot is shown at once without changes in the
+  editor, with changes the editor asks which to keep, and a save over a file changed since it was
+  read is refused. *Save as* writes elsewhere, e.g. a file the server's user cannot write. Changes
+  are kept while the page is open, and the page asks before closing with changes not saved.
+
+  The folders shown and the files open are read again every 3 s. A widget can *stay in its
+  folder* (e.g. one for the maps, or the rosbags) or be *read-only*: these are the page's choices,
+  not a protection (see Security).
 
 ## Plugins
 
@@ -255,10 +293,12 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 ## Security
 
 Tassello has no login. **Anyone who can open the page can drive the robot, run any command as
-the server's user, read its images, behavior trees and the behavior tree logs of its rosbags,
-record rosbags into new folders, and write behavior tree files (XML files whose root is
-`<root>`, over others of the same kind only)**: keep it on a network you trust, or behind a reverse proxy
-with authentication (it serves everything under `/`, its WebSocket at `/ws`).
+the server's user, and read, write, upload, move and delete any of the files that user can
+(the File Manager)**: keep it on a network you trust, or behind a reverse proxy with
+authentication (it serves everything under `/`, its WebSocket at `/ws`). Changes to the files
+are accepted from the dashboard's own pages only (they send a header that another site's page
+cannot), and the root, the home folder and the system's top folders (`/usr`, `/etc`…) are never
+deleted nor moved.
 
 ## How it works
 
@@ -293,6 +333,10 @@ Safety and bandwidth are the server's concern:
   times a second, not those received the same again. Subscribed best effort, they come from
   every publisher, whatever its QoS.
 - A button runs the command saved in its panel, never one sent by the page.
+- The File Manager's folders are read again every 3 s, and answered "unchanged" while they are;
+  the largest are listed in part (5,000 entries), and only the rows in sight are drawn. Uploads
+  and downloads are streamed, folders archived by `tar` as they are sent; saves replace files at
+  once (a temporary file renamed over them).
 
 ## Developing
 

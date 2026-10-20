@@ -4,7 +4,6 @@
 // and of the libraries the pages name (TreeNodesModel). And saved, only over
 // behavior trees, and only if unchanged since the page read them.
 
-import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
@@ -13,7 +12,7 @@ import type { BehaviorTreeFile, BehaviorTreeModels, BehaviorTreeSaved, BtNodeLib
 import { parseXmlSource, sourceText, type SourceElement } from '../shared/xml.ts';
 import { resolveTreeFile } from './behavior_tree_file.ts';
 import { isBehaviorTreeXml } from './files.ts';
-import { errorMessage, packageShareDirectory, type Logger } from './util.ts';
+import { contentVersion, errorMessage, packageShareDirectory, replaceFile, type Logger } from './util.ts';
 
 export type FileState = Omit<BehaviorTreeFile, 'type' | 'id'>;
 export type ModelsState = Omit<BehaviorTreeModels, 'type' | 'id'>;
@@ -30,11 +29,6 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_INCLUDES = 50;
 // A file of models kept parsed while unchanged; this many
 const MODEL_CACHE = 64;
-
-// Of a file's content
-export function contentVersion(text: string): string {
-  return createHash('sha256').update(text).digest('hex').slice(0, 16);
-}
 
 // Size, time and inode of a file, '' if gone
 async function stamp(file: string): Promise<string> {
@@ -336,24 +330,6 @@ class ModelsWatch {
   }
 }
 
-// Writes the file anew, at once: a temporary file renamed over it, keeping
-// its mode; in place if that cannot be (a folder the server cannot write in,
-// a file of another user's)
-async function writeFile(file: string, text: string): Promise<void> {
-  const stat = await fs.stat(file);
-  if (stat.uid === process.getuid?.()) {
-    const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(4).toString('hex')}.tmp`);
-    try {
-      await fs.writeFile(temporary, text, { mode: stat.mode & 0o7777, flag: 'wx' });
-      await fs.rename(temporary, file);
-      return;
-    } catch {
-      await fs.rm(temporary, { force: true });
-    }
-  }
-  await fs.writeFile(file, text);
-}
-
 export class BehaviorTreeFiles {
   private readonly uploadsDir: string;
   private readonly logger: Logger;
@@ -430,7 +406,7 @@ export class BehaviorTreeFiles {
       if (base !== null && contentVersion(current) !== base) {
         return { version: contentVersion(current), conflict: true };
       }
-      await writeFile(real, text);
+      await replaceFile(real, text);
     }
     this.logger.info(`Behavior tree saved: ${file}`);
     await this.watched.get(file)?.refresh();

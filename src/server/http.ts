@@ -17,17 +17,64 @@
 //   POST   /api/uploads                 an image or a behavior tree (the body) -> {name}
 //   GET    /api/uploads/<name>          an uploaded file
 //   GET    /api/plugins                 [PluginInfo] of the plugins loaded
+//   /api/fs/...                         the file manager's: any file of the
+//          robot (see src/shared/file_manager.ts), changed only by the
+//          dashboard's pages
+//     GET  places                       FsPlaces: home, the ROS workspaces
+//     GET  list?path=&known=            FsListing, 204 while still the known version
+//     GET  details?path=                FsDetails
+//     GET  disks                        [FsDisk] of the robot's file systems
+//     GET  analysis?path=               FsAnalysis: what takes a folder's space
+//     GET  text?path=&stamp=            FsText, 204 while still of that stamp
+//     PUT  text   {path, text, base, create}  -> FsSaved
+//     POST op     FsOperation           -> FsResult
+//     POST upload?path=&name=&conflict= the file (the body) -> FsResult
+//     GET  download?path=[&path=...]    a file, or folders and files as a .tar.gz
+//     GET  view?path=                   an image, PGM and PPM ones as PNG
 //   GET    /plugins/<name>/<path>       a file of the plugin's client folder
 
-import { createReadStream, promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { createReadStream, promises as fs, type Stats } from 'node:fs';
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 
+import sharp from 'sharp';
+
+import type { FsConflict, FsResult } from '../shared/file_manager.ts';
 import type { TopicInfo } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
-import { fileKind, isUploadName, listDirectory, MAX_UPLOAD_BYTES, resolveImagePath, saveUpload } from './files.ts';
+import { listDisks, spaceOf } from './disks.ts';
+import {
+  analyzeFolder,
+  archiveArguments,
+  changeMode,
+  deleteEntries,
+  entryDetails,
+  fsError,
+  listFolder,
+  listPlaces,
+  makeFile,
+  makeFolder,
+  readText,
+  receiveFile,
+  renameEntry,
+  resolvePath,
+  saveText,
+  transfer,
+  uploadTarget,
+} from './file_manager.ts';
+import {
+  fileKind,
+  IMAGE_EXTENSIONS,
+  isUploadName,
+  listDirectory,
+  MAX_UPLOAD_BYTES,
+  resolveImagePath,
+  saveUpload,
+} from './files.ts';
+import { decodeNetpbm, NETPBM_EXTENSIONS } from './netpbm.ts';
 import { HttpError, type PanelStore } from './panels.ts';
 import type { PluginHost } from './plugins.ts';
 import { errorMessage, packageShareDirectory, type Logger } from './util.ts';
@@ -67,12 +114,24 @@ const CONTENT_TYPES: Record<string, string> = {
 // Worth compressing: text, and meshes, often tens of MB of CAD exports
 const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.map', '.svg', '.stl', '.dae', '.obj']);
 const MAX_BODY_BYTES = 1024 * 1024;
+// A text file saved by the file manager, 5 MB, as JSON
+const MAX_TEXT_BODY_BYTES = 12 * 1024 * 1024;
+// Of a file uploaded by the file manager: rosbags are large
+const MAX_FS_UPLOAD_BYTES = 64 * 1024 ** 3;
+// PGM and PPM images converted to PNG
+const MAX_PREVIEW_BYTES = 256 * 1024 * 1024;
+// Analyses at once: each reads a whole tree of folders
+const MAX_ANALYSES = 2;
+const CONFLICTS: FsConflict[] = ['ask', 'skip', 'keep-both', 'replace'];
 // Compressed files are kept, the most recent first, within this size
 const GZIP_CACHE_BYTES = 64 * 1024 * 1024;
 const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 // For the images of the robot and of the users: an SVG opened by itself must
 // not run scripts in the dashboard's origin
-const SANDBOXED = { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" };
+const SANDBOXED = {
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  'X-Content-Type-Options': 'nosniff',
+};
 
 export function createRequestHandler(services: HttpServices): RequestListener {
   return (req, res) => {
@@ -111,7 +170,7 @@ async function handle(services: HttpServices, req: IncomingMessage, res: ServerR
 }
 
 async function api(
-  { store, topics, uploadsDir, plugins }: HttpServices,
+  { store, topics, uploadsDir, plugins, logger }: HttpServices,
   req: IncomingMessage,
   res: ServerResponse,
   route: string[],
@@ -166,6 +225,8 @@ async function api(
       return sendJson(res, 200, await listDirectory(query.get('dir') ?? '', fileKind(query.get('kind'))));
     }
     throw new HttpError(404, `No API at ${req.url}`);
+  } else if (resource === 'fs' && id && rest.length === 0) {
+    return fsApi(req, res, `${method} ${id}`, logger);
   } else if (resource === 'uploads' && id === undefined && method === 'POST') {
     return sendJson(res, 201, { name: await saveUpload(uploadsDir, await readBody(req, MAX_UPLOAD_BYTES)) });
   } else if (resource === 'uploads' && id && rest.length === 0 && method === 'GET') {
@@ -202,8 +263,224 @@ async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  return JSON.parse((await readBody(req, MAX_BODY_BYTES)).toString('utf8'));
+async function readJson(req: IncomingMessage, limit = MAX_BODY_BYTES): Promise<unknown> {
+  return JSON.parse((await readBody(req, limit)).toString('utf8'));
+}
+
+let analyses = 0;
+
+// The file manager's API (see file_manager.ts): route is the method and the
+// action, "GET list"
+async function fsApi(req: IncomingMessage, res: ServerResponse, route: string, logger: Logger): Promise<void> {
+  const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+  if (!route.startsWith('GET ') && typeof req.headers[DASHBOARD_CLIENT_HEADER.toLowerCase()] !== 'string') {
+    // Another site's page cannot send the header: its browser would first
+    // ask the server, which does not allow it
+    throw new HttpError(403, 'The robot’s files are changed by the dashboard’s pages only');
+  }
+  switch (route) {
+    case 'GET places':
+      return sendJson(res, 200, listPlaces());
+    case 'GET list': {
+      const listing = await listFolder(resolvePath(query.get('path') ?? '~'));
+      return listing.version === query.get('known') ? sendNothing(res) : sendJson(res, 200, listing);
+    }
+    case 'GET details':
+      return sendJson(res, 200, await entryDetails(resolvePath(query.get('path'))));
+    case 'GET disks':
+      return sendJson(res, 200, await listDisks());
+    case 'GET analysis': {
+      if (analyses >= MAX_ANALYSES) {
+        throw new HttpError(429, 'Other folders are being analyzed: try again in a moment');
+      }
+      analyses++;
+      try {
+        return sendJson(res, 200, await analyzeFolder(resolvePath(query.get('path'))));
+      } finally {
+        analyses--;
+      }
+    }
+    case 'GET text': {
+      const text = await readText(resolvePath(query.get('path')), query.get('stamp'));
+      return text ? sendJson(res, 200, text) : sendNothing(res);
+    }
+    case 'PUT text': {
+      const body = (await readJson(req, MAX_TEXT_BODY_BYTES)) as Record<string, unknown>;
+      if (typeof body.text !== 'string') {
+        throw new HttpError(400, 'text must be a string');
+      }
+      const file = resolvePath(body.path);
+      const saved = await saveText(file, body.text, typeof body.base === 'string' ? body.base : null, body.create === true);
+      if (!saved.conflict) {
+        logger.info(`File saved: ${file}`);
+      }
+      return sendJson(res, 200, saved);
+    }
+    case 'POST op': {
+      const result = await operate((await readJson(req)) as Record<string, unknown>, logger);
+      return sendJson(res, 200, result);
+    }
+    case 'POST upload': {
+      const folder = resolvePath(query.get('path'));
+      const name = query.get('name') ?? '';
+      const conflict = CONFLICTS.find((value) => value === query.get('conflict')) ?? 'ask';
+      const length = Number(req.headers['content-length']);
+      const space = Number.isFinite(length) ? await spaceOf(folder) : null;
+      if (space && length > space.free) {
+        throw new HttpError(507, `Not enough space on ${space.mount}: ${(space.free / 1e9).toFixed(1)} GB free`);
+      }
+      const target = await uploadTarget(folder, name, conflict);
+      if (!target) {
+        req.resume();
+        return sendJson(res, 200, { paths: [], conflicts: [name] } satisfies FsResult);
+      }
+      const size = await receiveFile(req, target, MAX_FS_UPLOAD_BYTES);
+      logger.info(`File uploaded: ${target} (${size} bytes)`);
+      return sendJson(res, 201, { paths: [target], conflicts: [] } satisfies FsResult);
+    }
+    case 'GET download': {
+      const files = query.getAll('path').map((value) => resolvePath(value));
+      if (files.length === 0) {
+        throw new HttpError(400, 'No path');
+      }
+      const stat =
+        files.length === 1
+          ? await fs.stat(files[0]).catch((e: unknown) => {
+              throw fsError(e, `Cannot download ${path.basename(files[0])}`);
+            })
+          : null;
+      return stat?.isFile() ? sendDownload(res, files[0], stat) : sendArchive(res, files, logger);
+    }
+    case 'GET view': {
+      const file = resolvePath(query.get('path'));
+      const extension = path.extname(file).toLowerCase();
+      if (!NETPBM_EXTENSIONS.has(extension)) {
+        if (!IMAGE_EXTENSIONS.has(extension) && extension !== '.ico') {
+          throw new HttpError(415, `Not an image: ${path.basename(file)}`);
+        }
+        return serveFile(path.dirname(file), path.basename(file), req, res, SANDBOXED);
+      }
+      const stat = await fs.stat(file).catch((e: unknown) => {
+        throw fsError(e, `Cannot read ${path.basename(file)}`);
+      });
+      if (stat.size > MAX_PREVIEW_BYTES) {
+        throw new HttpError(413, `Too large to preview: ${path.basename(file)}`);
+      }
+      let pixels;
+      try {
+        pixels = decodeNetpbm(await fs.readFile(file));
+      } catch (e) {
+        throw e instanceof Error && !('code' in e) ? new HttpError(415, e.message) : fsError(e, `Cannot read ${path.basename(file)}`);
+      }
+      const { data, width, height, channels } = pixels;
+      const png = await sharp(data, { raw: { width, height, channels } }).png().toBuffer();
+      res.writeHead(200, {
+        ...SANDBOXED,
+        'Content-Type': 'image/png',
+        'Content-Length': png.length,
+        'Cache-Control': 'no-cache',
+      });
+      res.end(png);
+      return;
+    }
+  }
+  throw new HttpError(404, `No API at ${req.url}`);
+}
+
+async function operate(body: Record<string, unknown>, logger: Logger): Promise<FsResult> {
+  const paths = () => {
+    if (!Array.isArray(body.paths) || body.paths.length === 0) {
+      throw new HttpError(400, 'paths must be a list of paths');
+    }
+    return body.paths.map((value) => resolvePath(value));
+  };
+  const log = (what: string, files: string[]) =>
+    logger.info(`File manager: ${what} ${files.length === 1 ? files[0] : `${files.length} entries (${files[0]}, …)`}`);
+  switch (body.op) {
+    case 'mkdir':
+      return makeFolder(resolvePath(body.path));
+    case 'create':
+      return makeFile(resolvePath(body.path));
+    case 'rename': {
+      const file = resolvePath(body.path);
+      const result = await renameEntry(file, body.name as string);
+      log(`renamed to ${body.name as string}:`, [file]);
+      return result;
+    }
+    case 'move':
+    case 'copy': {
+      const sources = paths();
+      const conflict = CONFLICTS.find((value) => value === body.conflict) ?? 'ask';
+      const result = await transfer(body.op, sources, resolvePath(body.to), conflict);
+      if (result.paths.length > 0) {
+        log(`${body.op === 'move' ? 'moved' : 'copied'} into ${resolvePath(body.to)}:`, sources);
+      }
+      return result;
+    }
+    case 'delete': {
+      const files = paths();
+      const result = await deleteEntries(files);
+      log('deleted', files);
+      return result;
+    }
+    case 'chmod':
+      return changeMode(resolvePath(body.path), body.mode);
+    default:
+      throw new HttpError(400, `Unknown operation ${JSON.stringify(body.op)}`);
+  }
+}
+
+function sendNothing(res: ServerResponse): void {
+  res.writeHead(204, { 'Cache-Control': 'no-store' }).end();
+}
+
+// attachment; filename="…": an ASCII name for old browsers, the name whole
+// for the others (RFC 6266)
+function contentDisposition(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+// A file of any size, streamed as it is
+function sendDownload(res: ServerResponse, file: string, stat: Stats): void {
+  res.writeHead(200, {
+    ...SANDBOXED,
+    'Content-Type': CONTENT_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'Content-Length': stat.size,
+    'Content-Disposition': contentDisposition(path.basename(file)),
+    'Cache-Control': 'no-store',
+  });
+  createReadStream(file)
+    .on('error', () => res.destroy())
+    .pipe(res);
+}
+
+// Entries of one folder, as tar archives them, gzipped, as it goes
+async function sendArchive(res: ServerResponse, files: string[], logger: Logger): Promise<void> {
+  const folder = path.dirname(files[0]);
+  const name = files.length === 1 ? path.basename(files[0]) : `${path.basename(folder) || 'root'}-${files.length}-items`;
+  const tar = spawn('tar', archiveArguments(files), { stdio: ['ignore', 'pipe', 'pipe'] });
+  await new Promise<void>((resolve, reject) => {
+    tar.once('spawn', resolve);
+    tar.once('error', (e) => reject(new HttpError(500, `Cannot archive: tar ${(e as NodeJS.ErrnoException).code ?? errorMessage(e)}`)));
+  });
+  let errors = '';
+  tar.stderr.on('data', (data: Buffer) => (errors = (errors + data.toString()).slice(-2000)));
+  tar.on('close', (code) => {
+    if (code !== 0 && errors.trim()) {
+      logger.warn(`Download of ${files.length === 1 ? files[0] : folder}: ${errors.trim()}`);
+    }
+  });
+  // The page gave up: so does tar
+  res.on('close', () => tar.exitCode === null && tar.kill());
+  res.writeHead(200, {
+    ...SANDBOXED,
+    'Content-Type': 'application/gzip',
+    'Content-Disposition': contentDisposition(`${name}.tar.gz`),
+    'Cache-Control': 'no-store',
+  });
+  tar.stdout.pipe(res);
 }
 
 const gzipAsync = promisify(gzip);

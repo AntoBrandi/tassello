@@ -45,7 +45,7 @@ export {
   type ImageOptions,
   type TfOptions,
 } from '../connection.ts';
-export { imageUrl } from '../api.ts';
+export { imageUrl, fsApi, ApiError, type Upload } from '../api.ts';
 
 // The page
 export { useDialogs, Modal, type Dialogs, type ConfirmOptions, type PromptOptions } from '../dialogs.tsx';
@@ -78,4 +78,18 @@ export type {
   Transform2D,
 } from '../../shared/protocol.ts';
 export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
+export type {
+  FsAnalysis,
+  FsConflict,
+  FsDetails,
+  FsDisk,
+  FsEntry,
+  FsListing,
+  FsOperation,
+  FsPlaces,
+  FsResult,
+  FsSaved,
+  FsSpace,
+  FsText,
+} from '../../shared/file_manager.ts';
 export type { Panel, WidgetInstance } from '../../shared/panel.ts';
