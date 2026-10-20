@@ -11,9 +11,15 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   as a graph or a list. The server follows the log for every page and keeps the nodes' state.
 - The inspector records its log into rosbags (`ros2 bag record`), and plays rosbags back in the
   widget (MCAP or SQLite, Humble's or Jazzy's), with pause, seek and speed.
+- Behavior Tree Editor widget: a BT.CPP behavior tree's XML file of the robot, edited as a graph,
+  with a palette of nodes (BT.CPP's, Nav2's, node libraries of `TreeNodesModel`, the file's own),
+  drag and drop, a side panel for the nodes' names and ports, subtrees, undo and redo, copy and
+  paste, and an XML view. Saves only what changed, keeping the file's comments and layout, and
+  never over changes made on the robot since it was read.
 - The file browser is resizable, and shows long names whole.
 - Plugins: the `behavior-tree` property kind, `connection.subscribeBehaviorTree`,
-  `recordBehaviorTree`, `subscribeBehaviorTreePlayback`, `controlBehaviorTreePlayback`.
+  `recordBehaviorTree`, `subscribeBehaviorTreePlayback`, `controlBehaviorTreePlayback`,
+  `subscribeBehaviorTreeFile`, `saveBehaviorTreeFile`.
 - Uploads take behavior trees (XML) as well as images.
 
 ## 0.1.0

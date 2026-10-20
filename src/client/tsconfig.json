@@ -15,5 +15,5 @@
   },
   "include": ["**/*.ts", "**/*.tsx", "../shared/**/*.ts"],
   // Run by node --test (npm test), typed by the server's configuration
-  "exclude": ["**/*.test.ts"]
+  "exclude": ["**/*.test.ts", "../shared/**/*.test.ts"]
 }

@@ -10,7 +10,8 @@ and plugins add more.
 - **Panels of widgets** on a grid: add, move and resize them in the browser, no code or config files.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
-  images, command buttons, a systemd application manager and a behavior tree inspector.
+  images, command buttons, a systemd application manager, and a behavior tree inspector and
+  editor.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -114,6 +115,7 @@ after the others on the devices already arranged.
 | **Button** | Runs a bash command on the robot, showing its output. Takes its running colour until the command finishes, on every page showing it; pressing it again stops the command |
 | **Application Manager** | The robot's systemd services matching a name: their state, whether they start at boot, buttons to start, stop and restart them, and their journal |
 | **Behavior Tree Inspector** | What a BT.CPP behavior tree is doing, from its log (Nav2's `/behavior_tree_log`): the tree of its XML file with the running branch lit, each node's status, last result, counts and ports, and the latest transitions. As a graph (pan, zoom, follow the running nodes) or a list. Records the log into rosbags, and plays rosbags back at any speed |
+| **Behavior Tree Editor** | Edits a BT.CPP behavior tree's XML file of the robot as a graph: nodes from a palette (BT.CPP's, Nav2's, your libraries'), dragged where they go, moved with their children, their names and ports edited in a side panel. Subtrees, undo and redo, copy and paste, an XML view. Saves only what changed, never over changes made meanwhile |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -173,6 +175,25 @@ Notes on some of them:
   `ros2 bag record -a`) and plays its log in the widget, on the tree of its file, without
   publishing anything: pause, seek and choose the speed (0.1× to 16×). Bags of Humble and of
   Jazzy are read either way; SQLite bags need Node.js 22.13, zstd compressed MCAP 22.15.
+- **Behavior Tree Editor** edits one BehaviorTree of the file at a time (its toolbar switches
+  between them, adds new ones, and double clicking a subtree opens its tree, even in an included
+  file). Add a node from the palette by dragging it where it goes (into a node, or beside one), or
+  click it to add it into the selected node, or after it. Drag nodes to move them with their
+  children. The side panel edits the selected node's name and ports, with their types, defaults
+  and descriptions from its model, and its other attributes (BT.CPP 4's `_skipIf`, `_while`…);
+  it moves, duplicates, wraps, unwraps and replaces it. What BT.CPP would refuse, such as a
+  decorator without its child, is marked. Keys: Delete, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+X,
+  Ctrl+V, Ctrl+D, Ctrl+S, the arrows to move the selection (Alt: the node).
+
+  The palette has BT.CPP's nodes (of the file's format, `BTCPP_format`), Nav2's (its
+  `nav2_tree_nodes.xml`, when installed), those of the file's `TreeNodesModel` and includes, and
+  those of the *node libraries*: XML files of `TreeNodesModel`, as Groot exports them, set in the
+  widget's properties or loaded from the palette. Saving writes back only the elements changed,
+  the rest of the file (comments, blank lines, indentation) as it was. The file is read again when
+  it changes on the robot: without changes in the editor it is shown at once, with changes the
+  editor asks which to keep, and a save over a file changed since it was read is refused.
+  Uploads, and files the server cannot write, are saved elsewhere with *Save as*. The editor keeps
+  its changes while the page is open, and the page asks before closing with changes not saved.
 
 ## Plugins
 
@@ -201,7 +222,8 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 
 Tassello has no login. **Anyone who can open the page can drive the robot, run any command as
 the server's user, read its images, behavior trees and the behavior tree logs of its rosbags,
-and record rosbags into new folders**: keep it on a network you trust, or behind a reverse proxy
+record rosbags into new folders, and write behavior tree files (XML files whose root is
+`<root>`, over others of the same kind only)**: keep it on a network you trust, or behind a reverse proxy
 with authentication (it serves everything under `/`, its WebSocket at `/ws`).
 
 ## How it works

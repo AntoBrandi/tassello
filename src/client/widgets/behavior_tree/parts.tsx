@@ -15,7 +15,7 @@ import {
 
 // What the node does, by its shape: → sequences, ? fallbacks, ⇉ parallels,
 // ↻ retries, ◇ decorators, ⚡ actions, ✓ conditions, the tree of subtrees
-function iconOf(node: BtNode) {
+function iconOf(node: Pick<BtNode, 'kind' | 'type'>) {
   switch (node.kind) {
     case 'control':
       if (/Sequence/.test(node.type)) {
@@ -42,12 +42,12 @@ function iconOf(node: BtNode) {
 }
 
 // None for the nodes not in the tree file, whose kind is not known
-export function KindIcon({ node, size = 14 }: { node: BtNode; size?: number }) {
+export function KindIcon({ node, size = 14 }: { node: Pick<BtNode, 'kind' | 'type'>; size?: number }) {
   const Icon = iconOf(node);
   return Icon && <Icon className="bt-kind" width={size} height={size} />;
 }
 
 // "Control", for the tooltips and details
-export function kindLabel(node: BtNode): string {
+export function kindLabel(node: Pick<BtNode, 'kind'>): string {
   return node.kind ? node.kind.charAt(0).toUpperCase() + node.kind.slice(1) : 'Not in the tree file';
 }

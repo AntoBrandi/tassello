@@ -24,6 +24,8 @@ export {
   useTopic,
   useTf,
   useCommandState,
+  type BehaviorTreeFileHandlers,
+  type BehaviorTreeFileOptions,
   type BehaviorTreeHandlers,
   type BehaviorTreeOptions,
   type BehaviorTreePlaybackOptions,
@@ -48,11 +50,15 @@ export { Joystick, type JoystickProps } from '../widgets/Joystick.tsx';
 export * from '../icons.tsx';
 
 export type {
+  BehaviorTreeFile,
   BehaviorTreeInfo,
+  BehaviorTreeModels,
   BehaviorTreePlaybackState,
   BehaviorTreeRecording,
+  BehaviorTreeSaved,
   BehaviorTreeUpdate,
   BtNode,
+  BtNodeLibrary,
   BtNodeState,
   BtTransition,
   CommandState,
@@ -62,4 +68,5 @@ export type {
   TfUpdate,
   Transform2D,
 } from '../../shared/protocol.ts';
+export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
 export type { Panel, WidgetInstance } from '../../shared/panel.ts';

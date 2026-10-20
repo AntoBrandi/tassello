@@ -51,6 +51,14 @@ export const CopyIcon = icon(
   </>,
 );
 export const UndoIcon = icon(<path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />);
+export const RedoIcon = icon(<path d="m15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />);
+export const SaveIcon = icon(
+  <>
+    <path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V3Z" />
+    <path d="M8 3v5h7V3M8 21v-7h8v7" />
+  </>,
+);
+export const CodeIcon = icon(<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16" />);
 export const MoreIcon = icon(
   <>
     <circle cx="5" cy="12" r="1" fill="currentColor" />
@@ -166,6 +174,15 @@ export const TreeIcon = icon(
     <rect x="3" y="16" width="6" height="5" rx="1.2" />
     <rect x="15" y="16" width="6" height="5" rx="1.2" />
     <path d="M12 8v4M6 16v-4h12v4" />
+  </>,
+);
+// The tree, a pencil on its right branch: the behavior tree editor
+export const TreeEditIcon = icon(
+  <>
+    <rect x="9" y="3" width="6" height="5" rx="1.2" />
+    <rect x="3" y="16" width="6" height="5" rx="1.2" />
+    <path d="M12 8v4M6 16v-4h7" />
+    <path d="M19.2 11.8a1.6 1.6 0 0 1 2.3 2.3L15.8 19.8l-3 .7.7-3Z" />
   </>,
 );
 export const ListIcon = icon(<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />);

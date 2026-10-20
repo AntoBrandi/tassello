@@ -9,6 +9,7 @@
 
 import { applicationsWidget } from './ApplicationsWidget.tsx';
 import { armTeleopWidget } from './ArmTeleopWidget.tsx';
+import { behaviorTreeEditorWidget } from './behavior_tree/BehaviorTreeEditorWidget.tsx';
 import { behaviorTreeWidget } from './behavior_tree/BehaviorTreeWidget.tsx';
 import { buttonWidget } from './ButtonWidget.tsx';
 import { cameraWidget } from './CameraWidget.tsx';
@@ -31,6 +32,7 @@ const CORE: RegisteredWidget[] = [
   buttonWidget,
   applicationsWidget,
   behaviorTreeWidget,
+  behaviorTreeEditorWidget,
 ];
 
 const registry = new WidgetRegistry(CORE);

@@ -7,10 +7,11 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { EXPLICIT, guessKind } from '../shared/bt_nodes.ts';
 import type { BehaviorTreeInfo, BtNode, BtNodeKind } from '../shared/protocol.ts';
+import { parseXml, type XmlElement } from '../shared/xml.ts';
 import { isUploadName } from './files.ts';
 import { errorMessage, packageShareDirectory, type Logger } from './util.ts';
-import { parseXml, type XmlElement } from './xml.ts';
 
 export interface BehaviorTreeFile {
   treeId: string;
@@ -23,43 +24,6 @@ export interface BehaviorTreeFile {
 // Beyond this, a file (or a recursion of subtrees missed) is not a tree to show
 const MAX_NODES = 5000;
 const PACKAGE_URL = /^package:\/\/([^/]+)\/(.+)$/;
-// The forms naming their type with an ID attribute: <Action ID="ComputePathToPose"/>
-const EXPLICIT: Record<string, BtNodeKind> = {
-  Action: 'action',
-  Condition: 'condition',
-  Control: 'control',
-  Decorator: 'decorator',
-  SubTree: 'subtree',
-  // BT.CPP 3's
-  SubTreePlus: 'subtree',
-};
-
-// BT.CPP's own nodes, 3 and 4, and Nav2's main ones, in case its models
-// (nav2_tree_nodes.xml) are not installed
-const KNOWN = new Map<string, BtNodeKind>([
-  ...[
-    'Sequence', 'SequenceStar', 'SequenceWithMemory', 'ReactiveSequence', 'Fallback', 'ReactiveFallback',
-    'Parallel', 'ParallelAll', 'IfThenElse', 'WhileDoElse', 'ManualSelector', 'TryCatch',
-    'Switch2', 'Switch3', 'Switch4', 'Switch5', 'Switch6',
-    'PipelineSequence', 'RecoveryNode', 'RoundRobin', 'NonblockingSequence', 'PersistentSequence',
-    'PauseResumeController',
-  ].map((type) => [type, 'control'] as const),
-  ...[
-    'Inverter', 'ForceSuccess', 'ForceFailure', 'Repeat', 'RetryUntilSuccessful', 'RetryUntilSuccesful',
-    'KeepRunningUntilFailure', 'Delay', 'Timeout', 'RunOnce', 'Precondition', 'SkipUnlessUpdated',
-    'WaitValueUpdate', 'LoopInt', 'LoopDouble', 'LoopString', 'LoopBool', 'BlackboardCheckInt',
-    'BlackboardCheckDouble', 'BlackboardCheckString', 'BlackboardCheckBool',
-    'RateController', 'DistanceController', 'SpeedController', 'GoalUpdater', 'PathLongerOnApproach',
-    'SingleTrigger', 'GoalUpdatedController',
-  ].map((type) => [type, 'decorator'] as const),
-  ...[
-    'ScriptCondition', 'WasEntryUpdated', 'GoalReached', 'GoalUpdated', 'GloballyUpdatedGoal',
-    'InitialPoseReceived', 'IsStuck', 'TransformAvailable', 'DistanceTraveled', 'TimeExpired',
-    'IsBatteryLow', 'IsBatteryCharging', 'IsPathValid', 'PathExpiringTimer', 'AreErrorCodesPresent',
-    'WouldAControllerRecoveryHelp', 'WouldAPlannerRecoveryHelp', 'WouldASmootherRecoveryHelp',
-  ].map((type) => [type, 'condition'] as const),
-]);
-const CONDITION_NAME = /^(Is|Are|Has|Was|Would|Can|Check)[A-Z]|Condition/;
 
 // The XML file a widget names: a robot path (/…, ~/…), package://… or
 // uploads/<name>. Throws for anything else: only XML files are read.
@@ -123,20 +87,6 @@ function loadNav2Kinds(): Promise<Map<string, BtNodeKind>> {
     return kinds;
   })();
   return nav2Kinds;
-}
-
-function guessKind(type: string, children: number): BtNodeKind {
-  const known = KNOWN.get(type);
-  if (known) {
-    return known;
-  }
-  if (children > 1) {
-    return 'control';
-  }
-  if (children === 1) {
-    return 'decorator';
-  }
-  return CONDITION_NAME.test(type) ? 'condition' : 'action';
 }
 
 // The tree's nodes, from the main BehaviorTree; subtrees not defined, and

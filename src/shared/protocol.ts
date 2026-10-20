@@ -6,6 +6,8 @@
 // numbered by the client, in one sequence per connection, and ended with
 // `unsubscribe`.
 
+import type { BtNodeModel } from './bt_nodes.ts';
+
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
 export type ImageTransport = 'auto' | 'raw' | 'compressed';
@@ -274,6 +276,30 @@ export interface BehaviorTreePlaybackControl {
   time?: number;
 }
 
+// A behavior tree's XML file, for the editor: its text as bt.file, again
+// whenever it changes, and the nodes known (bt.models): those of Nav2, of
+// the file's includes, and of the libraries (XML files of TreeNodesModel)
+export interface BehaviorTreeFileSubscribe {
+  type: 'bt.file.subscribe';
+  id: number;
+  // A robot path (/…, ~/…), package://<package>/<path> or uploads/<name>
+  path: string;
+  libraries: string[];
+}
+
+// Saves a behavior tree's XML file: answered by a result, a
+// BehaviorTreeSaved. Only over a behavior tree (whose root is <root>), and
+// only if it is still the version base (null: whatever it is now); create:
+// only a new file. Uploads are not saved.
+export interface BehaviorTreeFileSave {
+  type: 'bt.file.save';
+  id: number;
+  path: string;
+  text: string;
+  base: string | null;
+  create: boolean;
+}
+
 export type ClientMessage =
   | TwistCommand
   | ImageSubscribe
@@ -298,7 +324,9 @@ export type ClientMessage =
   | BehaviorTreeSubscribe
   | BehaviorTreeRecord
   | BehaviorTreePlaybackSubscribe
-  | BehaviorTreePlaybackControl;
+  | BehaviorTreePlaybackControl
+  | BehaviorTreeFileSubscribe
+  | BehaviorTreeFileSave;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -575,6 +603,49 @@ export interface BehaviorTreeUpdate {
   mismatch: string | null;
 }
 
+// Of a bt.file subscription
+export interface BehaviorTreeFile {
+  type: 'bt.file';
+  id: number;
+  // The file read: its absolute path
+  file: string;
+  // null if it could not be read, see error
+  text: string | null;
+  // Of its content: what a save names as its base
+  version: string | null;
+  // Why it cannot be saved: an upload, a file the server cannot write
+  readOnly: string | null;
+  error: string | null;
+}
+
+// Nodes of BT.CPP's trees, from a file of TreeNodesModel
+export interface BtNodeLibrary {
+  // Nav2, or the file's name
+  name: string;
+  // Its file
+  file: string;
+  models: BtNodeModel[];
+}
+
+// Of a bt.file subscription: whenever the file's includes or the libraries change
+export interface BehaviorTreeModels {
+  type: 'bt.models';
+  id: number;
+  libraries: BtNodeLibrary[];
+  // The BehaviorTrees of the file's includes, which its SubTrees may name
+  trees: { id: string; file: string }[];
+  // Libraries and includes that could not be read
+  warnings: string[];
+}
+
+// The result of a bt.file.save
+export interface BehaviorTreeSaved {
+  // The file's version: the one saved, or (conflict) the one found
+  version: string;
+  // Not saved: the file changed since the base
+  conflict: boolean;
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -593,6 +664,8 @@ export type ServerMessage =
   | BehaviorTreeUpdate
   | BehaviorTreeRecording
   | BehaviorTreePlaybackState
+  | BehaviorTreeFile
+  | BehaviorTreeModels
   | PanelsChanged
   | ErrorMessage;
 

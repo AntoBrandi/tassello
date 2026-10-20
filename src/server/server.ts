@@ -16,6 +16,7 @@ import { WebSocketServer } from 'ws';
 
 import type { ServerMessage } from '../shared/protocol.ts';
 import { Arm } from './arm.ts';
+import { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import { BehaviorTrees } from './behavior_trees.ts';
 import { CommandRunner } from './commands.ts';
 import { createRequestHandler } from './http.ts';
@@ -116,6 +117,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
   const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
+  const behaviorTreeFiles = new BehaviorTreeFiles(uploadsDir, logger);
   const host = new PluginHost(plugins);
   await host.activate({
     node,
@@ -163,6 +165,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       arm,
       ros,
       behaviorTrees,
+      behaviorTreeFiles,
       plugins: host,
       hostname: os.hostname(),
     });
@@ -208,6 +211,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     }
     wss.close();
     server.close();
+    behaviorTreeFiles.stopAll();
     // Time for those last zero velocities to leave, and for the bags being
     // recorded to be completed
     void Promise.all([

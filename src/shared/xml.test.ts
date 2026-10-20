@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parseXml } from './xml.ts';
+import { parseXml, parseXmlSource, sourceText, type SourceElement } from './xml.ts';
 
 test('elements and attributes, the rest skipped', () => {
   const root = parseXml(`<?xml version="1.0" encoding="UTF-8"?>
@@ -32,4 +32,17 @@ test('malformed documents name their line', () => {
   assert.throws(() => parseXml('<root a=1/>'), /Line 1: Malformed tag/);
   assert.throws(() => parseXml('<root><!-- never closed </root>'), /Comment not closed/);
   assert.throws(() => parseXml('just text'), /No XML element/);
+});
+
+test('as written: where the nodes are, comments and text kept', () => {
+  const text = '<?xml version="1.0"?>\n<root a="1">\n  <!-- note -->\n  <Port name="x">Some &amp; text</Port>\n  <Leaf />\n</root>\n';
+  const root = parseXmlSource(text);
+  assert.equal(text.slice(root.start, root.end), text.slice(22, -1));
+  assert.equal(text.slice(root.start, root.openEnd), '<root a="1"');
+  const [comment, port, leaf] = root.children;
+  assert.deepEqual([comment.type, text.slice(comment.start, comment.end)], ['comment', '<!-- note -->']);
+  assert.equal(port.type, 'element');
+  assert.equal(sourceText(text, port as SourceElement), 'Some & text');
+  assert.equal(text.slice(leaf.start, leaf.end), '<Leaf />');
+  assert.equal(text.slice(leaf.start, (leaf as SourceElement).openEnd), '<Leaf ');
 });

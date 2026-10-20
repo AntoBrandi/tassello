@@ -9,11 +9,15 @@ import {
   IMAGE_FORMATS,
   type ArmSubscribe,
   type ArmUpdate,
+  type BehaviorTreeFile,
+  type BehaviorTreeFileSubscribe,
   type BehaviorTreeInfo,
+  type BehaviorTreeModels,
   type BehaviorTreePlaybackControl,
   type BehaviorTreePlaybackState,
   type BehaviorTreePlaybackSubscribe,
   type BehaviorTreeRecording,
+  type BehaviorTreeSaved,
   type BehaviorTreeSubscribe,
   type BehaviorTreeUpdate,
   type ClientMessage,
@@ -49,6 +53,7 @@ export type ArmOptions = Omit<ArmSubscribe, 'type' | 'id'>;
 export type BehaviorTreeOptions = Omit<BehaviorTreeSubscribe, 'type' | 'id'>;
 export type BehaviorTreePlaybackOptions = Omit<BehaviorTreePlaybackSubscribe, 'type' | 'id'>;
 export type BehaviorTreePlaybackRequest = Omit<BehaviorTreePlaybackControl, 'type' | 'id'>;
+export type BehaviorTreeFileOptions = Omit<BehaviorTreeFileSubscribe, 'type' | 'id'>;
 
 export interface TopicHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
@@ -64,6 +69,13 @@ export interface BehaviorTreeHandlers {
   recording?: (recording: BehaviorTreeRecording['recording']) => void;
   // Played back: where the playback is
   playback?: (state: BehaviorTreePlaybackState) => void;
+}
+
+export interface BehaviorTreeFileHandlers {
+  // Its text, again whenever it changes
+  file: (file: BehaviorTreeFile) => void;
+  // The nodes it can use
+  models: (models: BehaviorTreeModels) => void;
 }
 
 // A frame's source size (see FRAME_HEADER_BYTES) and metadata, e.g. GridInfo
@@ -98,7 +110,8 @@ type Request =
   | Omit<ArmSubscribe, 'id'>
   | Omit<PluginSubscribe, 'id'>
   | Omit<BehaviorTreeSubscribe, 'id'>
-  | Omit<BehaviorTreePlaybackSubscribe, 'id'>;
+  | Omit<BehaviorTreePlaybackSubscribe, 'id'>
+  | Omit<BehaviorTreeFileSubscribe, 'id'>;
 
 interface Subscription {
   request: Request;
@@ -111,6 +124,7 @@ interface Subscription {
   arm?: (update: ArmUpdate) => void;
   plugin?: PluginStreamHandlers;
   behaviorTree?: BehaviorTreeHandlers;
+  behaviorTreeFile?: BehaviorTreeFileHandlers;
 }
 
 const MIN_RETRY_MS = 500;
@@ -252,6 +266,20 @@ export class Connection {
   // Plays, pauses, seeks or sets the speed of the playback id
   controlBehaviorTreePlayback(id: number, request: BehaviorTreePlaybackRequest): boolean {
     return this.send({ type: 'bt.playback.control', id, ...request });
+  }
+
+  // A behavior tree's XML file, to edit: its text, again whenever it changes,
+  // and the nodes it can use. Renewed on every connection.
+  subscribeBehaviorTreeFile(options: BehaviorTreeFileOptions, handlers: BehaviorTreeFileHandlers): () => void {
+    return this.subscribe({ type: 'bt.file.subscribe', ...options }, { behaviorTreeFile: handlers });
+  }
+
+  // Saves a behavior tree's XML file, if still of the version base (null:
+  // whatever it is), or as a new file (create)
+  saveBehaviorTreeFile(path: string, text: string, base: string | null, create = false): Promise<BehaviorTreeSaved> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'bt.file.save', id, path, text, base, create });
+    return this.result<BehaviorTreeSaved>(id, sent, REQUEST_TIMEOUT_MS);
   }
 
   // Resolves with systemctl's error, or null once done
@@ -433,6 +461,12 @@ export class Connection {
         break;
       case 'bt.playback.state':
         this.subscriptions.get(message.id)?.behaviorTree?.playback?.(message);
+        break;
+      case 'bt.file':
+        this.subscriptions.get(message.id)?.behaviorTreeFile?.file(message);
+        break;
+      case 'bt.models':
+        this.subscriptions.get(message.id)?.behaviorTreeFile?.models(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

@@ -156,6 +156,8 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `recordBehaviorTree(topic, path)` | Records the log into a rosbag in the new folder `path`, or stops (`null`): resolves with the bag's folder |
 | `subscribeBehaviorTreePlayback({ bag, topic, tree }, handlers)` | A rosbag's log played back, as `subscribeBehaviorTree` follows a live one, with `playback(state)`: returns `{ id, unsubscribe }` |
 | `controlBehaviorTreePlayback(id, { playing?, speed?, time? })` | Plays, pauses, sets the speed of, or seeks the playback |
+| `subscribeBehaviorTreeFile({ path, libraries }, { file, models })` | A behavior tree's XML file: its text and version, again whenever it changes, and the node models it can use (Nav2's, its includes', the libraries') |
+| `saveBehaviorTreeFile(path, text, base, create?)` | Saves a behavior tree's XML file if still of the version `base` (`null`: whatever it is), or as a new file: resolves with `{ version, conflict }` |
 | `serverNow()` | Now, on the robot's clock |
 
 Messages are JSON as rclnodejs has them: fields by name, numeric arrays as arrays, 64 bit

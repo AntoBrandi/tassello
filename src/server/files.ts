@@ -121,8 +121,7 @@ export async function listDirectory(
 // Saves an uploaded image or behavior tree; returns its name in the uploads
 // directory
 export async function saveUpload(uploadsDir: string, data: Buffer): Promise<string> {
-  const head = data.subarray(0, 64 * 1024).toString('utf8').trimStart();
-  const type = imageType(data) ?? (BEHAVIOR_TREE.test(head) ? 'xml' : null);
+  const type = imageType(data) ?? (isBehaviorTreeXml(data.subarray(0, 64 * 1024).toString('utf8')) ? 'xml' : null);
   if (!type) {
     throw new HttpError(415, 'Not an image (PNG, JPEG, GIF, WebP, BMP, SVG) nor a behavior tree (XML)');
   }
@@ -130,6 +129,11 @@ export async function saveUpload(uploadsDir: string, data: Buffer): Promise<stri
   await fs.mkdir(uploadsDir, { recursive: true });
   await fs.writeFile(path.join(uploadsDir, name), data);
   return name;
+}
+
+// Whether the text is BT.CPP's XML, by its first element: <root>
+export function isBehaviorTreeXml(text: string): boolean {
+  return BEHAVIOR_TREE.test(text.slice(0, 64 * 1024).trimStart());
 }
 
 export function isUploadName(name: string): boolean {

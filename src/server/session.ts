@@ -15,6 +15,7 @@ import {
 } from '../shared/protocol.ts';
 import type { PluginSession } from './api.ts';
 import type { Arm, ArmWatcher } from './arm.ts';
+import type { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import type { BehaviorTreePlayback } from './behavior_tree_playback.ts';
 import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
@@ -42,6 +43,7 @@ export interface SessionServices {
   arm: Arm;
   ros: Ros;
   behaviorTrees: BehaviorTrees;
+  behaviorTreeFiles: BehaviorTreeFiles;
   plugins: PluginHost;
   hostname: string;
 }
@@ -308,6 +310,35 @@ export class Session implements FrameSink, PluginSession {
           speed: typeof message.speed === 'number' ? message.speed : undefined,
           time: typeof message.time === 'number' ? message.time : undefined,
         });
+        return;
+
+      case 'bt.file.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        const libraries = Array.isArray(message.libraries) ? strings(message.libraries, 'libraries') : [];
+        this.subscriptions.set(
+          id,
+          services.behaviorTreeFiles.watch(string(message.path, 'path'), libraries, {
+            onFile: (file) => this.send({ type: 'bt.file', id, ...file }),
+            onModels: (models) => this.send({ type: 'bt.models', id, ...models }),
+          }),
+        );
+        return;
+      }
+
+      case 'bt.file.save':
+        if (typeof message.text !== 'string') {
+          throw new Error('text must be a string');
+        }
+        this.answer(
+          message.id,
+          services.behaviorTreeFiles.save(
+            string(message.path, 'path'),
+            message.text,
+            typeof message.base === 'string' ? message.base : null,
+            message.create === true,
+          ),
+        );
         return;
 
       case 'arm.subscribe': {
