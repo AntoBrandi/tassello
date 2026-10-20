@@ -9,6 +9,13 @@ import {
   IMAGE_FORMATS,
   type ArmSubscribe,
   type ArmUpdate,
+  type BehaviorTreeInfo,
+  type BehaviorTreePlaybackControl,
+  type BehaviorTreePlaybackState,
+  type BehaviorTreePlaybackSubscribe,
+  type BehaviorTreeRecording,
+  type BehaviorTreeSubscribe,
+  type BehaviorTreeUpdate,
   type ClientMessage,
   type CommandState,
   type GridSubscribe,
@@ -39,10 +46,24 @@ export type TopicOptions = Omit<TopicSubscribe, 'type' | 'id'>;
 export type ServicesOptions = Omit<ServicesSubscribe, 'type' | 'id'>;
 export type LogsOptions = Omit<LogsSubscribe, 'type' | 'id'>;
 export type ArmOptions = Omit<ArmSubscribe, 'type' | 'id'>;
+export type BehaviorTreeOptions = Omit<BehaviorTreeSubscribe, 'type' | 'id'>;
+export type BehaviorTreePlaybackOptions = Omit<BehaviorTreePlaybackSubscribe, 'type' | 'id'>;
+export type BehaviorTreePlaybackRequest = Omit<BehaviorTreePlaybackControl, 'type' | 'id'>;
 
 export interface TopicHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   message: (messageType: string, message: unknown) => void;
+}
+
+export interface BehaviorTreeHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // The tree's nodes; a reset update follows
+  tree: (tree: BehaviorTreeInfo) => void;
+  update: (update: BehaviorTreeUpdate) => void;
+  // Live: the topic's recording, if any
+  recording?: (recording: BehaviorTreeRecording['recording']) => void;
+  // Played back: where the playback is
+  playback?: (state: BehaviorTreePlaybackState) => void;
 }
 
 // A frame's source size (see FRAME_HEADER_BYTES) and metadata, e.g. GridInfo
@@ -75,7 +96,9 @@ type Request =
   | Omit<ServicesSubscribe, 'id'>
   | Omit<LogsSubscribe, 'id'>
   | Omit<ArmSubscribe, 'id'>
-  | Omit<PluginSubscribe, 'id'>;
+  | Omit<PluginSubscribe, 'id'>
+  | Omit<BehaviorTreeSubscribe, 'id'>
+  | Omit<BehaviorTreePlaybackSubscribe, 'id'>;
 
 interface Subscription {
   request: Request;
@@ -87,6 +110,7 @@ interface Subscription {
   logs?: (update: LogsUpdate) => void;
   arm?: (update: ArmUpdate) => void;
   plugin?: PluginStreamHandlers;
+  behaviorTree?: BehaviorTreeHandlers;
 }
 
 const MIN_RETRY_MS = 500;
@@ -97,6 +121,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const CALL_TIMEOUT_MS = 5000;
 // Time for the answer to travel, on top of the server's own timeout
 const RESULT_MARGIN_MS = 2000;
+// Of ros2 bag record, to start or to complete the bag
+const RECORD_TIMEOUT_MS = 20_000;
 
 function commandKey(panelId: string, widgetId: string): string {
   return `${panelId}/${widgetId}`;
@@ -196,6 +222,36 @@ export class Connection {
 
   subscribeLogs(options: LogsOptions, callback: (update: LogsUpdate) => void): () => void {
     return this.subscribe({ type: 'logs.subscribe', ...options }, { logs: callback });
+  }
+
+  // A behavior tree's log: its tree, then its nodes' states as they change.
+  // Renewed on every connection with the tree and a reset update.
+  subscribeBehaviorTree(options: BehaviorTreeOptions, handlers: BehaviorTreeHandlers): () => void {
+    return this.subscribe({ type: 'bt.subscribe', ...options }, { behaviorTree: handlers });
+  }
+
+  // Records a behavior tree's log into a rosbag, in the new folder path, or
+  // stops recording it (null): resolves with the bag's folder
+  recordBehaviorTree(topic: string, path: string | null): Promise<string | null> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'bt.record', id, topic, path });
+    return this.result<string | null>(id, sent, RECORD_TIMEOUT_MS);
+  }
+
+  // A rosbag of a behavior tree's log played back, as a live one is followed;
+  // returns the subscription's id, for its controls, and the unsubscribe
+  // function. Renewed on every connection, from the start.
+  subscribeBehaviorTreePlayback(
+    options: BehaviorTreePlaybackOptions,
+    handlers: BehaviorTreeHandlers,
+  ): { id: number; unsubscribe: () => void } {
+    const id = this.nextId;
+    return { id, unsubscribe: this.subscribe({ type: 'bt.playback', ...options }, { behaviorTree: handlers }) };
+  }
+
+  // Plays, pauses, seeks or sets the speed of the playback id
+  controlBehaviorTreePlayback(id: number, request: BehaviorTreePlaybackRequest): boolean {
+    return this.send({ type: 'bt.playback.control', id, ...request });
   }
 
   // Resolves with systemctl's error, or null once done
@@ -327,7 +383,7 @@ export class Connection {
         break;
       case 'stream.status': {
         const subscription = this.subscriptions.get(message.id);
-        (subscription?.stream ?? subscription?.topic)?.status(message.state, message.message);
+        (subscription?.stream ?? subscription?.topic ?? subscription?.behaviorTree)?.status(message.state, message.message);
         subscription?.plugin?.status?.(message.state, message.message);
         break;
       }
@@ -365,6 +421,18 @@ export class Connection {
       }
       case 'plugin.data':
         this.subscriptions.get(message.id)?.plugin?.data(message.data);
+        break;
+      case 'bt.tree':
+        this.subscriptions.get(message.id)?.behaviorTree?.tree(message);
+        break;
+      case 'bt':
+        this.subscriptions.get(message.id)?.behaviorTree?.update(message);
+        break;
+      case 'bt.recording':
+        this.subscriptions.get(message.id)?.behaviorTree?.recording?.(message.recording);
+        break;
+      case 'bt.playback.state':
+        this.subscriptions.get(message.id)?.behaviorTree?.playback?.(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

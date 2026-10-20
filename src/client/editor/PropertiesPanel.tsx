@@ -7,7 +7,7 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { TopicInfo, WidgetInstance } from '../../shared/panel.ts';
 import { api } from '../api.ts';
 import { CloseIcon, CopyIcon, QuestionIcon, TrashIcon } from '../icons.tsx';
-import { ImageInput } from './ImageInput.tsx';
+import { FileInput } from './FileInput.tsx';
 import { resolveConfig, widgetDefinition } from '../widgets/registry.ts';
 import type { Property } from '../widgets/types.ts';
 
@@ -150,10 +150,17 @@ function PropertyField({
               />
             );
           case 'image':
+          case 'behavior-tree':
             return (
-              <ImageInput id={id} value={String(value)} placeholder={property.placeholder} onCommit={onChange}>
+              <FileInput
+                id={id}
+                kind={property.kind}
+                value={String(value)}
+                placeholder={property.placeholder}
+                onCommit={onChange}
+              >
                 {(props) => <CommittedInput {...props} />}
-              </ImageInput>
+              </FileInput>
             );
           case 'topic':
             return (

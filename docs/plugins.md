@@ -138,6 +138,7 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `topic` | `string`, a topic name, suggesting those of the ROS graph | `topicTypes`, e.g. `['sensor_msgs/msg/Image']` |
 | `select` | one of the options' values | `options: [{ value, label }]` |
 | `image` | `string`, an image of the robot or uploaded (see `imageUrl`) | `placeholder` |
+| `behavior-tree` | `string`, a behavior tree's XML (BT.CPP's) of the robot, or uploaded | `placeholder` |
 
 ### The robot
 
@@ -151,6 +152,10 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `subscribePlugin(plugin, stream, params, { data, status? })` | Follows a stream of the plugin's server side (`ctx.stream`). Returns the unsubscribe function |
 | `subscribeTopic({ topic, maxRate }, { message, status })` | Any topic's messages, as JSON. Returns the unsubscribe function |
 | `subscribeTf({ targetFrame, sourceFrame, rate }, callback)` | A frame's 2D pose in another |
+| `subscribeBehaviorTree({ topic, tree }, { tree, update, status, recording? })` | A behavior tree's log (`nav2_msgs/msg/BehaviorTreeLog`), on the tree of its XML file: its nodes, then their states and transitions as they change (see `src/shared/protocol.ts`) |
+| `recordBehaviorTree(topic, path)` | Records the log into a rosbag in the new folder `path`, or stops (`null`): resolves with the bag's folder |
+| `subscribeBehaviorTreePlayback({ bag, topic, tree }, handlers)` | A rosbag's log played back, as `subscribeBehaviorTree` follows a live one, with `playback(state)`: returns `{ id, unsubscribe }` |
+| `controlBehaviorTreePlayback(id, { playing?, speed?, time? })` | Plays, pauses, sets the speed of, or seeks the playback |
 | `serverNow()` | Now, on the robot's clock |
 
 Messages are JSON as rclnodejs has them: fields by name, numeric arrays as arrays, 64 bit

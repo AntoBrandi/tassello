@@ -30,6 +30,8 @@ type PropertyKind<V> = [V] extends [boolean]
           | { kind: 'select'; default: V; options: { value: V; label: string }[] }
           // A robot file (browsed), a package's, or an uploaded image: see imageUrl
           | { kind: 'image'; default: V; placeholder?: string }
+          // The same, of a behavior tree's XML (BT.CPP's)
+          | { kind: 'behavior-tree'; default: V; placeholder?: string }
       : never;
 
 // A property of a widget, edited in the properties panel. Its value is stored
@@ -67,7 +69,7 @@ export type Property = PropertyBase<Config, string> &
     | { kind: 'string' | 'color' | 'text'; default: string; placeholder?: string }
     | { kind: 'topic'; default: string; topicTypes: string[]; placeholder?: string }
     | { kind: 'select'; default: string; options: { value: string; label: string }[] }
-    | { kind: 'image'; default: string; placeholder?: string }
+    | { kind: 'image' | 'behavior-tree'; default: string; placeholder?: string }
   );
 
 export interface RegisteredWidget extends Omit<WidgetDefinition<Config>, 'properties'> {

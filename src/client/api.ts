@@ -28,10 +28,14 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 
 const panelUrl = (id: string) => `/api/panels/${encodeURIComponent(id)}`;
 
+// The robot's files a page browses for (see src/server/files.ts): images,
+// behavior trees (XML), rosbags (their folders or files), or folders only
+export type FileKind = 'image' | 'behavior-tree' | 'bag' | 'folder';
+
 export interface DirectoryListing {
   dir: string;
   parent: string | null;
-  entries: { name: string; kind: 'dir' | 'image' }[];
+  entries: { name: string; kind: 'dir' | FileKind }[];
 }
 
 async function upload(file: Blob): Promise<{ name: string }> {
@@ -69,7 +73,8 @@ export const api = {
   deletePanel: (id: string) => request<void>('DELETE', panelUrl(id)),
   listTopics: () => request<TopicInfo[]>('GET', '/api/topics'),
   listPlugins: () => request<PluginInfo[]>('GET', '/api/plugins'),
-  listFiles: (dir: string) => request<DirectoryListing>('GET', `/api/files/list?dir=${encodeURIComponent(dir)}`),
-  // Resolves with the image's value for a widget: uploads/<name>
-  uploadImage: async (file: Blob) => `uploads/${(await upload(file)).name}`,
+  listFiles: (dir: string, kind: FileKind = 'image') =>
+    request<DirectoryListing>('GET', `/api/files/list?dir=${encodeURIComponent(dir)}&kind=${kind}`),
+  // An image or a behavior tree; resolves with its value for a widget: uploads/<name>
+  uploadFile: async (file: Blob) => `uploads/${(await upload(file)).name}`,
 };

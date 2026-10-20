@@ -10,11 +10,14 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  resizable = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  // By its corner, its body filling it
+  resizable?: boolean;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -28,7 +31,12 @@ export function Modal({
 
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className={`modal${wide ? ' wide' : ''}${resizable ? ' resizable' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <header className="modal-header">
           <h2>{title}</h2>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>

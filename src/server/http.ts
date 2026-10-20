@@ -12,9 +12,10 @@
 //          directory, as package://<package>/<path> names it: the meshes of
 //          the robot description
 //   GET    /api/files?path=<path>       an image of the robot (absolute or ~/ path)
-//   GET    /api/files/list?dir=<dir>    its subdirectories and images
-//   POST   /api/uploads                 an image (the body) -> {name}
-//   GET    /api/uploads/<name>          an uploaded image
+//   GET    /api/files/list?dir=<dir>[&kind=behavior-tree]
+//                                       its subdirectories and images (or XML files)
+//   POST   /api/uploads                 an image or a behavior tree (the body) -> {name}
+//   GET    /api/uploads/<name>          an uploaded file
 //   GET    /api/plugins                 [PluginInfo] of the plugins loaded
 //   GET    /plugins/<name>/<path>       a file of the plugin's client folder
 
@@ -26,7 +27,7 @@ import { gzip } from 'node:zlib';
 
 import type { TopicInfo } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
-import { isUploadName, listDirectory, MAX_UPLOAD_BYTES, resolveImagePath, saveUpload } from './files.ts';
+import { fileKind, isUploadName, listDirectory, MAX_UPLOAD_BYTES, resolveImagePath, saveUpload } from './files.ts';
 import { HttpError, type PanelStore } from './panels.ts';
 import type { PluginHost } from './plugins.ts';
 import { errorMessage, packageShareDirectory, type Logger } from './util.ts';
@@ -36,7 +37,7 @@ export interface HttpServices {
   // The built page, null when not built (development: Vite serves it)
   wwwDir: string | null;
   topics: () => TopicInfo[];
-  // Where uploaded images are kept
+  // Where uploaded images and behavior trees are kept
   uploadsDir: string;
   plugins: PluginHost;
   logger: Logger;
@@ -55,6 +56,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
+  '.xml': 'application/xml; charset=utf-8',
   '.bmp': 'image/bmp',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
@@ -161,7 +163,7 @@ async function api(
       return serveFile(path.dirname(file), path.basename(file), req, res, SANDBOXED);
     }
     if (id === 'list' && rest.length === 0) {
-      return sendJson(res, 200, await listDirectory(query.get('dir') ?? ''));
+      return sendJson(res, 200, await listDirectory(query.get('dir') ?? '', fileKind(query.get('kind'))));
     }
     throw new HttpError(404, `No API at ${req.url}`);
   } else if (resource === 'uploads' && id === undefined && method === 'POST') {

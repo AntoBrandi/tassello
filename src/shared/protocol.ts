@@ -224,6 +224,56 @@ export interface PluginSubscribe {
   params: unknown;
 }
 
+// A behavior tree's log (nav2_msgs/msg/BehaviorTreeLog, which Nav2's
+// bt_navigator publishes on /behavior_tree_log): the tree's nodes as bt.tree,
+// then their states and transitions as bt updates, at most BT_RATE a second.
+// The server follows the log for every page at once, and for a while after
+// the last one: a page opened later sees the nodes as they are. Its status
+// comes as stream.status.
+export interface BehaviorTreeSubscribe {
+  type: 'bt.subscribe';
+  id: number;
+  topic: string;
+  // The XML of the tree the robot runs, to show it whole: a robot path (/…,
+  // ~/…), package://<package>/<path> or uploads/<name>. Empty: the nodes are
+  // those of the log, as they first change.
+  tree: string;
+}
+
+// Records a behavior tree's log into a rosbag (ros2 bag record into the new
+// folder path), or stops recording it (path null): answered by a result, the
+// bag's folder. Every page following the topic is told (bt.recording).
+export interface BehaviorTreeRecord {
+  type: 'bt.record';
+  id: number;
+  topic: string;
+  path: string | null;
+}
+
+// A rosbag of a behavior tree's log, played back for this page: as a bt
+// subscription, its tree and its nodes' states (on the bag's clock), and
+// where the playback is (bt.playback.state). It starts playing.
+export interface BehaviorTreePlaybackSubscribe {
+  type: 'bt.playback';
+  id: number;
+  // A bag's folder, or one of its files (.mcap, .db3): /…, ~/…
+  bag: string;
+  // The log's topic, if the bag has several
+  topic: string;
+  tree: string;
+}
+
+// Controls the playback subscription id: any of its fields
+export interface BehaviorTreePlaybackControl {
+  type: 'bt.playback.control';
+  id: number;
+  playing?: boolean;
+  // 1: as recorded
+  speed?: number;
+  // Seeks: on the bag's clock (ms since the epoch)
+  time?: number;
+}
+
 export type ClientMessage =
   | TwistCommand
   | ImageSubscribe
@@ -244,7 +294,11 @@ export type ClientMessage =
   | RosPublish
   | RosCall
   | PluginRequest
-  | PluginSubscribe;
+  | PluginSubscribe
+  | BehaviorTreeSubscribe
+  | BehaviorTreeRecord
+  | BehaviorTreePlaybackSubscribe
+  | BehaviorTreePlaybackControl;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -421,6 +475,106 @@ export interface PluginData {
   data: unknown;
 }
 
+export type BtNodeKind = 'action' | 'condition' | 'control' | 'decorator' | 'subtree';
+
+// A node of a behavior tree, as BT.CPP makes it from the XML
+export interface BtNode {
+  // As the log names it: its name attribute, or its type
+  name: string;
+  // Its registration ID: the XML tag, the ID of <Action ID="…"> and the like,
+  // SubTree for subtrees (whose ID is a port)
+  type: string;
+  // null if unknown: the nodes of the log that are not in the tree file
+  kind: BtNodeKind | null;
+  // Its parent's index, -1 for the tree's root and the nodes not in the tree
+  parent: number;
+  // Its other attributes: its parameters and blackboard entries
+  ports: Record<string, string>;
+}
+
+// The tree of a bt subscription, again whenever its file changes: the states
+// and transitions known so far follow, as a reset update
+export interface BehaviorTreeInfo {
+  type: 'bt.tree';
+  id: number;
+  // The BehaviorTree shown: the file's main tree; '' without a file
+  treeId: string;
+  // In BT.CPP's order (that of their UIDs): depth first, each subtree
+  // expanded where it is used
+  nodes: BtNode[];
+  // Why the tree file could not be read: the nodes are then the log's
+  error: string | null;
+  // What may be wrong with it: an include not found, a subtree not defined
+  warnings: string[];
+}
+
+export interface BtNodeState {
+  node: number;
+  // IDLE, RUNNING, SUCCESS, FAILURE or SKIPPED, as the log says; null until
+  // a transition of the node, or of one below it, is seen
+  status: string | null;
+  // Its last SUCCESS or FAILURE: parents reset their children to IDLE once
+  // they are done with them, at once
+  result: string | null;
+  // When it last changed, on the server's clock; 0 if not seen changing
+  since: number;
+  // Transitions seen, of all kinds, then to SUCCESS and to FAILURE
+  changes: number;
+  successes: number;
+  failures: number;
+}
+
+export interface BtTransition {
+  // The robot's (ms since the epoch)
+  time: number;
+  node: number;
+  from: string;
+  to: string;
+}
+
+// Of a bt subscription: its topic's recording, if any, on connection and
+// whenever it starts or stops
+export interface BehaviorTreeRecording {
+  type: 'bt.recording';
+  id: number;
+  // Its folder, and when it started on the server's clock
+  recording: { path: string; since: number } | null;
+}
+
+// Of a bt.playback subscription, whenever it changes, and a few times a
+// second while playing
+export interface BehaviorTreePlaybackState {
+  type: 'bt.playback.state';
+  id: number;
+  // The bag's topic played, '' until read
+  topic: string;
+  // The bag's clock (ms since the epoch): when its log starts and ends, and
+  // where the playback is
+  start: number;
+  end: number;
+  time: number;
+  playing: boolean;
+  speed: number;
+  // Why the bag cannot be played
+  error: string | null;
+}
+
+export interface BehaviorTreeUpdate {
+  type: 'bt';
+  id: number;
+  // The states of all the nodes known, and the latest transitions: they
+  // replace what came before
+  reset: boolean;
+  // Nodes of the log not in the tree (all of them without a tree file),
+  // after the nodes known so far
+  added: BtNode[];
+  // Of the nodes that changed
+  states: BtNodeState[];
+  transitions: BtTransition[];
+  // Why the log does not seem to be of the tree shown, null if it does
+  mismatch: string | null;
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -435,6 +589,10 @@ export type ServerMessage =
   | ArmUpdate
   | Result
   | PluginData
+  | BehaviorTreeInfo
+  | BehaviorTreeUpdate
+  | BehaviorTreeRecording
+  | BehaviorTreePlaybackState
   | PanelsChanged
   | ErrorMessage;
 
@@ -465,6 +623,7 @@ export interface GridInfo {
 
 export const TELEOP_WATCHDOG_MS = 500;
 export const ARM_STATE_RATE = 10;
+export const BT_RATE = 10;
 export const DASHBOARD_CLIENT_HEADER = 'X-Dashboard-Client';
 
 // A plugin, as GET /api/plugins lists them

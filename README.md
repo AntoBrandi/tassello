@@ -10,7 +10,7 @@ and plugins add more.
 - **Panels of widgets** on a grid: add, move and resize them in the browser, no code or config files.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
-  images, command buttons and a systemd application manager.
+  images, command buttons, a systemd application manager and a behavior tree inspector.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -113,6 +113,7 @@ after the others on the devices already arranged.
 | **Image Viewer** | A static image: a file of the robot, typed (`/…`, `~/…`, `package://…`) or picked by browsing its folders, or an image uploaded from the page's device |
 | **Button** | Runs a bash command on the robot, showing its output. Takes its running colour until the command finishes, on every page showing it; pressing it again stops the command |
 | **Application Manager** | The robot's systemd services matching a name: their state, whether they start at boot, buttons to start, stop and restart them, and their journal |
+| **Behavior Tree Inspector** | What a BT.CPP behavior tree is doing, from its log (Nav2's `/behavior_tree_log`): the tree of its XML file with the running branch lit, each node's status, last result, counts and ports, and the latest transitions. As a graph (pan, zoom, follow the running nodes) or a list. Records the log into rosbags, and plays rosbags back at any speed |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -153,6 +154,25 @@ Notes on some of them:
 - **Image Viewer** reads only images (PNG, JPEG, GIF, WebP, BMP, SVG). Uploads are kept next to
   the panels (`~/.local/share/tassello/images`). Images are served sandboxed: an SVG cannot run
   scripts in the dashboard.
+- **Behavior Tree Inspector** follows a `nav2_msgs/BehaviorTreeLog` topic, which BT.CPP trees
+  log with Nav2's `RosTopicLogger`: Nav2's bt_navigator on `/behavior_tree_log`. Its *tree file*
+  is the XML the robot runs (`/…`, `~/…`, `package://…`, browsed or uploaded), read with its
+  includes and subtrees, and again when it changes; e.g. Nav2's default,
+  `package://nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml`.
+  Without it, the nodes are listed as the log names them. Since Jazzy, the log gives the nodes'
+  UIDs, which tell them apart exactly; before, nodes of the same name (a `RecoveryNode` named
+  after its action) are told apart by their statuses and their parents'. The log only says what
+  changes: the server follows it for every page, and for 10 minutes after the last one closes,
+  so that a page opened later sees the nodes as they are. A node reset to idle by its parent
+  shows how it last ended.
+
+  Its record button records the log on the robot with `ros2 bag record`, into a new folder
+  (`<recordings folder>/behavior_tree_<date>_<time>` by default), until pressed again: every
+  page showing the topic shows it recording. Its playback button opens a rosbag of the robot
+  (a bag's folder, or its `.mcap` or `.db3` file, e.g. of a whole run recorded with
+  `ros2 bag record -a`) and plays its log in the widget, on the tree of its file, without
+  publishing anything: pause, seek and choose the speed (0.1× to 16×). Bags of Humble and of
+  Jazzy are read either way; SQLite bags need Node.js 22.13, zstd compressed MCAP 22.15.
 
 ## Plugins
 
@@ -180,8 +200,9 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 ## Security
 
 Tassello has no login. **Anyone who can open the page can drive the robot, run any command as
-the server's user and read its images**: keep it on a network you trust, or behind a reverse
-proxy with authentication (it serves everything under `/`, its WebSocket at `/ws`).
+the server's user, read its images, behavior trees and the behavior tree logs of its rosbags,
+and record rosbags into new folders**: keep it on a network you trust, or behind a reverse proxy
+with authentication (it serves everything under `/`, its WebSocket at `/ws`).
 
 ## How it works
 
@@ -207,6 +228,8 @@ Safety and bandwidth are the server's concern:
   of their publishers, so latched maps arrive.
 - Topics are subscribed once, whatever the number of pages, with the type and QoS of their
   publishers; TF only while a page shows the robot.
+- Behavior tree logs, streams of transitions, are followed whole, none dropped: each page gets
+  the nodes that changed, at most 10 times a second, however fast the tree ticks.
 - A button runs the command saved in its panel, never one sent by the page.
 
 ## Developing

@@ -24,6 +24,10 @@ export {
   useTopic,
   useTf,
   useCommandState,
+  type BehaviorTreeHandlers,
+  type BehaviorTreeOptions,
+  type BehaviorTreePlaybackOptions,
+  type BehaviorTreePlaybackRequest,
   type Connection,
   type ConnectionStatus,
   type TopicState,
@@ -43,5 +47,19 @@ export { notify } from '../notifications.tsx';
 export { Joystick, type JoystickProps } from '../widgets/Joystick.tsx';
 export * from '../icons.tsx';
 
-export type { CommandState, ClientMessage, ServerMessage, StreamStatus, TfUpdate, Transform2D } from '../../shared/protocol.ts';
+export type {
+  BehaviorTreeInfo,
+  BehaviorTreePlaybackState,
+  BehaviorTreeRecording,
+  BehaviorTreeUpdate,
+  BtNode,
+  BtNodeState,
+  BtTransition,
+  CommandState,
+  ClientMessage,
+  ServerMessage,
+  StreamStatus,
+  TfUpdate,
+  Transform2D,
+} from '../../shared/protocol.ts';
 export type { Panel, WidgetInstance } from '../../shared/panel.ts';

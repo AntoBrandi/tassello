@@ -158,3 +158,45 @@ export const QuestionIcon = icon(
     <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" />
   </>,
 );
+// A behavior tree, and its nodes: what they do by their shape, as their
+// colour says how they are doing
+export const TreeIcon = icon(
+  <>
+    <rect x="9" y="3" width="6" height="5" rx="1.2" />
+    <rect x="3" y="16" width="6" height="5" rx="1.2" />
+    <rect x="15" y="16" width="6" height="5" rx="1.2" />
+    <path d="M12 8v4M6 16v-4h12v4" />
+  </>,
+);
+export const ListIcon = icon(<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />);
+export const HistoryIcon = icon(<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5M12 7v5l3 2" />);
+export const ArrowRightIcon = icon(<path d="M4 12h15M13 6l6 6-6 6" />);
+export const QuestionMarkIcon = icon(<path d="M8.5 8.5a3.5 3.5 0 1 1 5 3.2c-.9.4-1.5 1.3-1.5 2.3v.5M12 19.5h.01" />);
+export const ParallelIcon = icon(<path d="M4 8h13M4 16h13M14 4l4 4-4 4M14 12l4 4-4 4" />);
+export const ForkIcon = icon(<path d="M12 3v7M12 10l-6 7v4M12 10l6 7v4" />);
+export const DiamondIcon = icon(<path d="m12 3 9 9-9 9-9-9 9-9Z" />);
+export const BoltIcon = icon(<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2Z" />);
+export const CheckCircleIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m8 12.5 2.8 2.8L16 9.8" />
+  </>,
+);
+export const RecordIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" />
+  </>,
+);
+export const PauseIcon = icon(
+  <>
+    <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" />
+    <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" />
+  </>,
+);
+export const FilmIcon = icon(
+  <>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
+  </>,
+);

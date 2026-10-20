@@ -15,6 +15,8 @@ import {
 } from '../shared/protocol.ts';
 import type { PluginSession } from './api.ts';
 import type { Arm, ArmWatcher } from './arm.ts';
+import type { BehaviorTreePlayback } from './behavior_tree_playback.ts';
+import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
 import type { Poses } from './poses.ts';
@@ -39,6 +41,7 @@ export interface SessionServices {
   systemd: SystemdServices;
   arm: Arm;
   ros: Ros;
+  behaviorTrees: BehaviorTrees;
   plugins: PluginHost;
   hostname: string;
 }
@@ -98,6 +101,8 @@ export class Session implements FrameSink, PluginSession {
   private readonly consumers = new Map<number, Consumer>();
   // The arm subscriptions, for their jogs
   private readonly arms = new Map<number, ArmWatcher>();
+  // The behavior tree playbacks, for their controls
+  private readonly playbacks = new Map<number, BehaviorTreePlayback>();
   private lastError = { message: '', at: 0 };
 
   constructor(ws: WebSocket, services: SessionServices) {
@@ -145,6 +150,7 @@ export class Session implements FrameSink, PluginSession {
     this.subscriptions.clear();
     this.consumers.clear();
     this.arms.clear();
+    this.playbacks.clear();
   }
 
   private reportError(message: string): void {
@@ -251,6 +257,58 @@ export class Session implements FrameSink, PluginSession {
         );
         return;
       }
+
+      case 'bt.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.behaviorTrees.watch(string(message.topic, 'topic'), optionalString(message.tree), {
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onTree: (tree) => this.send({ type: 'bt.tree', id, ...tree }),
+            onUpdate: (update) => this.send({ type: 'bt', id, ...update }),
+            onRecording: (recording) => this.send({ type: 'bt.recording', id, recording }),
+          }),
+        );
+        return;
+      }
+
+      case 'bt.record':
+        this.answer(
+          message.id,
+          services.behaviorTrees.record(
+            string(message.topic, 'topic'),
+            message.path === null ? null : string(message.path, 'path'),
+          ),
+        );
+        return;
+
+      case 'bt.playback': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        const playback = services.behaviorTrees.play(
+          string(message.bag, 'bag'),
+          optionalString(message.topic),
+          optionalString(message.tree),
+          {
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onTree: (tree) => this.send({ type: 'bt.tree', id, ...tree }),
+            onUpdate: (update) => this.send({ type: 'bt', id, ...update }),
+            onPlayback: (state) => this.send({ type: 'bt.playback.state', id, ...state }),
+          },
+        );
+        this.playbacks.set(id, playback);
+        this.subscriptions.set(id, () => playback.close());
+        return;
+      }
+
+      case 'bt.playback.control':
+        this.playbacks.get(subscriptionId(message.id))?.control({
+          playing: typeof message.playing === 'boolean' ? message.playing : undefined,
+          speed: typeof message.speed === 'number' ? message.speed : undefined,
+          time: typeof message.time === 'number' ? message.time : undefined,
+        });
+        return;
 
       case 'arm.subscribe': {
         const id = subscriptionId(message.id);
@@ -434,5 +492,6 @@ export class Session implements FrameSink, PluginSession {
     this.subscriptions.delete(id);
     this.consumers.delete(id);
     this.arms.delete(id);
+    this.playbacks.delete(id);
   }
 }

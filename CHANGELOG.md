@@ -3,6 +3,19 @@
 Tassello follows [semantic versioning](https://semver.org): before 1.0, a new minor version may
 change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as noted here.
 
+## Unreleased
+
+- Behavior Tree Inspector widget: what a BT.CPP behavior tree is doing, from its
+  `nav2_msgs/BehaviorTreeLog` (Nav2's `/behavior_tree_log`), on the tree of its XML file: the
+  running branch, each node's status, last result, counts and ports, and the latest transitions,
+  as a graph or a list. The server follows the log for every page and keeps the nodes' state.
+- The inspector records its log into rosbags (`ros2 bag record`), and plays rosbags back in the
+  widget (MCAP or SQLite, Humble's or Jazzy's), with pause, seek and speed.
+- The file browser is resizable, and shows long names whole.
+- Plugins: the `behavior-tree` property kind, `connection.subscribeBehaviorTree`,
+  `recordBehaviorTree`, `subscribeBehaviorTreePlayback`, `controlBehaviorTreePlayback`.
+- Uploads take behavior trees (XML) as well as images.
+
 ## 0.1.0
 
 The first release, from the Dieletrikbot's web dashboard.

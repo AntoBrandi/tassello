@@ -16,6 +16,7 @@ import { WebSocketServer } from 'ws';
 
 import type { ServerMessage } from '../shared/protocol.ts';
 import { Arm } from './arm.ts';
+import { BehaviorTrees } from './behavior_trees.ts';
 import { CommandRunner } from './commands.ts';
 import { createRequestHandler } from './http.ts';
 import { PanelStore } from './panels.ts';
@@ -112,6 +113,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const systemd = new SystemdServices(logger);
   const arm = new Arm(node, topics, logger);
   const ros = new Ros(node);
+  // Next to the panels
+  const uploadsDir = path.join(path.dirname(panelsDir), 'images');
+  const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
   const host = new PluginHost(plugins);
   await host.activate({
     node,
@@ -135,8 +139,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       wwwDir,
       logger,
       plugins: host,
-      // Next to the panels
-      uploadsDir: path.join(path.dirname(panelsDir), 'images'),
+      uploadsDir,
       topics: () =>
         node
           .getTopicNamesAndTypes()
@@ -159,6 +162,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
       systemd,
       arm,
       ros,
+      behaviorTrees,
       plugins: host,
       hostname: os.hostname(),
     });
@@ -204,8 +208,13 @@ export async function startServer(options: ServerOptions): Promise<void> {
     }
     wss.close();
     server.close();
-    // Time for those last zero velocities to leave
-    void Promise.all([host.shutdown(logger), new Promise((resolve) => setTimeout(resolve, 200))]).finally(() => {
+    // Time for those last zero velocities to leave, and for the bags being
+    // recorded to be completed
+    void Promise.all([
+      host.shutdown(logger),
+      behaviorTrees.stopAll(),
+      new Promise((resolve) => setTimeout(resolve, 200)),
+    ]).finally(() => {
       node.destroy();
       rclnodejs.shutdown();
       process.exit(code);
