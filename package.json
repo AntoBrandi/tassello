@@ -72,7 +72,6 @@
     "@xterm/headless": "^6.0.0",
     "rclnodejs": "^2.3.0",
     "sharp": "^0.35.5",
-    "tassello": "^0.1.1",
     "ws": "^8.22.0"
   },
   "peerDependencies": {
