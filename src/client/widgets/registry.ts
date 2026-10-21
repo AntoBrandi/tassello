@@ -18,6 +18,7 @@ import { fileManagerWidget } from './file_manager/FileManagerWidget.tsx';
 import { imageWidget } from './ImageWidget.tsx';
 import { logsWidget } from './logs/LogsWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
+import { networkingWidget } from './networking/NetworkingWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
@@ -41,6 +42,7 @@ const CORE: RegisteredWidget[] = [
   diagnosticsWidget,
   fileManagerWidget,
   terminalWidget,
+  networkingWidget,
 ];
 
 const registry = new WidgetRegistry(CORE);

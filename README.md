@@ -11,7 +11,8 @@ and plugins add more.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
-  editor, the ROS log of every node, the robot's diagnostics, a file manager and a terminal.
+  editor, the ROS log of every node, the robot's diagnostics, a file manager, a terminal, and
+  its networks: Wi-Fi joined, connections switched, the robot as an access point.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -22,7 +23,8 @@ Tassello runs on the robot (or any machine on its ROS network) and needs:
 - ROS 2: Humble, Jazzy, Kilted or Lyrical, on x64 or arm64 (e.g. a Raspberry Pi), for which
   [rclnodejs](https://github.com/RobotWebTools/rclnodejs) ships prebuilt binaries;
 - Node.js 22 or newer, and npm;
-- Python 3, which ROS 2 comes with: the Terminal widget's pseudo-terminals.
+- Python 3, which ROS 2 comes with: the Terminal widget's pseudo-terminals;
+- NetworkManager, which Ubuntu runs, for the Networking widget.
 
 ```bash
 npm install -g tassello
@@ -121,6 +123,7 @@ after the others on the devices already arranged.
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 | **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
+| **Networking** | The robot's networks, through NetworkManager, as a phone's settings show them: the Wi-Fi networks in range, joined with their password; the connections saved, switched between, edited (their addresses by DHCP or static), forgotten; the robot as an access point, its network shared by a QR code; the interfaces, their state and addresses. Asks before a change that would cut the page off from the robot |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -296,6 +299,60 @@ Notes on some of them:
   types after a colon (`-:|`). While the on-screen keyboard is open, the terminal fills the screen
   above it, the keys right above the keyboard (*Full screen while typing*). One finger scrolls (the
   scrollback, or the program: less, htop), flung or not; two pinch the text's size.
+- **Networking** changes the networks through NetworkManager (`nmcli`), which Ubuntu runs (a
+  robot whose netplan renders with systemd-networkd shows its interfaces as not managed). Its
+  **Wi-Fi** view lists the networks in range of each Wi-Fi interface, the one connected to first,
+  then those saved, then by signal. *Join* asks for the password (WPA and WPA2 Personal, WPA3
+  Personal, WEP, and WPA Enterprise with PEAP and MSCHAPv2), *Connect* uses the one saved, and
+  asks for it again if it is found wrong; *Join a hidden network…* looks for one by name. *New
+  access point…* makes the robot a Wi-Fi network of its own: WPA2 with a password made for it,
+  2.4 or 5 GHz, a channel, the robot's address on it (10.42.0.1 if not given), giving addresses to
+  who joins (NetworkManager's shared mode, with `dnsmasq-base`). *Start automatically* makes it
+  the robot's network from when it starts, wherever it is. *Share…* shows a network's name and
+  password, and the QR code phones join it by. The **Saved** view lists the connections saved, by
+  kind (Wi-Fi networks, access points, wired, VPN), the active then the latest used first: connect
+  and disconnect them, edit them (their name, password, interface, IPv4: DHCP, static with a
+  gateway and DNS servers, shared or disabled, whether they connect by themselves and with which
+  priority) and forget them; *New wired connection…* gives a cable an address of its own, e.g. on
+  a lidar's network. The **Interfaces** view shows each interface's state, addresses, gateway, DNS
+  servers, MAC address and speed, and the connections it may connect with. A widget can be for
+  some interfaces only (`wlan0, eth*`), or read-only. Those other programs configure (docker's
+  bridges, VPN clients' tunnels) are left out, unless *Show every interface*.
+
+  The server tells each page which interface it reaches the robot through: a change that would
+  cut the page off (disconnecting that interface, switching its Wi-Fi to another network, making
+  it an access point, turning Wi-Fi off) is asked about first, saying so. What is being done shows
+  on every page, and how it ended, also to a page that lost the robot meanwhile: after switching
+  networks, the robot is reached on the new one; if it could not join it, NetworkManager connects
+  by itself to one of those saved that connect automatically. A Wi-Fi network or an access point
+  that fails to start is not kept; a cable's waits for its cable.
+
+  A desktop's NetworkManager lets the users of its session change the networks, not a service's:
+  give the server's user the right with a polkit rule. On Ubuntu 22.04 (polkit 0.105),
+  `/etc/polkit-1/localauthority/50-local.d/tassello-networking.pkla`, for the user `robot`:
+
+  ```ini
+  [Let the dashboard change the networks]
+  Identity=unix-user:robot
+  Action=org.freedesktop.NetworkManager.*
+  ResultAny=yes
+  ResultInactive=yes
+  ResultActive=yes
+  ```
+
+  From Ubuntu 24.04 (and Debian 12), `/etc/polkit-1/rules.d/50-tassello-networking.rules`:
+
+  ```js
+  polkit.addRule(function (action, subject) {
+    if (action.id.indexOf('org.freedesktop.NetworkManager.') === 0 && subject.user === 'robot') {
+      return polkit.Result.YES;
+    }
+  });
+  ```
+
+  Without it, the widget says the networks cannot be changed. *Share…* reads the passwords with
+  `nmcli --show-secrets`, which needs the same right; those a desktop's keyring keeps cannot be
+  read.
 
 ## Plugins
 
@@ -323,14 +380,15 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 ## Security
 
 Tassello has no login. **Anyone who can open the page can drive the robot, run any command as
-the server's user (the Terminal, a shell), and read, write, upload, move and delete any of the
-files that user can (the File Manager)**: keep it on a network you trust, or behind a reverse proxy
+the server's user (the Terminal, a shell), read, write, upload, move and delete any of the
+files that user can (the File Manager), and change the robot's networks and read their passwords
+(Networking)**: keep it on a network you trust, or behind a reverse proxy
 with authentication (it serves everything under `/`, its WebSocket at `/ws`). Changes to the files
 are accepted from the dashboard's own pages only (they send a header that another site's page
 cannot), and the root, the home folder and the system's top folders (`/usr`, `/etc`…) are never
-deleted nor moved. Terminals open from the dashboard's own pages only too: those whose origin is
-the host they reached (the `Host` header, or the `X-Forwarded-Host` a reverse proxy sets), which
-another site's page cannot pretend.
+deleted nor moved. Terminals open, and networks change, from the dashboard's own pages only too:
+those whose origin is the host they reached (the `Host` header, or the `X-Forwarded-Host` a
+reverse proxy sets), which another site's page cannot pretend.
 
 ## How it works
 
@@ -342,6 +400,7 @@ another site's page cannot pretend.
                                                                         ├─ sharp: raw images to JPEG, maps to PNG
                                                                         ├─ bash: the buttons' commands
                                                                         ├─ python3: the terminals' pseudo-terminals
+                                                                        ├─ nmcli: the networks (NetworkManager)
                                                                         └─ the plugins' server sides
 ```
 
@@ -371,6 +430,10 @@ Safety and bandwidth are the server's concern:
   paces the program, never the pages: a page gets at most 256 KB ahead of what it has drawn, and a
   page further behind (a slow phone, a hidden tab, a flood of output) gets the screen as it is
   instead of all that led to it. A page that reconnects gets what it missed, from the last 1 MB.
+- The networks are read once for every page: again as soon as `nmcli monitor` reports a change,
+  and every 3 s for the signals of the Wi-Fi networks in range, which are scanned for when a page
+  opens the widget (at most every 30 s) or asks. Passwords are on `nmcli`'s command line only for
+  the moment it takes to save them, activating a connection being another command.
 - The File Manager's folders are read again every 3 s, and answered "unchanged" while they are;
   the largest are listed in part (5,000 entries), and only the rows in sight are drawn. Uploads
   and downloads are streamed, folders archived by `tar` as they are sent; saves replace files at

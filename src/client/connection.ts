@@ -4,6 +4,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
 import {
   FRAME_HEADER_BYTES,
   IMAGE_FORMATS,
@@ -28,6 +29,7 @@ import {
   type ImageSubscribe,
   type LogsSubscribe,
   type LogsUpdate,
+  type NetworkUpdate,
   type PathSubscribe,
   type PathUpdate,
   type PluginSubscribe,
@@ -146,7 +148,8 @@ type Request =
   | Omit<BehaviorTreeFileSubscribe, 'id'>
   | Omit<RosoutSubscribe, 'id'>
   | Omit<DiagnosticsSubscribe, 'id'>
-  | Omit<TerminalOpen, 'id'>;
+  | Omit<TerminalOpen, 'id'>
+  | { type: 'network.subscribe' };
 
 interface Subscription {
   // Or made anew on every connection
@@ -164,6 +167,7 @@ interface Subscription {
   rosout?: RosoutHandlers;
   diagnostics?: DiagnosticsHandlers;
   terminal?: TerminalHandlers;
+  network?: (update: NetworkUpdate) => void;
 }
 
 const MIN_RETRY_MS = 500;
@@ -176,6 +180,9 @@ const CALL_TIMEOUT_MS = 5000;
 const RESULT_MARGIN_MS = 2000;
 // Of ros2 bag record, to start or to complete the bag
 const RECORD_TIMEOUT_MS = 20_000;
+// Of a network action: NetworkManager is given a minute to activate a
+// connection
+const NETWORK_TIMEOUT_MS = 80_000;
 // What is typed or pasted in a terminal goes in messages of at most this many
 // characters: the server takes messages of 1 MB at most
 const TERMINAL_INPUT_CHUNK = 64 * 1024;
@@ -379,6 +386,23 @@ export class Connection {
   // Hangs up the terminal's program if it runs, and starts it again
   restartTerminal(id: number): boolean {
     return this.send({ type: 'terminal.restart', id });
+  }
+
+  // The robot's networks, as NetworkManager has them (see NetworkUpdate):
+  // again whenever they change. Returns the unsubscribe function.
+  subscribeNetwork(callback: (update: NetworkUpdate) => void): () => void {
+    return this.subscribe({ type: 'network.subscribe' }, { network: callback });
+  }
+
+  // Changes the robot's networks: resolves once NetworkManager is done
+  // (a connection activated...), rejects with why not. The page loses the
+  // robot if it moves it to another network: it rejects then too.
+  networkAction(request: Exclude<NetworkRequest, { action: 'secrets' }>): Promise<NetworkResult>;
+  networkAction(request: Extract<NetworkRequest, { action: 'secrets' }>): Promise<NetworkSecrets>;
+  networkAction(request: NetworkRequest): Promise<NetworkResult | NetworkSecrets> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'network.action', id, request });
+    return this.result(id, sent, NETWORK_TIMEOUT_MS);
   }
 
   // Resolves with systemctl's error, or null once done
@@ -585,6 +609,9 @@ export class Connection {
         break;
       case 'terminal.exit':
         this.subscriptions.get(message.id)?.terminal?.exit(message);
+        break;
+      case 'network':
+        this.subscriptions.get(message.id)?.network?.(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

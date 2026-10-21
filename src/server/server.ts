@@ -21,6 +21,7 @@ import { BehaviorTrees } from './behavior_trees.ts';
 import { CommandRunner } from './commands.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { createRequestHandler } from './http.ts';
+import { Networking } from './networking.ts';
 import { PanelStore } from './panels.ts';
 import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
@@ -120,6 +121,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const rosout = new Rosout(node, logger);
   const diagnostics = new Diagnostics(node, logger);
   const terminals = new Terminals(logger);
+  const networking = new Networking(logger);
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
   const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
@@ -175,12 +177,14 @@ export async function startServer(options: ServerOptions): Promise<void> {
         rosout,
         diagnostics,
         terminals,
+        networking,
         behaviorTrees,
         behaviorTreeFiles,
         plugins: host,
         hostname: os.hostname(),
       },
       ownPage(req.headers),
+      req.socket.localAddress ?? null,
     );
     sessions.add(session);
     logger.debug(`Page connected from ${req.socket.remoteAddress}`);
@@ -215,6 +219,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     commands.stopAll();
     systemd.stopAll();
     terminals.stopAll();
+    networking.stopAll();
     // Stops the robot if a page was driving it, while the node still runs
     for (const session of sessions) {
       session.close();

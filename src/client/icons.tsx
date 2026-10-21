@@ -331,3 +331,39 @@ export const ClipboardIcon = icon(
 );
 export const TextSmallerIcon = icon(<path d="m3 19 5-13 5 13M5 14h6M16 9h6" />);
 export const TextLargerIcon = icon(<path d="m3 19 5-13 5 13M5 14h6M16 9h6M19 6v6" />);
+// A router, broadcasting: the Networking widget
+export const NetworkIcon = icon(
+  <>
+    <rect x="2.5" y="14" width="19" height="7" rx="2" />
+    <path d="M6.5 17.5h.01M10 17.5h.01M16 14v-4" />
+    <path d="M13.5 7.5a3.5 3.5 0 0 1 5 0M11.2 5.2a6.8 6.8 0 0 1 9.6 0" />
+  </>,
+);
+export const WifiIcon = icon(
+  <>
+    <path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 15.9a5 5 0 0 1 6.8 0" />
+    <circle cx="12" cy="19.3" r="1.3" fill="currentColor" stroke="none" />
+  </>,
+);
+export const WifiOffIcon = icon(
+  <>
+    <path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 15.9a5 5 0 0 1 6.8 0M3 3l18 18" />
+    <circle cx="12" cy="19.3" r="1.3" fill="currentColor" stroke="none" />
+  </>,
+);
+// A port with its pins: a cable's connection
+export const EthernetIcon = icon(
+  <>
+    <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3.5v3h-9v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+    <path d="M7.5 9v2.5M10.5 9v2.5M13.5 9v2.5M16.5 9v2.5" />
+  </>,
+);
+// Broadcasting: an access point, the robot's own network
+export const HotspotIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="2" />
+    <path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8" />
+  </>,
+);
+// A VPN
+export const ShieldIcon = icon(<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z" />);

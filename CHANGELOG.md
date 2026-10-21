@@ -66,6 +66,21 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   `restartTerminal`, the `TerminalOutput` and `TerminalExit` types, and the `ShellIcon`,
   `KeyboardIcon`, `MaximizeIcon`, `MinimizeIcon`, `ClipboardIcon`, `TextSmallerIcon` and
   `TextLargerIcon` icons.
+- Networking widget: the robot's networks, through NetworkManager (`nmcli`), as a phone's settings
+  show them. The Wi-Fi networks in range, joined with their password (WPA, WPA2 and WPA3 Personal,
+  WEP, WPA Enterprise with PEAP), hidden ones by name; the connections saved, connected and
+  disconnected, edited (password, interface, IPv4 by DHCP or static with gateway and DNS, shared,
+  connecting automatically and with which priority) and forgotten; wired connections with an
+  address of their own; the robot as an access point (WPA2, band, channel, its address), started
+  now or at boot, and a network shared by its password and a QR code; the interfaces, their state,
+  addresses, gateway, DNS, MAC address and speed. The server tells each page which interface it
+  reaches the robot through, and the widget asks before a change that would cut it off. The server
+  follows NetworkManager for every page (`nmcli monitor`), shows every page what is being done and
+  how it ended, and says when its user may not change the networks (a polkit rule, see the
+  README). Networks change from the dashboard's own pages only.
+- Plugins: `connection.subscribeNetwork`, `networkAction`, the `Network*`, `WifiNetwork`,
+  `WifiSecurity` and `ConnectionKind` types, and the `NetworkIcon`, `WifiIcon`, `WifiOffIcon`,
+  `EthernetIcon`, `HotspotIcon` and `ShieldIcon` icons.
 
 ## 0.1.0
 

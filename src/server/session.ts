@@ -21,6 +21,8 @@ import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
 import type { Diagnostics } from './diagnostics.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
+import type { Networking } from './networking.ts';
+import { checkRequest, deviceOfAddress } from './networking_format.ts';
 import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
@@ -48,6 +50,7 @@ export interface SessionServices {
   rosout: Rosout;
   diagnostics: Diagnostics;
   terminals: Terminals;
+  networking: Networking;
   behaviorTrees: BehaviorTrees;
   behaviorTreeFiles: BehaviorTreeFiles;
   plugins: PluginHost;
@@ -117,14 +120,17 @@ export class Session implements FrameSink, PluginSession {
   // The terminals, for what is typed in them
   private readonly terminals = new Map<number, TerminalView>();
   // The page is one of the dashboard's own (see ownPage): only those open
-  // terminals
+  // terminals and change the networks
   private readonly ownPage: boolean;
+  // The server's address the page reached: the interface it comes through
+  private readonly localAddress: string | null;
   private lastError = { message: '', at: 0 };
 
-  constructor(ws: WebSocket, services: SessionServices, ownPage: boolean) {
+  constructor(ws: WebSocket, services: SessionServices, ownPage: boolean, localAddress: string | null) {
     this.ws = ws;
     this.services = services;
     this.ownPage = ownPage;
+    this.localAddress = localAddress;
     ws.on('message', (data, isBinary) => {
       if (!isBinary) {
         this.onMessage(data.toString());
@@ -436,6 +442,33 @@ export class Session implements FrameSink, PluginSession {
 
       case 'terminal.restart':
         this.terminals.get(subscriptionId(message.id))?.restart();
+        return;
+
+      case 'network.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.networking.watch((state) =>
+            this.send({
+              type: 'network',
+              id,
+              ...state,
+              via: deviceOfAddress(state.devices, this.localAddress),
+              canChange: this.ownPage,
+            }),
+          ),
+        );
+        return;
+      }
+
+      case 'network.action':
+        this.answer(
+          message.id,
+          this.ownPage
+            ? Promise.resolve(message.request).then((request) => services.networking.act(checkRequest(request)))
+            : Promise.reject(new Error('The networks are changed from the dashboard’s own pages only')),
+        );
         return;
 
       case 'arm.subscribe': {

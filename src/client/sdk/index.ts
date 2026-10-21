@@ -73,6 +73,7 @@ export type {
   DiagnosticEntry,
   DiagnosticsUpdate,
   LogEntry,
+  NetworkUpdate,
   RosoutUpdate,
   ServerMessage,
   StreamStatus,
@@ -82,6 +83,20 @@ export type {
   Transform2D,
 } from '../../shared/protocol.ts';
 export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
+export type {
+  ConnectionKind,
+  NetworkActivity,
+  NetworkConnection,
+  NetworkDevice,
+  NetworkPermissions,
+  NetworkRequest,
+  NetworkResult,
+  NetworkSecrets,
+  NetworkSettings,
+  NetworkState,
+  WifiNetwork,
+  WifiSecurity,
+} from '../../shared/networking.ts';
 export type {
   FsAnalysis,
   FsConflict,

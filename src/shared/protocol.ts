@@ -7,6 +7,7 @@
 // `unsubscribe`.
 
 import type { BtNodeModel } from './bt_nodes.ts';
+import type { NetworkRequest, NetworkState } from './networking.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
@@ -379,6 +380,24 @@ export interface TerminalRestart {
   id: number;
 }
 
+// The robot's networks, as NetworkManager has them: its interfaces, the
+// connections saved, the Wi-Fi networks in range and what the pages are
+// having done to them, whenever that changes (network updates). The server
+// follows them for every page at once.
+export interface NetworkSubscribe {
+  type: 'network.subscribe';
+  id: number;
+}
+
+// Changes the robot's networks (nmcli): answered by a result with the same
+// id once NetworkManager is done, e.g. a connection activated, or why not
+// (NetworkResult, or NetworkSecrets). The dashboard's own pages only.
+export interface NetworkAction {
+  type: 'network.action';
+  id: number;
+  request: NetworkRequest;
+}
+
 export type ClientMessage =
   | TwistCommand
   | ImageSubscribe
@@ -412,7 +431,9 @@ export type ClientMessage =
   | TerminalInput
   | TerminalResize
   | TerminalAck
-  | TerminalRestart;
+  | TerminalRestart
+  | NetworkSubscribe
+  | NetworkAction;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -851,6 +872,17 @@ export interface TerminalExit {
   exitCode: number | null;
 }
 
+// Of a network subscription
+export interface NetworkUpdate extends NetworkState {
+  type: 'network';
+  id: number;
+  // The interface this page reaches the robot through; null if not known,
+  // e.g. through a reverse proxy, or from the robot itself
+  via: string | null;
+  // The page may change the networks: one of the dashboard's own
+  canChange: boolean;
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -875,6 +907,7 @@ export type ServerMessage =
   | DiagnosticsUpdate
   | TerminalOutput
   | TerminalExit
+  | NetworkUpdate
   | PanelsChanged
   | ErrorMessage;
 

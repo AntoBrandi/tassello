@@ -164,6 +164,8 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `terminalInput(id, data)` / `resizeTerminal(id, cols, rows)` | What is typed in the terminal; its size |
 | `ackTerminal(id, started, offset)` | The page wrote the output up to `offset`: the server sends at most 256 KB ahead of it |
 | `restartTerminal(id)` | Hangs up the terminal's program, and starts it again |
+| `subscribeNetwork(callback)` | The robot's networks, as NetworkManager has them: its interfaces, the connections saved, the Wi-Fi networks in range, what the server's user may change and what the pages are having done, again whenever that changes, and `via`, the interface the page reaches the robot through (see `NetworkUpdate` in `src/shared/protocol.ts`, `NetworkState` in `src/shared/networking.ts`). Returns the unsubscribe function |
+| `networkAction(request)` | Changes them (`NetworkRequest`): `connect`, `disconnect`, `create` (a Wi-Fi network, an access point, a cable's: `NetworkSettings`), `modify`, `delete`, `wifi` (on or off), `rescan`; resolves once NetworkManager is done with `{ uuid, message }`, rejects with why not. `secrets` resolves with a Wi-Fi network's name and password (`NetworkSecrets`). The dashboard's own pages only |
 | `serverNow()` | Now, on the robot's clock |
 
 The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see
