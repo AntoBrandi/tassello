@@ -81,6 +81,8 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 - Plugins: `connection.subscribeNetwork`, `networkAction`, the `Network*`, `WifiNetwork`,
   `WifiSecurity` and `ConnectionKind` types, and the `NetworkIcon`, `WifiIcon`, `WifiOffIcon`,
   `EthernetIcon`, `HotspotIcon` and `ShieldIcon` icons.
+- Plugins: a `select` property's options can be known at run time, e.g. the robot's: `useOptions`,
+  a hook the properties panel calls. Its values are not checked against the options.
 
 ## 0.1.0
 

@@ -140,6 +140,20 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `image` | `string`, an image of the robot or uploaded (see `imageUrl`) | `placeholder` |
 | `behavior-tree` | `string`, a behavior tree's XML (BT.CPP's) of the robot, or uploaded | `placeholder` |
 
+A `select`'s options can also be known only at run time, e.g. the robot's: `useOptions`, a hook
+the properties panel calls, gives those, shown after `options`. Its values are then not checked
+against the options, and a value among neither is kept (it may be one later, e.g. once fetched):
+
+```ts
+function useArms() {
+  const [arms, setArms] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => connection.subscribePlugin('my-robot', 'arms', {}, { data: (data) => setArms(data as typeof arms) }), []);
+  return arms;
+}
+
+{ key: 'arm', label: 'Arm', kind: 'select', default: '', options: [{ value: '', label: 'None' }], useOptions: useArms }
+```
+
 ### The robot
 
 `connection`, the page's connection to the server:

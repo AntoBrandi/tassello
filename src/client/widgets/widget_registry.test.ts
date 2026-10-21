@@ -60,3 +60,27 @@ test('plugins change the defaults of the properties, if they fit', () => {
   registry.registerPlugin('other', { widgets: [widget('later')] });
   assert.equal(registry.definition('later')!.properties.length, 3);
 });
+
+test('selects with options known at run time keep any value of their type', () => {
+  const robot = defineWidget<{ robot: string }>({
+    type: 'robot',
+    name: 'robot',
+    description: '',
+    icon: () => null,
+    defaultSize: { w: 2, h: 2 },
+    minSize: { w: 1, h: 1 },
+    component: () => null,
+    properties: [
+      {
+        key: 'robot',
+        label: 'Robot',
+        kind: 'select',
+        default: '',
+        options: [{ value: '', label: 'None' }],
+        useOptions: () => [],
+      },
+    ],
+  });
+  assert.deepEqual(resolveConfig(robot, { robot: 'tiago-1' }), { robot: 'tiago-1' });
+  assert.deepEqual(resolveConfig(robot, { robot: 1 }), { robot: '' });
+});

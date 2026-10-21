@@ -13,7 +13,8 @@ export interface WidgetEntry {
 export function fitsProperty(property: Property, value: unknown): boolean {
   return (
     typeof value === typeof property.default &&
-    (property.kind !== 'select' || property.options.some((o) => o.value === value)) &&
+    // Those with options known at run time take any value: see useOptions
+    (property.kind !== 'select' || !!property.useOptions || property.options.some((o) => o.value === value)) &&
     (typeof value !== 'number' || Number.isFinite(value))
   );
 }

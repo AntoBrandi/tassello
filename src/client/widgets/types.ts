@@ -27,7 +27,15 @@ type PropertyKind<V> = [V] extends [boolean]
           | { kind: 'text'; default: V; placeholder?: string }
           // Suggests the topics of the ROS graph of these types
           | { kind: 'topic'; default: V; topicTypes: string[]; placeholder?: string }
-          | { kind: 'select'; default: V; options: { value: V; label: string }[] }
+          | {
+              kind: 'select';
+              default: V;
+              options: { value: V; label: string }[];
+              // Options known at run time, e.g. the robot's, after `options`:
+              // a hook, called by the properties panel. Values among neither
+              // are kept, as they may be options later
+              useOptions?: () => { value: V; label: string }[];
+            }
           // A robot file (browsed), a package's, or an uploaded image: see imageUrl
           | { kind: 'image'; default: V; placeholder?: string }
           // The same, of a behavior tree's XML (BT.CPP's)
@@ -68,7 +76,12 @@ export type Property = PropertyBase<Config, string> &
     | PropertyKind<number>
     | { kind: 'string' | 'color' | 'text'; default: string; placeholder?: string }
     | { kind: 'topic'; default: string; topicTypes: string[]; placeholder?: string }
-    | { kind: 'select'; default: string; options: { value: string; label: string }[] }
+    | {
+        kind: 'select';
+        default: string;
+        options: { value: string; label: string }[];
+        useOptions?: () => { value: string; label: string }[];
+      }
     | { kind: 'image' | 'behavior-tree'; default: string; placeholder?: string }
   );
 

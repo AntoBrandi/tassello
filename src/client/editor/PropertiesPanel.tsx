@@ -11,6 +11,11 @@ import { FileInput } from './FileInput.tsx';
 import { resolveConfig, widgetDefinition } from '../widgets/registry.ts';
 import type { Property } from '../widgets/types.ts';
 
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
 export interface PropertiesPanelProps {
   widget: WidgetInstance;
   onChange: (widget: WidgetInstance) => void;
@@ -123,7 +128,15 @@ function PropertyField({
               />
             );
           case 'select':
-            return (
+            return property.useOptions ? (
+              <RunTimeSelect
+                id={id}
+                value={String(value)}
+                options={property.options}
+                useOptions={property.useOptions}
+                onChange={onChange}
+              />
+            ) : (
               <select id={id} value={String(value)} onChange={(e) => onChange(e.target.value)}>
                 {property.options.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -243,6 +256,36 @@ function CommittedInput({
         }
       }}
     />
+  );
+}
+
+// A select whose options are also known at run time (useOptions, a hook: the
+// same one for as long as the panel shows the widget). The value is kept when
+// among neither, e.g. while they are fetched, and shown as it is.
+function RunTimeSelect({
+  id,
+  value,
+  options,
+  useOptions,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  options: SelectOption[];
+  useOptions: () => SelectOption[];
+  onChange: (value: string) => void;
+}) {
+  const found = useOptions();
+  const all = [...options, ...found.filter((option) => !options.some((o) => o.value === option.value))];
+  return (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+      {!all.some((option) => option.value === value) && <option value={value}>{value}</option>}
+      {all.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
