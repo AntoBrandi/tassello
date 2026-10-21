@@ -1,8 +1,8 @@
 # Tassello
 
 **A web dashboard for ROS 2 robots.** Drive the robot, send it navigation goals, see it move in 3D,
-watch its cameras, run commands on it and manage its services from any browser on the network,
-phones included. Arrange it all in the browser, as panels of widgets, and extend it with plugins.
+watch its cameras, run commands on it, open a terminal on it and manage its services from any
+browser on the network, phones included. Arrange it all in the browser, as panels of widgets, and extend it with plugins.
 
 *Tassello* is Italian for a mosaic tile, and for a wall plug: the dashboard is a mosaic of widgets,
 and plugins add more.
@@ -11,7 +11,7 @@ and plugins add more.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
-  editor, the ROS log of every node, and the robot's diagnostics.
+  editor, the ROS log of every node, the robot's diagnostics, a file manager and a terminal.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -21,7 +21,8 @@ Tassello runs on the robot (or any machine on its ROS network) and needs:
 
 - ROS 2: Humble, Jazzy, Kilted or Lyrical, on x64 or arm64 (e.g. a Raspberry Pi), for which
   [rclnodejs](https://github.com/RobotWebTools/rclnodejs) ships prebuilt binaries;
-- Node.js 22 or newer, and npm.
+- Node.js 22 or newer, and npm;
+- Python 3, which ROS 2 comes with: the Terminal widget's pseudo-terminals.
 
 ```bash
 npm install -g tassello
@@ -119,6 +120,7 @@ after the others on the devices already arranged.
 | **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
+| **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
 
@@ -266,6 +268,34 @@ Notes on some of them:
   The folders shown and the files open are read again every 3 s. A widget can *stay in its
   folder* (e.g. one for the maps, or the rosbags) or be *read-only*: these are the page's choices,
   not a protection (see Security).
+- **Terminal** runs the login shell of the server's user (`$SHELL -l`, as SSH does: its
+  `~/.bashrc` and the ROS setup Tassello was started with), or the widget's *command* through it,
+  in its *folder* (`~` by default; `/…`, `~/…`, `package://…`), on a pseudo-terminal of its own:
+  `TERM=xterm-256color`, true colour, full screen programs (vim, htop, less) and their mouse. A
+  terminal belongs to the browser's tab: reloading the page, losing the connection or showing
+  another panel and coming back finds it as it was, what it printed meanwhile included, screens of
+  full screen programs too. A terminal no page shows is hung up after an hour (its programs get
+  SIGHUP, as when a terminal window is closed), as is the one unseen the longest when 16 are open:
+  for jobs that should outlive it, `tmux` or `nohup`. A *command* such as `tmux new -A -s robot` gives every page, and every
+  device, the same session. When the program ends, Enter or *Restart* starts it again; *Restart*
+  also hangs up a program that hangs. Changing the widget's command or folder starts it anew.
+
+  Copy with Ctrl+C while text is selected (it interrupts otherwise) or Ctrl+Shift+C, paste with
+  Ctrl+Shift+V or the toolbar's button (pages served over http cannot read the clipboard: it opens
+  a box to paste into, on phones too). The toolbar changes the size of the text for this device, as
+  pinching does, and fills the window with the terminal.
+
+  On touch screens (or always, or never: *Extra keys*) the keys phones lack are under the
+  terminal, as Termux has them: Esc, `/`, `-`, Home, ↑, End, Page Up, then Tab, Ctrl, Alt, ←, ↓,
+  →, Page Down. Tapped, they type without closing the on-screen keyboard. Ctrl, Alt and Shift
+  apply to the next key, of the row or of the keyboard (Ctrl, then `c`: interrupt); tapped twice,
+  or held, they stay until tapped again. Swiping up on a key, or holding it, types what its corner
+  shows (`\`, `|`, `~`); the arrows repeat while held. Their *layout* is a property: a line per
+  row, keys by name (`ESC TAB CTRL ALT SHIFT HOME END PGUP PGDN UP DOWN LEFT RIGHT INS DEL BKSP
+  ENTER SPACE F1`…`F12 KEYBOARD PASTE`) or what they type (`~`, `|`, `ros2`), what swiping up
+  types after a colon (`-:|`). While the on-screen keyboard is open, the terminal fills the screen
+  above it, the keys right above the keyboard (*Full screen while typing*). One finger scrolls (the
+  scrollback, or the program: less, htop), flung or not; two pinch the text's size.
 
 ## Plugins
 
@@ -293,12 +323,14 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 ## Security
 
 Tassello has no login. **Anyone who can open the page can drive the robot, run any command as
-the server's user, and read, write, upload, move and delete any of the files that user can
-(the File Manager)**: keep it on a network you trust, or behind a reverse proxy with
-authentication (it serves everything under `/`, its WebSocket at `/ws`). Changes to the files
+the server's user (the Terminal, a shell), and read, write, upload, move and delete any of the
+files that user can (the File Manager)**: keep it on a network you trust, or behind a reverse proxy
+with authentication (it serves everything under `/`, its WebSocket at `/ws`). Changes to the files
 are accepted from the dashboard's own pages only (they send a header that another site's page
 cannot), and the root, the home folder and the system's top folders (`/usr`, `/etc`…) are never
-deleted nor moved.
+deleted nor moved. Terminals open from the dashboard's own pages only too: those whose origin is
+the host they reached (the `Host` header, or the `X-Forwarded-Host` a reverse proxy sets), which
+another site's page cannot pretend.
 
 ## How it works
 
@@ -309,6 +341,7 @@ deleted nor moved.
                                                                         ├─ rclnodejs: ROS
                                                                         ├─ sharp: raw images to JPEG, maps to PNG
                                                                         ├─ bash: the buttons' commands
+                                                                        ├─ python3: the terminals' pseudo-terminals
                                                                         └─ the plugins' server sides
 ```
 
@@ -333,6 +366,11 @@ Safety and bandwidth are the server's concern:
   times a second, not those received the same again. Subscribed best effort, they come from
   every publisher, whatever its QoS.
 - A button runs the command saved in its panel, never one sent by the page.
+- A terminal's pseudo-terminal is opened by a few lines of Python (ROS 2's own), no native module
+  to build. Its output is also played on a terminal of the server's own (xterm.js, headless), which
+  paces the program, never the pages: a page gets at most 256 KB ahead of what it has drawn, and a
+  page further behind (a slow phone, a hidden tab, a flood of output) gets the screen as it is
+  instead of all that led to it. A page that reconnects gets what it missed, from the last 1 MB.
 - The File Manager's folders are read again every 3 s, and answered "unchanged" while they are;
   the largest are listed in part (5,000 entries), and only the rows in sight are drawn. Uploads
   and downloads are streamed, folders archived by `tar` as they are sent; saves replace files at

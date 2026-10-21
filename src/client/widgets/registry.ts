@@ -20,6 +20,7 @@ import { logsWidget } from './logs/LogsWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
+import { terminalWidget } from './terminal/TerminalWidget.tsx';
 import type { RegisteredWidget, TasselloClientPlugin } from './types.ts';
 import { WidgetRegistry } from './widget_registry.ts';
 
@@ -39,6 +40,7 @@ const CORE: RegisteredWidget[] = [
   logsWidget,
   diagnosticsWidget,
   fileManagerWidget,
+  terminalWidget,
 ];
 
 const registry = new WidgetRegistry(CORE);

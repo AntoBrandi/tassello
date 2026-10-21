@@ -29,6 +29,7 @@ import type { Rosout } from './rosout.ts';
 import type { FrameStreams } from './streams.ts';
 import type { SystemdServices } from './systemd.ts';
 import type { Teleop } from './teleop.ts';
+import type { Terminals, TerminalView } from './terminals.ts';
 import type { Tf } from './tf.ts';
 import type { Topics } from './topics.ts';
 import { errorMessage, toJson } from './util.ts';
@@ -46,6 +47,7 @@ export interface SessionServices {
   ros: Ros;
   rosout: Rosout;
   diagnostics: Diagnostics;
+  terminals: Terminals;
   behaviorTrees: BehaviorTrees;
   behaviorTreeFiles: BehaviorTreeFiles;
   plugins: PluginHost;
@@ -90,6 +92,9 @@ function strings(value: unknown, field: string): string[] {
   return value.map((v: string) => v.trim()).filter(Boolean);
 }
 
+// A terminal's name, chosen by the page
+const TERMINAL_NAME = /^[\w-]{1,64}$/;
+
 function subscriptionId(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffffff) {
     throw new Error('Invalid subscription id');
@@ -109,11 +114,17 @@ export class Session implements FrameSink, PluginSession {
   private readonly arms = new Map<number, ArmWatcher>();
   // The behavior tree playbacks, for their controls
   private readonly playbacks = new Map<number, BehaviorTreePlayback>();
+  // The terminals, for what is typed in them
+  private readonly terminals = new Map<number, TerminalView>();
+  // The page is one of the dashboard's own (see ownPage): only those open
+  // terminals
+  private readonly ownPage: boolean;
   private lastError = { message: '', at: 0 };
 
-  constructor(ws: WebSocket, services: SessionServices) {
+  constructor(ws: WebSocket, services: SessionServices, ownPage: boolean) {
     this.ws = ws;
     this.services = services;
+    this.ownPage = ownPage;
     ws.on('message', (data, isBinary) => {
       if (!isBinary) {
         this.onMessage(data.toString());
@@ -157,6 +168,7 @@ export class Session implements FrameSink, PluginSession {
     this.consumers.clear();
     this.arms.clear();
     this.playbacks.clear();
+    this.terminals.clear();
   }
 
   private reportError(message: string): void {
@@ -371,6 +383,61 @@ export class Session implements FrameSink, PluginSession {
         return;
       }
 
+      case 'terminal.open': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        if (!this.ownPage) {
+          // e.g. another site's page, which a browser lets reach the robot
+          this.sendStreamStatus(id, 'error', 'Terminals open in the dashboard’s own pages only');
+          return;
+        }
+        if (typeof message.terminal !== 'string' || !TERMINAL_NAME.test(message.terminal)) {
+          throw new Error('Invalid terminal name');
+        }
+        const point = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+        const view = services.terminals.open(
+          {
+            terminal: message.terminal,
+            command: optionalString(message.command),
+            folder: optionalString(message.folder) || '~',
+            cols: number(message.cols, 2, 1000, 80),
+            rows: number(message.rows, 1, 500, 24),
+            started: point(message.started),
+            offset: point(message.offset),
+          },
+          {
+            onOutput: (output) => this.send({ type: 'terminal.output', id, ...output }),
+            onExit: (exit) => this.send({ type: 'terminal.exit', id, ...exit }),
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+          },
+        );
+        this.terminals.set(id, view);
+        this.subscriptions.set(id, () => view.close());
+        return;
+      }
+
+      case 'terminal.input':
+        if (typeof message.data === 'string') {
+          this.terminals.get(subscriptionId(message.id))?.input(message.data);
+        }
+        return;
+
+      case 'terminal.resize':
+        this.terminals
+          .get(subscriptionId(message.id))
+          ?.resize(number(message.cols, 2, 1000, 80), number(message.rows, 1, 500, 24));
+        return;
+
+      case 'terminal.ack':
+        if (typeof message.started === 'number' && typeof message.offset === 'number') {
+          this.terminals.get(subscriptionId(message.id))?.ack(message.started, message.offset);
+        }
+        return;
+
+      case 'terminal.restart':
+        this.terminals.get(subscriptionId(message.id))?.restart();
+        return;
+
       case 'arm.subscribe': {
         const id = subscriptionId(message.id);
         this.unsubscribe(id);
@@ -554,5 +621,6 @@ export class Session implements FrameSink, PluginSession {
     this.consumers.delete(id);
     this.arms.delete(id);
     this.playbacks.delete(id);
+    this.terminals.delete(id);
   }
 }

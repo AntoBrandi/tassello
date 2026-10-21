@@ -160,6 +160,10 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `subscribeDiagnostics({ topic }, { update, status })` | The robot's diagnostics (`diagnostic_msgs/msg/DiagnosticArray`, `topic` usually `/diagnostics` or `/diagnostics_agg`): the statuses the server keeps, the latest of each name, stale once no longer received, and their latest changes of level, then those that changed (see `DiagnosticsUpdate` in `src/shared/protocol.ts`). Returns the unsubscribe function |
 | `subscribeBehaviorTreeFile({ path, libraries }, { file, models })` | A behavior tree's XML file: its text and version, again whenever it changes, and the node models it can use (Nav2's, its includes', the libraries') |
 | `saveBehaviorTreeFile(path, text, base, create?)` | Saves a behavior tree's XML file if still of the version `base` (`null`: whatever it is), or as a new file: resolves with `{ version, conflict }` |
+| `subscribeTerminal({ terminal, command, folder }, { output, exit, status, shown })` | A terminal on the robot, by a name of the page's choosing: the login shell, or `command`, in `folder`. Its output as it comes (`TerminalOutput`: written to a terminal emulator, then acknowledged), from what the page shows, which `shown()` gives on every connection: `{ cols, rows, started, offset }`. Returns `{ id, unsubscribe }`; the terminal lives on without the page, for an hour. The dashboard's own pages only |
+| `terminalInput(id, data)` / `resizeTerminal(id, cols, rows)` | What is typed in the terminal; its size |
+| `ackTerminal(id, started, offset)` | The page wrote the output up to `offset`: the server sends at most 256 KB ahead of it |
+| `restartTerminal(id)` | Hangs up the terminal's program, and starts it again |
 | `serverNow()` | Now, on the robot's clock |
 
 The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see

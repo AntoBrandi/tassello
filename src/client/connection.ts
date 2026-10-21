@@ -39,6 +39,9 @@ import {
   type ServicesUpdate,
   type ServiceVerb,
   type StreamStatus,
+  type TerminalExit,
+  type TerminalOpen,
+  type TerminalOutput,
   type TfSubscribe,
   type TfUpdate,
   type TopicSubscribe,
@@ -60,6 +63,7 @@ export type BehaviorTreePlaybackRequest = Omit<BehaviorTreePlaybackControl, 'typ
 export type BehaviorTreeFileOptions = Omit<BehaviorTreeFileSubscribe, 'type' | 'id'>;
 export type RosoutOptions = Omit<RosoutSubscribe, 'type' | 'id'>;
 export type DiagnosticsOptions = Omit<DiagnosticsSubscribe, 'type' | 'id'>;
+export type TerminalOptions = Pick<TerminalOpen, 'terminal' | 'command' | 'folder'>;
 
 export interface TopicHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
@@ -94,6 +98,16 @@ export interface DiagnosticsHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The statuses that changed, and their changes of level
   update: (update: DiagnosticsUpdate) => void;
+}
+
+export interface TerminalHandlers {
+  // Its error, if it could not be opened
+  status: (state: StreamStatus['state'], message: string) => void;
+  output: (output: TerminalOutput) => void;
+  exit: (exit: TerminalExit) => void;
+  // What the page shows, asked on every connection: the terminal's size, and
+  // the output it has
+  shown: () => Pick<TerminalOpen, 'cols' | 'rows' | 'started' | 'offset'>;
 }
 
 // A frame's source size (see FRAME_HEADER_BYTES) and metadata, e.g. GridInfo
@@ -131,10 +145,12 @@ type Request =
   | Omit<BehaviorTreePlaybackSubscribe, 'id'>
   | Omit<BehaviorTreeFileSubscribe, 'id'>
   | Omit<RosoutSubscribe, 'id'>
-  | Omit<DiagnosticsSubscribe, 'id'>;
+  | Omit<DiagnosticsSubscribe, 'id'>
+  | Omit<TerminalOpen, 'id'>;
 
 interface Subscription {
-  request: Request;
+  // Or made anew on every connection
+  request: Request | (() => Request);
   stream?: StreamHandlers;
   tf?: (update: TfUpdate) => void;
   path?: (update: PathUpdate) => void;
@@ -147,6 +163,7 @@ interface Subscription {
   behaviorTreeFile?: BehaviorTreeFileHandlers;
   rosout?: RosoutHandlers;
   diagnostics?: DiagnosticsHandlers;
+  terminal?: TerminalHandlers;
 }
 
 const MIN_RETRY_MS = 500;
@@ -159,6 +176,9 @@ const CALL_TIMEOUT_MS = 5000;
 const RESULT_MARGIN_MS = 2000;
 // Of ros2 bag record, to start or to complete the bag
 const RECORD_TIMEOUT_MS = 20_000;
+// What is typed or pasted in a terminal goes in messages of at most this many
+// characters: the server takes messages of 1 MB at most
+const TERMINAL_INPUT_CHUNK = 64 * 1024;
 
 function commandKey(panelId: string, widgetId: string): string {
   return `${panelId}/${widgetId}`;
@@ -319,6 +339,48 @@ export class Connection {
     return this.subscribe({ type: 'diagnostics.subscribe', ...options }, { diagnostics: handlers });
   }
 
+  // A terminal on the robot, by its name (see TerminalOpen): its output as it
+  // comes, from what the page shows, which it is asked on every connection.
+  // Returns the subscription's id, for what is typed in it, and the
+  // unsubscribe function; the terminal lives on, without the page.
+  subscribeTerminal(options: TerminalOptions, handlers: TerminalHandlers): { id: number; unsubscribe: () => void } {
+    const id = this.nextId;
+    const request = (): Omit<TerminalOpen, 'id'> => ({ type: 'terminal.open', ...options, ...handlers.shown() });
+    return { id, unsubscribe: this.subscribe(request, { terminal: handlers }) };
+  }
+
+  // Typed or pasted in the terminal id; false if not connected: it is dropped
+  terminalInput(id: number, data: string): boolean {
+    for (let start = 0; start < data.length; ) {
+      let end = Math.min(data.length, start + TERMINAL_INPUT_CHUNK);
+      // Not half a character: each message is written to the terminal as UTF-8
+      const last = data.charCodeAt(end - 1);
+      if (end < data.length && last >= 0xd800 && last <= 0xdbff) {
+        end--;
+      }
+      if (!this.send({ type: 'terminal.input', id, data: data.slice(start, end) })) {
+        return false;
+      }
+      start = end;
+    }
+    return true;
+  }
+
+  resizeTerminal(id: number, cols: number, rows: number): boolean {
+    return this.send({ type: 'terminal.resize', id, cols, rows });
+  }
+
+  // The page has written the output of the program started at started, up to
+  // offset: the server sends more
+  ackTerminal(id: number, started: number, offset: number): boolean {
+    return this.send({ type: 'terminal.ack', id, started, offset });
+  }
+
+  // Hangs up the terminal's program if it runs, and starts it again
+  restartTerminal(id: number): boolean {
+    return this.send({ type: 'terminal.restart', id });
+  }
+
   // Resolves with systemctl's error, or null once done
   serviceAction(unit: string, scope: ServiceScope, verb: ServiceVerb): Promise<string | null> {
     const id = this.nextId++;
@@ -406,10 +468,10 @@ export class Connection {
     });
   }
 
-  private subscribe(request: Request, handlers: Omit<Subscription, 'request'>): () => void {
+  private subscribe(request: Subscription['request'], handlers: Omit<Subscription, 'request'>): () => void {
     const id = this.nextId++;
     this.subscriptions.set(id, { request, ...handlers });
-    this.send({ ...request, id } as ClientMessage);
+    this.send({ ...(typeof request === 'function' ? request() : request), id } as ClientMessage);
     return () => {
       this.subscriptions.delete(id);
       this.send({ type: 'unsubscribe', id });
@@ -430,7 +492,7 @@ export class Connection {
         this.retryMs = MIN_RETRY_MS;
         this.setStatus('open');
         for (const [id, { request }] of this.subscriptions) {
-          this.send({ ...request, id } as ClientMessage);
+          this.send({ ...(typeof request === 'function' ? request() : request), id } as ClientMessage);
         }
         break;
       case 'commands':
@@ -453,7 +515,8 @@ export class Connection {
           subscription?.topic ??
           subscription?.behaviorTree ??
           subscription?.rosout ??
-          subscription?.diagnostics
+          subscription?.diagnostics ??
+          subscription?.terminal
         )?.status(message.state, message.message);
         subscription?.plugin?.status?.(message.state, message.message);
         break;
@@ -516,6 +579,12 @@ export class Connection {
         break;
       case 'diagnostics':
         this.subscriptions.get(message.id)?.diagnostics?.update(message);
+        break;
+      case 'terminal.output':
+        this.subscriptions.get(message.id)?.terminal?.output(message);
+        break;
+      case 'terminal.exit':
+        this.subscriptions.get(message.id)?.terminal?.exit(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

@@ -31,9 +31,10 @@ import { Session } from './session.ts';
 import { FrameStreams } from './streams.ts';
 import { SystemdServices } from './systemd.ts';
 import { Teleop } from './teleop.ts';
+import { Terminals } from './terminals.ts';
 import { Tf } from './tf.ts';
 import { Topics } from './topics.ts';
-import { defaultPanelsDirectory, errorMessage, tasselloRoot } from './util.ts';
+import { defaultPanelsDirectory, errorMessage, ownPage, tasselloRoot } from './util.ts';
 
 export interface ServerOptions {
   port: number;
@@ -118,6 +119,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const ros = new Ros(node);
   const rosout = new Rosout(node, logger);
   const diagnostics = new Diagnostics(node, logger);
+  const terminals = new Terminals(logger);
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
   const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
@@ -157,24 +159,29 @@ export async function startServer(options: ServerOptions): Promise<void> {
   // The pages' messages are small: velocities, subscriptions
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1024 * 1024 });
   wss.on('connection', (ws, req) => {
-    const session = new Session(ws, {
-      teleop,
-      streams,
-      tf,
-      paths,
-      topics,
-      poses,
-      commands,
-      systemd,
-      arm,
-      ros,
-      rosout,
-      diagnostics,
-      behaviorTrees,
-      behaviorTreeFiles,
-      plugins: host,
-      hostname: os.hostname(),
-    });
+    const session = new Session(
+      ws,
+      {
+        teleop,
+        streams,
+        tf,
+        paths,
+        topics,
+        poses,
+        commands,
+        systemd,
+        arm,
+        ros,
+        rosout,
+        diagnostics,
+        terminals,
+        behaviorTrees,
+        behaviorTreeFiles,
+        plugins: host,
+        hostname: os.hostname(),
+      },
+      ownPage(req.headers),
+    );
     sessions.add(session);
     logger.debug(`Page connected from ${req.socket.remoteAddress}`);
     let alive = true;
@@ -207,6 +214,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     stopping = true;
     commands.stopAll();
     systemd.stopAll();
+    terminals.stopAll();
     // Stops the robot if a page was driving it, while the node still runs
     for (const session of sessions) {
       session.close();

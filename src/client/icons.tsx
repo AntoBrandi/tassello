@@ -309,3 +309,25 @@ export const ArchiveIcon = icon(
     <path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" />
   </>,
 );
+// A shell's prompt: the Terminal widget
+export const ShellIcon = icon(<path d="m4 17 6-6-6-6M12 19h8" />);
+export const KeyboardIcon = icon(
+  <>
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M8 12.5h.01M12 12.5h.01M16 12.5h.01M7 16h10" />
+  </>,
+);
+export const MaximizeIcon = icon(
+  <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />,
+);
+export const MinimizeIcon = icon(
+  <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />,
+);
+export const ClipboardIcon = icon(
+  <>
+    <rect x="8" y="2" width="8" height="4" rx="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+  </>,
+);
+export const TextSmallerIcon = icon(<path d="m3 19 5-13 5 13M5 14h6M16 9h6" />);
+export const TextLargerIcon = icon(<path d="m3 19 5-13 5 13M5 14h6M16 9h6M19 6v6" />);

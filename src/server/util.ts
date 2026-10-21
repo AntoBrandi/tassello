@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
+import type { IncomingHttpHeaders } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -38,6 +39,27 @@ export function tasselloRoot(): string {
 export function absoluteTopic(topic: string): string {
   const trimmed = topic.trim().replace(/\/+$/, '');
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+// Whether the page that opened a WebSocket is one of the dashboard's own.
+// Browsers say which site a page is from (Origin), and another site's page
+// cannot change it; the dashboard's is the host the page reached: the Host
+// header, or the X-Forwarded-Host of a reverse proxy. Programs other than
+// browsers send no Origin.
+export function ownPage(headers: IncomingHttpHeaders): boolean {
+  if (headers.origin === undefined) {
+    return true;
+  }
+  let host: string;
+  try {
+    host = new URL(headers.origin).host.toLowerCase();
+  } catch {
+    // "null": a sandboxed frame, a file
+    return false;
+  }
+  const forwarded = headers['x-forwarded-host'];
+  const proxied = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0].trim();
+  return [headers.host, proxied].some((reached) => reached?.toLowerCase() === host);
 }
 
 export function errorMessage(e: unknown): string {

@@ -325,6 +325,60 @@ export interface DiagnosticsSubscribe {
   topic: string;
 }
 
+// A terminal on the robot: the user's login shell, or a command, on a
+// pseudo-terminal, as the server's user. It outlives the page: the page opens
+// it again by its name after a reload or a reconnection, and gets what it
+// missed (TerminalOutput); the server hangs it up once no page has shown it
+// for an hour. Only the dashboard's own pages open terminals.
+export interface TerminalOpen {
+  type: 'terminal.open';
+  id: number;
+  // Chosen by the page, for as long as the browser's tab lives
+  terminal: string;
+  // Run by the login shell; empty: the shell itself
+  command: string;
+  // Where it starts: /…, ~/…, package://<package>/…
+  folder: string;
+  cols: number;
+  rows: number;
+  // The output the page shows: its program's start (TerminalOutput.started)
+  // and how far it goes; null if it shows none
+  started: number | null;
+  offset: number | null;
+}
+
+// Typed, pasted: written to the terminal as is
+export interface TerminalInput {
+  type: 'terminal.input';
+  id: number;
+  data: string;
+}
+
+// Of the terminal the page shows: the last page to say so sets the size
+export interface TerminalResize {
+  type: 'terminal.resize';
+  id: number;
+  cols: number;
+  rows: number;
+}
+
+// The page has written the output up to offset: the server sends a page at
+// most TERMINAL_WINDOW characters ahead of it, and those that fall too far
+// behind get the screen instead of what they missed
+export interface TerminalAck {
+  type: 'terminal.ack';
+  id: number;
+  // Of the program's output (TerminalOutput.started): not another's
+  started: number;
+  offset: number;
+}
+
+// Hangs up the program if it runs, and starts it again
+export interface TerminalRestart {
+  type: 'terminal.restart';
+  id: number;
+}
+
 export type ClientMessage =
   | TwistCommand
   | ImageSubscribe
@@ -353,7 +407,12 @@ export type ClientMessage =
   | BehaviorTreeFileSubscribe
   | BehaviorTreeFileSave
   | RosoutSubscribe
-  | DiagnosticsSubscribe;
+  | DiagnosticsSubscribe
+  | TerminalOpen
+  | TerminalInput
+  | TerminalResize
+  | TerminalAck
+  | TerminalRestart;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -762,6 +821,36 @@ export interface DiagnosticsUpdate {
   changes: DiagnosticChange[];
 }
 
+// Of a terminal subscription: its program's output, as it comes. The status
+// of the subscription comes as stream.status: its error if the terminal could
+// not be opened.
+export interface TerminalOutput {
+  type: 'terminal.output';
+  id: number;
+  // When the program started, on the server's clock: output of another
+  // program than the one the page shows (restarted, or the server was)
+  // follows what it shows, from offset 0
+  started: number;
+  // In characters (UTF-16 code units) of the program's output, after data
+  offset: number;
+  // data is the screen and its scrollback (TERMINAL_SCROLLBACK lines),
+  // which replace what the page shows, instead of following it
+  reset: boolean;
+  data: string;
+  // The window's title the program set, with every reset; null: as before
+  title: string | null;
+}
+
+// Of a terminal subscription: its program ended, after the last of its
+// output. Sent again to the pages opening it, until restarted.
+export interface TerminalExit {
+  type: 'terminal.exit';
+  id: number;
+  started: number;
+  // 128 + the signal's number if killed by one; null if hung up
+  exitCode: number | null;
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -784,6 +873,8 @@ export type ServerMessage =
   | BehaviorTreeModels
   | RosoutUpdate
   | DiagnosticsUpdate
+  | TerminalOutput
+  | TerminalExit
   | PanelsChanged
   | ErrorMessage;
 
@@ -822,6 +913,10 @@ export const ROSOUT_HISTORY = 10_000;
 export const DIAGNOSTICS_RATE = 4;
 // Changes of level kept by the server, and by the page
 export const DIAGNOSTICS_CHANGES = 1000;
+// Lines of a terminal kept above its screen, by the server and by the page
+export const TERMINAL_SCROLLBACK = 2000;
+// Characters of a terminal's output sent to a page and not yet written by it
+export const TERMINAL_WINDOW = 256 * 1024;
 export const DASHBOARD_CLIENT_HEADER = 'X-Dashboard-Client';
 
 // A plugin, as GET /api/plugins lists them

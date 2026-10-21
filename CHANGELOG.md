@@ -53,6 +53,19 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   `HomeIcon`, `HardDriveIcon`, `BookmarkIcon`, `SidebarIcon`, `PieChartIcon`, `InfoIcon`,
   `WrapIcon`, `LinkIcon`, `LockIcon` and `ArchiveIcon` icons.
 - REST errors of the API reject with an `ApiError`, which has the HTTP status.
+- Terminal widget: a shell on the robot (the login shell of the server's user), or a command, in
+  a full terminal (xterm.js): colours, full screen programs and their mouse, copy and paste. It
+  outlives the page: reloaded, reconnected or shown again, it is as it was, full screen programs
+  included; hung up an hour after no page shows it. On touch screens, Termux's extra keys (Esc,
+  Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down): sticky modifiers that also apply to the
+  on-screen keyboard, keys swiped up for another character, a layout of one's own; the terminal
+  fills the screen above the on-screen keyboard while typing; one finger scrolls, two pinch the
+  text's size. Needs Python 3 (ROS 2's), no native module. Terminals open from the dashboard's own
+  pages only.
+- Plugins: `connection.subscribeTerminal`, `terminalInput`, `resizeTerminal`, `ackTerminal`,
+  `restartTerminal`, the `TerminalOutput` and `TerminalExit` types, and the `ShellIcon`,
+  `KeyboardIcon`, `MaximizeIcon`, `MinimizeIcon`, `ClipboardIcon`, `TextSmallerIcon` and
+  `TextLargerIcon` icons.
 
 ## 0.1.0
 

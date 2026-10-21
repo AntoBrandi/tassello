@@ -40,6 +40,8 @@ export {
   type RosoutOptions,
   type DiagnosticsHandlers,
   type DiagnosticsOptions,
+  type TerminalHandlers,
+  type TerminalOptions,
   type StreamHandlers,
   type FrameInfo,
   type ImageOptions,
@@ -74,6 +76,8 @@ export type {
   RosoutUpdate,
   ServerMessage,
   StreamStatus,
+  TerminalExit,
+  TerminalOutput,
   TfUpdate,
   Transform2D,
 } from '../../shared/protocol.ts';
