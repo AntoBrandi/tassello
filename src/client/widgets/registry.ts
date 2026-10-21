@@ -20,6 +20,7 @@ import { logsWidget } from './logs/LogsWidget.tsx';
 import { monitorWidget } from './monitor/MonitorWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
 import { networkingWidget } from './networking/NetworkingWidget.tsx';
+import { parametersWidget } from './parameters/ParametersWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
@@ -42,6 +43,7 @@ const CORE: RegisteredWidget[] = [
   logsWidget,
   diagnosticsWidget,
   monitorWidget,
+  parametersWidget,
   fileManagerWidget,
   terminalWidget,
   networkingWidget,

@@ -188,6 +188,9 @@ function useArms() {
 | `interfaceInfo(type)` | An interface's definition (`ros2 interface show`), the schemas of its messages and their default values (`InterfaceInfo`) |
 | `subscribeAction({ action, actionType }, { goals, status })` | What an action's servers are doing: their goals, whoever sent them, with their status and latest feedback, and the results of those the dashboard sent (`ActionGoal`). Returns the unsubscribe function |
 | `sendGoal(action, type, goal)` / `cancelGoal(action, type, goal)` | Sends a goal: resolves with its UUID once accepted. Cancels one by its UUID, or all of the action's (`null`), whoever sent them |
+| `subscribeParameters(node, { update, status })` | A node's parameters (`ros2 param list`, `get`, `describe`: `ParamInfo` in `src/shared/parameters.ts`), all of them, then those that change, whoever sets them. Returns the unsubscribe function |
+| `setParameters(node, [{ name, value }], atomically?)` | `ros2 param set` (`value`: `{ type, value }`, `ParamValue`); a value of type `not_set` deletes the parameter. Resolves with what the node says of each: `{ name, successful, reason }` |
+| `dumpParameters(node)` / `loadParameters(node, yaml)` | `ros2 param dump`: resolves with the YAML. `ros2 param load`: the node's parameters in the YAML set, resolves with what the node says of each |
 | `serverNow()` | Now, on the robot's clock |
 
 The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see

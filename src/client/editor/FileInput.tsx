@@ -20,6 +20,7 @@ const KINDS: Record<FileKind, { title: string; none: string; icon: string }> = {
   image: { title: 'Choose an image of the robot', none: 'No folder nor image here', icon: '🖼' },
   'behavior-tree': { title: 'Choose a behavior tree of the robot', none: 'No folder nor XML file here', icon: '🌳' },
   bag: { title: 'Choose a rosbag of the robot', none: 'No folder nor rosbag here', icon: '🎞' },
+  yaml: { title: 'Choose a parameter file of the robot', none: 'No folder nor YAML file here', icon: '📄' },
   folder: { title: 'Choose a folder of the robot', none: 'No folder here', icon: '📁' },
 };
 

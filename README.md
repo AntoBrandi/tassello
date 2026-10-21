@@ -12,7 +12,7 @@ and plugins add more.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
   editor, the ROS log of every node, the robot's diagnostics, its topics, services and actions
-  as the `ros2` command line shows them, a file manager, a terminal, and its networks: Wi-Fi
+  as the `ros2` command line shows them, its nodes' parameters, a file manager, a terminal, and its networks: Wi-Fi
   joined, connections switched, the robot as an access point.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
@@ -131,6 +131,7 @@ after the others on the devices already arranged.
 | **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
 | **ROS Monitor** | The ROS graph, as the `ros2` command line shows it, on three sheets: its topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's messages, their rate, bandwidth and delay, its publishers and subscriptions with their QoS and those that cannot talk, a message to publish once or at a rate (`ros2 topic echo`, `hz`, `bw`, `delay`, `info -v`, `pub`); a service to call, once or at a rate (`ros2 service call`, `info`, `echo`); every goal of an action, whoever sent it, with its feedback, and a goal to send or cancel (`ros2 action send_goal`, `info`); their types' definitions (`ros2 interface show`) |
+| **Parameters** | Nodes' parameters, as rqt_reconfigure and `ros2 param` show them: the nodes of the graph, and the parameters of the one chosen grouped by their prefixes, each edited in place (a switch, a slider within its range, a field), live as they change wherever they are set. Their descriptions, ranges and constraints (`ros2 param describe`); new ones set and undeclared ones deleted (`set`, `delete`); all of them dumped as YAML, downloaded or saved on the robot (`dump`), and loaded from a YAML file of the robot or of the page's device (`load`) |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 | **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
 | **Networking** | The robot's networks, through NetworkManager, as a phone's settings show them: the Wi-Fi networks in range, joined with their password; the connections saved, switched between, edited (their addresses by DHCP or static), forgotten; the robot as an access point, its network shared by a QR code; the interfaces, their state and addresses. Asks before a change that would cut the page off from the robot |
@@ -301,6 +302,24 @@ Notes on some of them:
 
   Messages, requests and goals are made from rclnodejs's code of their types, which Tassello
   makes when it starts for the workspaces sourced (see Install).
+- **Parameters** lists the nodes of the graph (but the hidden ones, as `ros2 node list` does), or
+  shows one node only, its *node* (a panel to tune `/controller_server`). A node's parameters are
+  read through its parameter services (`rcl_interfaces`), grouped by the prefixes of their names
+  (the groups of read-only parameters only, such as `qos_overrides`, folded), and filtered by name
+  or description. Each is edited with its type's editor: a switch for a boolean, a slider and a
+  field for a number with a range, a field for the others (lists' items separated by commas),
+  applied on Enter or when left; what the node refuses (out of its range, of another type, read
+  only) is said under it, with the node's reason, and the value goes back. Changes made elsewhere
+  (`ros2 param set`, the node itself) show as they come: the server follows `/parameter_events`.
+  A parameter's details give its description, type, range and constraints, copy its value or its
+  `ros2 param set` command, and delete it (`ros2 param delete`, which only undeclared parameters
+  allow). *Add* sets a parameter the node did not declare, which nodes allow only if they say so;
+  its type is read from its value as `ros2 param set` reads it (`[1, 2.5]`: doubles), or chosen.
+  *Dump* writes the YAML `ros2 param dump` writes, downloaded, saved on the robot or copied; *Load*
+  reads a parameter file of the robot or of the page's device as `ros2 param load` does (the
+  node's section, and the `/**` one) and sets its parameters one by one, saying which the node
+  refused and why. Parameter files are read and written by Python's yaml, as `ros2 param` does. A
+  widget can be *view only*.
 - **File Manager** opens its *folder* (`~` by default; `/…`, `~/…`, `package://…`) and lists it
   with its entries' sizes and times, sorted by name (naturally: `run_2` before `run_10`), size or
   time, folders first; the chevrons unfold folders in place. Its places are home, the root, the
@@ -447,7 +466,8 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 ## Security
 
 Tassello has no login. **Anyone who can open the page can drive the robot, publish on any topic,
-call any service and send or cancel any goal (the ROS Monitor), run any command as
+call any service and send or cancel any goal (the ROS Monitor), change any node's parameters
+(Parameters), run any command as
 the server's user (the Terminal, a shell), read, write, upload, move and delete any of the
 files that user can (the File Manager), and change the robot's networks and read their passwords
 (Networking)**: keep it on a network you trust, or behind a reverse proxy

@@ -2,7 +2,8 @@
 // behavior tree inspectors: files of the robot, which a page picks by
 // browsing its directories, and files uploaded from a page, kept by the
 // server next to the panels. Only those: the dashboard does not hand out any
-// file of the robot. A page also browses for rosbags, and for folders.
+// file of the robot. A page also browses for rosbags, parameter files (YAML),
+// and folders.
 
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
@@ -14,11 +15,13 @@ import { HttpError } from './panels.ts';
 export const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 // The files a page browses for, by kind: folders only for 'folder'. Bags are
 // folders (with their metadata.yaml) or their files.
-export type FileKind = 'image' | 'behavior-tree' | 'bag' | 'folder';
+export type FileKind = 'image' | 'behavior-tree' | 'bag' | 'yaml' | 'folder';
 const EXTENSIONS: Record<FileKind, Set<string>> = {
   image: IMAGE_EXTENSIONS,
   'behavior-tree': new Set(['.xml']),
   bag: new Set(['.mcap', '.db3']),
+  // Parameter files
+  yaml: new Set(['.yaml', '.yml']),
   folder: new Set(),
 };
 const FILE_KINDS = new Set(Object.keys(EXTENSIONS));

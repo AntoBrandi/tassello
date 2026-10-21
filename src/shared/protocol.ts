@@ -17,6 +17,7 @@ import type {
   TopicStats,
 } from './monitor.ts';
 import type { NetworkRequest, NetworkState } from './networking.ts';
+import type { ParamInfo, ParamValue } from './parameters.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
@@ -234,6 +235,46 @@ export interface RosCall {
   // std_msgs/msg/Header, and a field it has not is refused; the response
   // comes as monitored messages do (TruncatedValue... in monitor.ts)
   checked?: boolean;
+}
+
+// A node's parameters (ros2 param list, get, describe): all of them, then
+// those that change (published on /parameter_events, or set from the
+// dashboard), as params updates. Read again whenever a page subscribes. Its
+// status comes as stream.status: its error if the node has no parameter
+// services.
+export interface ParamsSubscribe {
+  type: 'params.subscribe';
+  id: number;
+  // Its full name: /namespace/name
+  node: string;
+}
+
+// Sets parameters (ros2 param set), one by one or atomically; a value of type
+// not_set deletes the parameter (ros2 param delete). Answered by a result
+// with the same id: ParamResult[], what the node says of each.
+export interface ParamsSet {
+  type: 'params.set';
+  id: number;
+  node: string;
+  parameters: { name: string; value: ParamValue }[];
+  atomically: boolean;
+}
+
+// ros2 param dump: answered by a result with the same id, the YAML
+export interface ParamsDump {
+  type: 'params.dump';
+  id: number;
+  node: string;
+}
+
+// ros2 param load: the node's parameters in the YAML (its section, or /**'s)
+// set one by one. Answered by a result with the same id: ParamResult[], with
+// those the file has that cannot be set.
+export interface ParamsLoad {
+  type: 'params.load';
+  id: number;
+  node: string;
+  yaml: string;
 }
 
 // The ROS graph: its topics, services, actions and nodes (GraphSnapshot), as
@@ -554,7 +595,11 @@ export type ClientMessage =
   | InterfaceGet
   | ActionSubscribe
   | ActionSend
-  | ActionCancel;
+  | ActionCancel
+  | ParamsSubscribe
+  | ParamsSet
+  | ParamsDump
+  | ParamsLoad;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -1047,6 +1092,17 @@ export interface TopicPublished extends PublishState {
   id: number;
 }
 
+// Of a params subscription
+export interface ParamsUpdate {
+  type: 'params';
+  id: number;
+  // parameters are all of them, which replace those of before; else those
+  // added or changed
+  reset: boolean;
+  parameters: ParamInfo[];
+  deleted: string[];
+}
+
 // Of an action subscription: its goals, the latest accepted first
 export interface ActionGoals {
   type: 'action.goals';
@@ -1086,6 +1142,7 @@ export type ServerMessage =
   | TopicEchoUpdate
   | TopicPublished
   | ActionGoals
+  | ParamsUpdate
   | PanelsChanged
   | ErrorMessage;
 

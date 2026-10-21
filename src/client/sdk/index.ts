@@ -47,6 +47,7 @@ export {
   type ImageOptions,
   type OverlayHandlers,
   type OverlayOptions,
+  type ParamsHandlers,
   type TfOptions,
   type TopicMonitorHandlers,
   type TopicMonitorOptions,
@@ -83,6 +84,7 @@ export type {
   NetworkUpdate,
   OverlayKind,
   OverlayUpdate,
+  ParamsUpdate,
   RosoutUpdate,
   ServerMessage,
   StreamStatus,
@@ -92,6 +94,7 @@ export type {
   Transform2D,
 } from '../../shared/protocol.ts';
 export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
+export type { ParamDescriptor, ParamInfo, ParamResult, ParamScalar, ParamType, ParamValue } from '../../shared/parameters.ts';
 export type {
   ActionGoal,
   BigIntValue,

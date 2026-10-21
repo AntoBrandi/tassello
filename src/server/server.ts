@@ -27,6 +27,7 @@ import { makeMessageCode } from './message_code.ts';
 import { Networking } from './networking.ts';
 import { Overlays } from './overlays.ts';
 import { PanelStore } from './panels.ts';
+import { Parameters } from './parameters.ts';
 import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
 import { Poses } from './poses.ts';
@@ -133,6 +134,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const topicMonitors = new TopicMonitors(node, logger, interfaces);
   const publishing = new TopicPublishing(node, interfaces);
   const actions = new Actions(node, interfaces, logger);
+  const parameters = new Parameters(node, logger);
   const rosout = new Rosout(node, logger);
   const diagnostics = new Diagnostics(node, logger);
   const terminals = new Terminals(logger);
@@ -201,6 +203,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         publishing,
         interfaces,
         actions,
+        parameters,
         plugins: host,
         hostname: os.hostname(),
       },

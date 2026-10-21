@@ -5,6 +5,16 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Parameters widget: nodes' parameters, as rqt_reconfigure and `ros2 param` show them. A node's
+  parameters grouped by their prefixes, each edited in place (a switch, a slider within its range,
+  a field), with what the node refuses and why; changes made elsewhere followed live on
+  `/parameter_events`. Their descriptions, ranges and constraints (`describe`); new ones set and
+  undeclared ones deleted (`set`, `delete`); all of them dumped as YAML, downloaded, saved on the
+  robot or copied (`dump`), and loaded from a YAML file of the robot or of the page's device
+  (`load`), as `ros2 param` does, with Python's yaml. A widget can be for one node, or view only.
+- The file browser picks parameter files (YAML) too.
+- Plugins: `connection.subscribeParameters`, `setParameters`, `dumpParameters`, `loadParameters`,
+  and the types of `src/shared/parameters.ts`.
 - Navigation widget: the laser scan, put in the map frame by TF as each arrives (in 3D: a lidar
   mounted upside down lands where it looks), the quickest check of the localization; and the
   robot drawn with Nav2's footprint (`published_footprint`), moving with the robot. A scan no

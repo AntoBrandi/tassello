@@ -27,6 +27,7 @@ import type { Interfaces } from './interfaces.ts';
 import type { Networking } from './networking.ts';
 import { checkRequest, deviceOfAddress } from './networking_format.ts';
 import type { Overlays } from './overlays.ts';
+import type { Parameters } from './parameters.ts';
 import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
@@ -66,6 +67,7 @@ export interface SessionServices {
   publishing: TopicPublishing;
   interfaces: Interfaces;
   actions: Actions;
+  parameters: Parameters;
   plugins: PluginHost;
   hostname: string;
 }
@@ -635,6 +637,51 @@ export class Session implements FrameSink, PluginSession {
         this.answer(
           message.id,
           Promise.resolve().then(() => services.interfaces.info(string(message.interfaceType, 'interfaceType'))),
+        );
+        return;
+
+      case 'params.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.parameters.watch(string(message.node, 'node'), {
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onUpdate: (update) => this.send({ type: 'params', id, ...update }),
+          }),
+        );
+        return;
+      }
+
+      case 'params.set':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() => {
+            if (!Array.isArray(message.parameters)) {
+              throw new Error('parameters must be a list');
+            }
+            return services.parameters.set(
+              string(message.node, 'node'),
+              message.parameters.map((p) => ({ name: string(p?.name, 'name'), value: p.value })),
+              message.atomically === true,
+            );
+          }),
+        );
+        return;
+
+      case 'params.dump':
+        this.answer(message.id, Promise.resolve().then(() => services.parameters.dump(string(message.node, 'node'))));
+        return;
+
+      case 'params.load':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() => {
+            if (typeof message.yaml !== 'string') {
+              throw new Error('yaml must be a string');
+            }
+            return services.parameters.load(string(message.node, 'node'), message.yaml);
+          }),
         );
         return;
 

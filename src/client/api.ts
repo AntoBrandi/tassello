@@ -52,8 +52,9 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 const panelUrl = (id: string) => `/api/panels/${encodeURIComponent(id)}`;
 
 // The robot's files a page browses for (see src/server/files.ts): images,
-// behavior trees (XML), rosbags (their folders or files), or folders only
-export type FileKind = 'image' | 'behavior-tree' | 'bag' | 'folder';
+// behavior trees (XML), rosbags (their folders or files), parameter files
+// (YAML), or folders only
+export type FileKind = 'image' | 'behavior-tree' | 'bag' | 'yaml' | 'folder';
 
 export interface DirectoryListing {
   dir: string;

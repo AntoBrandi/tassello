@@ -15,6 +15,7 @@ import type {
   TopicStats,
 } from '../shared/monitor.ts';
 import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
+import type { ParamResult, ParamValue } from '../shared/parameters.ts';
 import {
   FRAME_HEADER_BYTES,
   IMAGE_FORMATS,
@@ -44,6 +45,8 @@ import {
   type NetworkUpdate,
   type OverlaySubscribe,
   type OverlayUpdate,
+  type ParamsSubscribe,
+  type ParamsUpdate,
   type PathSubscribe,
   type PathUpdate,
   type PluginSubscribe,
@@ -123,6 +126,13 @@ export interface DiagnosticsHandlers {
   update: (update: DiagnosticsUpdate) => void;
 }
 
+export interface ParamsHandlers {
+  // Its error if the node has no parameter services
+  status: (state: StreamStatus['state'], message: string) => void;
+  // All of them (reset), then those added, changed or deleted
+  update: (update: ParamsUpdate) => void;
+}
+
 export interface OverlayHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   overlay: (update: OverlayUpdate) => void;
@@ -179,6 +189,7 @@ type Request =
   | Omit<TfSubscribe, 'id'>
   | Omit<PathSubscribe, 'id'>
   | Omit<OverlaySubscribe, 'id'>
+  | Omit<ParamsSubscribe, 'id'>
   | Omit<TopicSubscribe, 'id'>
   | Omit<ServicesSubscribe, 'id'>
   | Omit<LogsSubscribe, 'id'>
@@ -204,6 +215,7 @@ interface Subscription {
   tf?: (update: TfUpdate) => void;
   path?: (update: PathUpdate) => void;
   overlay?: OverlayHandlers;
+  params?: ParamsHandlers;
   topic?: TopicHandlers;
   services?: (update: ServicesUpdate) => void;
   logs?: (update: LogsUpdate) => void;
@@ -553,6 +565,41 @@ export class Connection {
     return known;
   }
 
+  // A node's parameters (ros2 param list, get, describe), then their changes,
+  // whoever makes them. Read again on every connection. Returns the
+  // unsubscribe function.
+  subscribeParameters(node: string, handlers: ParamsHandlers): () => void {
+    return this.subscribe({ type: 'params.subscribe', node }, { params: handlers });
+  }
+
+  // ros2 param set, one by one or atomically; a value of type not_set deletes
+  // the parameter (ros2 param delete). Resolves with what the node says of
+  // each.
+  setParameters(
+    node: string,
+    parameters: { name: string; value: ParamValue }[],
+    atomically = false,
+  ): Promise<ParamResult[]> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'params.set', id, node, parameters, atomically });
+    return this.result<ParamResult[]>(id, sent, REQUEST_TIMEOUT_MS);
+  }
+
+  // ros2 param dump: resolves with the YAML
+  dumpParameters(node: string): Promise<string> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'params.dump', id, node });
+    return this.result<string>(id, sent, REQUEST_TIMEOUT_MS);
+  }
+
+  // ros2 param load: the node's parameters in the YAML set; resolves with
+  // what the node says of each, and of those the file has that cannot be set
+  loadParameters(node: string, yaml: string): Promise<ParamResult[]> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'params.load', id, node, yaml });
+    return this.result<ParamResult[]>(id, sent, REQUEST_TIMEOUT_MS);
+  }
+
   // What an action's servers are doing: their goals, whoever sent them, with
   // their latest feedback. Returns the unsubscribe function.
   subscribeAction(options: ActionOptions, handlers: ActionHandlers): () => void {
@@ -684,7 +731,8 @@ export class Connection {
           subscription?.terminal ??
           subscription?.topicMonitor ??
           subscription?.action ??
-          subscription?.overlay
+          subscription?.overlay ??
+          subscription?.params
         )?.status(message.state, message.message);
         subscription?.plugin?.status?.(message.state, message.message);
         break;
@@ -777,6 +825,9 @@ export class Connection {
         break;
       case 'action.goals':
         this.subscriptions.get(message.id)?.action?.goals(message.goals);
+        break;
+      case 'params':
+        this.subscriptions.get(message.id)?.params?.update(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));
