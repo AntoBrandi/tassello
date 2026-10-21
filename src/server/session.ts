@@ -26,6 +26,7 @@ import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_str
 import type { Interfaces } from './interfaces.ts';
 import type { Networking } from './networking.ts';
 import { checkRequest, deviceOfAddress } from './networking_format.ts';
+import type { Overlays } from './overlays.ts';
 import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
@@ -47,6 +48,7 @@ export interface SessionServices {
   streams: FrameStreams;
   tf: Tf;
   paths: Paths;
+  overlays: Overlays;
   topics: Topics;
   poses: Poses;
   commands: CommandRunner;
@@ -280,6 +282,22 @@ export class Session implements FrameSink, PluginSession {
         this.subscriptions.set(
           id,
           services.paths.watch(string(message.topic, 'topic'), (path) => this.send({ type: 'path', id, ...path })),
+        );
+        return;
+      }
+
+      case 'overlay.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        if (message.kind !== 'scan' && message.kind !== 'footprint') {
+          throw new Error('kind must be scan or footprint');
+        }
+        this.subscriptions.set(
+          id,
+          services.overlays.watch(message.kind, string(message.topic, 'topic'), string(message.frame, 'frame'), {
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onOverlay: (overlay) => this.send({ type: 'overlay', id, ...overlay }),
+          }),
         );
         return;
       }

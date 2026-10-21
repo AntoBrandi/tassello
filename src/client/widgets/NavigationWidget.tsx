@@ -1,12 +1,14 @@
 // The navigation map: the map, optionally Nav2's global and local costmaps
-// and planned path over it, and the robot where TF puts it. Its tools set a pose estimate (as
+// and planned path over it, the laser scan where TF puts it (its points on the
+// map's walls: the robot is localized), and the robot where TF puts it, its
+// footprint Nav2's. Its tools set a pose estimate (as
 // RViz's 2D Pose Estimate, for AMCL) and send navigation goals (as RViz's Nav2
 // Goal): press on the map where the robot is or should go, drag towards where
 // it faces, release. Drag to pan, scroll or pinch to zoom.
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 
-import type { GridInfo, GridStyle, PathUpdate, Transform2D, TfUpdate } from '../../shared/protocol.ts';
+import type { GridInfo, GridStyle, OverlayKind, PathUpdate, Transform2D, TfUpdate } from '../../shared/protocol.ts';
 import { connection, useTf } from '../connection.ts';
 import { FitIcon, FlagIcon, LocateIcon, MapIcon, NavigationIcon } from '../icons.tsx';
 import { notify } from '../notifications.tsx';
@@ -20,6 +22,10 @@ interface NavigationConfig {
   localCostmapTopic: string;
   showPlan: boolean;
   planTopic: string;
+  showScan: boolean;
+  scanTopic: string;
+  showFootprint: boolean;
+  footprintTopic: string;
   goalTopic: string;
   poseTopic: string;
   mapFrame: string;
@@ -55,8 +61,23 @@ const DRAG_PX = 6;
 const STALE_MS = 2000;
 // The goal's marker goes once the robot is this close to it
 const GOAL_REACHED_M = 0.25;
-// The plan leads to the goal: the same colour
-const COLORS = { robot: '#4f8cff', stale: '#8b95a7', goal: '#2fbf71', plan: '#2fbf71', pose: '#f0a020' };
+// The scan's points: their size on the map, within these on the screen
+const SCAN_DOT_M = 0.05;
+const SCAN_DOT_MIN_PX = 2;
+const SCAN_DOT_MAX_PX = 6;
+// A scan is shown as stale beyond this age
+const SCAN_STALE_MS = 1500;
+// The plan leads to the goal: the same colour. The scan stands out on free,
+// occupied and unknown cells, and on the costmaps' colours.
+const COLORS = {
+  robot: '#4f8cff',
+  stale: '#8b95a7',
+  goal: '#2fbf71',
+  plan: '#2fbf71',
+  pose: '#f0a020',
+  scan: '#ff2d6f',
+  scanStale: 'rgb(139 149 167 / 70%)',
+};
 
 const toDegrees = (radians: number) => (radians * 180) / Math.PI;
 
@@ -120,24 +141,60 @@ function drawArrow(
   context.restore();
 }
 
+// The distance from the robot's origin to the nearest edge of its footprint
+// (x0, y0, x1, y1, ... in its frame), and to its farthest corner, in meters
+function footprintRadii(points: number[]): { inner: number; outer: number } {
+  let inner = Infinity;
+  let outer = 0;
+  const count = points.length / 2;
+  for (let i = 0; i < count; i++) {
+    const [ax, ay] = [points[2 * i], points[2 * i + 1]];
+    const [bx, by] = [points[(2 * i + 2) % points.length], points[(2 * i + 3) % points.length]];
+    outer = Math.max(outer, Math.hypot(ax, ay));
+    // The origin's projection on the edge, within it
+    const [dx, dy] = [bx - ax, by - ay];
+    const length = dx * dx + dy * dy;
+    const t = length > 0 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / length)) : 0;
+    inner = Math.min(inner, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return { inner: Number.isFinite(inner) ? inner : 0, outer };
+}
+
 function drawRobot(
   context: CanvasRenderingContext2D,
   toCanvas: DOMMatrix,
   pose: Transform2D,
   scale: number,
   stale: boolean,
+  // Its footprint, in its frame: drawn instead of a circle unless too small
+  // to see
+  footprint: number[] | null,
 ): void {
   const p = toCanvas.transformPoint({ x: pose.x, y: pose.y });
-  const radius = Math.max(MIN_ROBOT_RADIUS_PX, ROBOT_RADIUS_M * scale);
   const color = stale ? COLORS.stale : COLORS.robot;
+  const radii = footprint && footprint.length >= 6 ? footprintRadii(footprint) : null;
+  const outline = radii !== null && radii.outer * scale >= MIN_ROBOT_RADIUS_PX;
+  // Of the heading: inside the footprint
+  const radius = outline
+    ? Math.min(18, Math.max(MIN_ROBOT_RADIUS_PX * 0.75, radii.inner * scale * 0.75))
+    : Math.max(MIN_ROBOT_RADIUS_PX, ROBOT_RADIUS_M * scale);
   context.save();
   context.translate(p.x, p.y);
   context.rotate(-pose.yaw);
   context.beginPath();
-  context.arc(0, 0, radius, 0, 2 * Math.PI);
+  if (outline) {
+    // y flips on the canvas
+    for (let i = 0; i < footprint!.length; i += 2) {
+      context.lineTo(footprint![i] * scale, -footprint![i + 1] * scale);
+    }
+    context.closePath();
+  } else {
+    context.arc(0, 0, radius, 0, 2 * Math.PI);
+  }
   context.fillStyle = `${color}55`;
   context.fill();
   context.lineWidth = 2;
+  context.lineJoin = 'round';
   context.strokeStyle = color;
   context.stroke();
   // Heading
@@ -182,10 +239,25 @@ function drawPath(context: CanvasRenderingContext2D, toCanvas: DOMMatrix, points
   context.restore();
 }
 
+// points: x0, y0, x1, y1, ... in the map frame
+function drawScan(context: CanvasRenderingContext2D, toCanvas: DOMMatrix, points: number[], scale: number, stale: boolean): void {
+  const size = Math.min(SCAN_DOT_MAX_PX, Math.max(SCAN_DOT_MIN_PX, SCAN_DOT_M * scale));
+  const { a, b, c, d, e, f } = toCanvas;
+  context.beginPath();
+  for (let i = 0; i < points.length; i += 2) {
+    const [x, y] = [points[i], points[i + 1]];
+    context.rect(a * x + c * y + e - size / 2, b * x + d * y + f - size / 2, size, size);
+  }
+  context.fillStyle = stale ? COLORS.scanStale : COLORS.scan;
+  context.fill();
+}
+
 interface Scene {
   layers: Partial<Record<LayerName, Layer>>;
   placements: Partial<Record<LayerName, Transform2D | null>>;
   plan: { points: number[]; placement: Transform2D } | null;
+  scan: { points: number[]; stale: boolean } | null;
+  footprint: number[] | null;
   robot: TfUpdate | null;
   goal: Transform2D | null;
   preview: { tool: Tool; pose: Transform2D } | null;
@@ -222,6 +294,9 @@ function render(canvas: HTMLCanvasElement, view: View | null, scene: Scene): voi
     context.drawImage(layer.image, 0, 0);
   }
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  if (scene.scan) {
+    drawScan(context, toCanvas, scene.scan.points, view.scale, scene.scan.stale);
+  }
   if (scene.plan) {
     drawPath(context, toCanvas.multiply(frameToWorld(scene.plan.placement)), scene.plan.points);
   }
@@ -229,7 +304,7 @@ function render(canvas: HTMLCanvasElement, view: View | null, scene: Scene): voi
     drawArrow(context, toCanvas, scene.goal, COLORS.goal);
   }
   if (scene.robot?.transform) {
-    drawRobot(context, toCanvas, scene.robot.transform, view.scale, scene.robot.ageMs > STALE_MS);
+    drawRobot(context, toCanvas, scene.robot.transform, view.scale, scene.robot.ageMs > STALE_MS, scene.footprint);
   }
   if (scene.preview) {
     drawArrow(context, toCanvas, scene.preview.pose, COLORS[scene.preview.tool]);
@@ -277,6 +352,12 @@ function NavigationWidget({ config, editing }: WidgetProps<NavigationConfig>) {
   const goal = useRef<Transform2D | null>(null);
   const plan = useRef<PathUpdate | null>(null);
   const [planFrame, setPlanFrame] = useState('');
+  // The scan's points in the map frame, and when they came (the page's clock)
+  const scan = useRef<{ points: number[]; at: number } | null>(null);
+  // The footprint, in the robot's frame
+  const footprint = useRef<number[] | null>(null);
+  // Why the scan or the footprint cannot be shown
+  const [overlayErrors, setOverlayErrors] = useState<Record<OverlayKind, string | null>>({ scan: null, footprint: null });
   const preview = useRef<Scene['preview']>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<Gesture | null>(null);
@@ -311,6 +392,11 @@ function NavigationWidget({ config, editing }: WidgetProps<NavigationConfig>) {
         render(canvas, view.current, {
           ...rest,
           plan: plan.current && placement ? { points: plan.current.points, placement } : null,
+          scan: scan.current && {
+            points: scan.current.points,
+            stale: Date.now() - scan.current.at > SCAN_STALE_MS,
+          },
+          footprint: footprint.current,
           goal: goal.current,
           preview: preview.current,
         });
@@ -416,6 +502,67 @@ function NavigationWidget({ config, editing }: WidgetProps<NavigationConfig>) {
       redraw();
     };
   }, [planTopic, redraw]);
+
+  // ── Scan and footprint ──
+  const setOverlayError = useCallback(
+    (kind: OverlayKind, error: string | null) =>
+      setOverlayErrors((errors) => (errors[kind] === error ? errors : { ...errors, [kind]: error })),
+    [],
+  );
+
+  const scanTopic = config.showScan ? config.scanTopic.trim() : '';
+  useEffect(() => {
+    if (!scanTopic || !mapFrame) {
+      return;
+    }
+    // A scan no longer coming fades, whatever else redraws
+    let staleTimer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = connection.subscribeOverlay(
+      { kind: 'scan', topic: scanTopic, frame: mapFrame },
+      {
+        status: (state, message) => setOverlayError('scan', state === 'error' ? message : null),
+        overlay: (update) => {
+          scan.current = update.error ? null : { points: update.points, at: Date.now() };
+          setOverlayError('scan', update.error);
+          clearTimeout(staleTimer);
+          staleTimer = setTimeout(redraw, SCAN_STALE_MS + 50);
+          redraw();
+        },
+      },
+    );
+    return () => {
+      unsubscribe();
+      clearTimeout(staleTimer);
+      scan.current = null;
+      setOverlayError('scan', null);
+      redraw();
+    };
+  }, [scanTopic, mapFrame, redraw, setOverlayError]);
+
+  const footprintTopic = config.showFootprint ? config.footprintTopic.trim() : '';
+  const robotFrame = config.robotFrame.trim();
+  useEffect(() => {
+    if (!footprintTopic || !robotFrame) {
+      return;
+    }
+    const unsubscribe = connection.subscribeOverlay(
+      { kind: 'footprint', topic: footprintTopic, frame: robotFrame },
+      {
+        status: (state, message) => setOverlayError('footprint', state === 'error' ? message : null),
+        overlay: (update) => {
+          footprint.current = update.error ? null : update.points;
+          setOverlayError('footprint', update.error);
+          redraw();
+        },
+      },
+    );
+    return () => {
+      unsubscribe();
+      footprint.current = null;
+      setOverlayError('footprint', null);
+      redraw();
+    };
+  }, [footprintTopic, robotFrame, redraw, setOverlayError]);
 
   // ── Robot ──
   useEffect(() => {
@@ -676,7 +823,17 @@ function NavigationWidget({ config, editing }: WidgetProps<NavigationConfig>) {
             : 'Press where the robot is, drag towards where it faces'}
         </div>
       )}
-      <div className={`nav-readout ${readout.className}`}>{readout.text}</div>
+      <div className="nav-status">
+        {(['scan', 'footprint'] as const).map(
+          (kind) =>
+            overlayErrors[kind] && (
+              <div key={kind} className="nav-readout nav-note error">
+                {overlayErrors[kind]}
+              </div>
+            ),
+        )}
+        <div className={`nav-readout ${readout.className}`}>{readout.text}</div>
+      </div>
     </div>
   );
 }
@@ -724,6 +881,26 @@ export const navigationWidget = defineWidget<NavigationConfig>({
       topicTypes: ['nav_msgs/msg/Path'],
       help: 'nav_msgs/Path: Nav2’s planner publishes its plan on /plan',
       visible: (config) => config.showPlan,
+    },
+    { key: 'showScan', label: 'Show the laser scan', kind: 'boolean', default: true },
+    {
+      key: 'scanTopic',
+      label: 'Scan topic',
+      kind: 'topic',
+      default: '/scan',
+      topicTypes: ['sensor_msgs/msg/LaserScan'],
+      help: 'sensor_msgs/LaserScan, drawn where TF puts it: its points fall on the map’s walls when the robot is localized',
+      visible: (config) => config.showScan,
+    },
+    { key: 'showFootprint', label: 'Show the footprint', kind: 'boolean', default: true },
+    {
+      key: 'footprintTopic',
+      label: 'Footprint topic',
+      kind: 'topic',
+      default: '/local_costmap/published_footprint',
+      topicTypes: ['geometry_msgs/msg/PolygonStamped'],
+      help: 'geometry_msgs/PolygonStamped: the footprint Nav2’s costmaps use, which they publish on <costmap>/published_footprint. The robot is drawn with it instead of a circle',
+      visible: (config) => config.showFootprint,
     },
     {
       key: 'goalTopic',

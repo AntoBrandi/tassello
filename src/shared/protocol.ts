@@ -81,6 +81,21 @@ export interface PathSubscribe {
   topic: string;
 }
 
+// What the navigation widgets draw over the map: a laser scan's points
+// (sensor_msgs/LaserScan), or a footprint's polygon (geometry_msgs/
+// PolygonStamped, Nav2's published_footprint), put in frame by TF as each
+// arrives. The latest, then the next ones at most OVERLAY_RATE a second, as
+// overlay updates. Its status comes as stream.status.
+export type OverlayKind = 'scan' | 'footprint';
+
+export interface OverlaySubscribe {
+  type: 'overlay.subscribe';
+  id: number;
+  kind: OverlayKind;
+  topic: string;
+  frame: string;
+}
+
 // Any topic, its messages as JSON: the latest, then the next ones, at most
 // maxRate a second. Its status comes as stream.status.
 export interface TopicSubscribe {
@@ -501,6 +516,7 @@ export type ClientMessage =
   | GridSubscribe
   | TfSubscribe
   | PathSubscribe
+  | OverlaySubscribe
   | TopicSubscribe
   | ServicesSubscribe
   | ServiceAction
@@ -623,6 +639,18 @@ export interface PathUpdate {
   frameId: string;
   // x0, y0, x1, y1, ... in frameId
   points: number[];
+}
+
+// Of an overlay subscription
+export interface OverlayUpdate {
+  type: 'overlay';
+  id: number;
+  // x0, y0, x1, y1, ... in the frame asked for: a scan's points with a return
+  // (centimeters), a polygon's corners (millimeters)
+  points: number[];
+  // Why the latest message could not be put in that frame, e.g. no TF
+  // between them: points is empty then
+  error: string | null;
 }
 
 export interface TopicMessage {
@@ -1033,6 +1061,7 @@ export type ServerMessage =
   | StreamStatus
   | TfUpdate
   | PathUpdate
+  | OverlayUpdate
   | TopicMessage
   | ServicesUpdate
   | ServiceResult
@@ -1086,6 +1115,8 @@ export interface GridInfo {
 }
 
 export const TELEOP_WATCHDOG_MS = 500;
+// Overlay updates, at most, a second
+export const OVERLAY_RATE = 5;
 export const ARM_STATE_RATE = 10;
 export const BT_RATE = 10;
 export const ROSOUT_RATE = 10;

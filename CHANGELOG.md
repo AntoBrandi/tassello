@@ -5,6 +5,12 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Navigation widget: the laser scan, put in the map frame by TF as each arrives (in 3D: a lidar
+  mounted upside down lands where it looks), the quickest check of the localization; and the
+  robot drawn with Nav2's footprint (`published_footprint`), moving with the robot. A scan no
+  longer coming turns gray; what cannot be shown is said over the map.
+- Plugins: `connection.subscribeOverlay`, a laser scan's points or a footprint's polygon in a
+  frame.
 - ROS Monitor widget: the ROS graph, as the `ros2` command line shows it, on three sheets: its
   topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's
   messages (`ros2 topic echo`: a field of them, lists cut, the latest 100 kept while paused), their

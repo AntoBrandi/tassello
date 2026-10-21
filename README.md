@@ -119,7 +119,7 @@ after the others on the devices already arranged.
 | Widget | What it does |
 |---|---|
 | **Teleop** | Publishes velocity commands (`Twist` or `TwistStamped`) while its pads are held: one pad (x, z), or two in omnidirectional mode (x and y, z). Then one zero, and nothing, so that the lower priorities of a twist_mux, e.g. navigation, take over again |
-| **Navigation** | The map, optionally the global and local costmaps and the planned path, and the robot where TF puts it. Its tools set the pose estimate and send navigation goals, as RViz's do: press where the robot is or should go, drag towards where it faces. Pan, zoom, fit the map or follow the robot |
+| **Navigation** | The map, optionally the global and local costmaps and the planned path, the laser scan, and the robot where TF puts it, drawn with Nav2's footprint. Its tools set the pose estimate and send navigation goals, as RViz's do: press where the robot is or should go, drag towards where it faces. Pan, zoom, fit the map or follow the robot |
 | **Robot Model** | The robot in 3D, from its URDF and meshes, posed by the joint states. The links of moving joints turn orange, with an arrow at the joint in the direction of the motion |
 | **Arm Teleop** | Jogs an arm driven by ros2_control `JointTrajectoryController`s: a slider per joint, or pads moving the end effector in a straight line (damped least squares on the URDF's kinematics, collision checked by MoveIt's move_group when it runs) |
 | **Camera** | An image topic, raw (`sensor_msgs/Image`) or compressed (`sensor_msgs/CompressedImage`) |
@@ -143,6 +143,16 @@ Notes on some of them:
   bt_navigator follows) and pose estimates as `geometry_msgs/PoseWithCovarianceStamped`
   (`/initialpose`, with RViz's covariance, which AMCL starts from). Layers in another frame, like
   Nav2's local costmap, are placed in the map frame by TF.
+
+  The laser scan (`sensor_msgs/LaserScan`, `/scan`) is the quickest check of the localization:
+  its points fall on the map's walls when the robot is where the map frame says. Each scan is put
+  in the map frame by TF as it arrives, on the server, in 3D (a lidar mounted upside down or
+  tilted lands where it looks), its points without a return left out, at most 5 a second; a scan
+  no longer coming turns gray after 1.5 s. The robot is drawn with the footprint Nav2's costmaps
+  use (`geometry_msgs/PolygonStamped`, `/local_costmap/published_footprint`), put in the robot's
+  frame as it arrives and drawn where the robot is now, so that it moves with it; a circle
+  without it, or zoomed out too far to see it. What cannot be shown, e.g. a scan whose frame TF
+  does not connect to the map, is said above the robot's pose.
 - **Robot Model** loads the meshes of the description from the robot's ROS packages
   (`package://` paths), which the server serves compressed. three.js is only fetched by the pages
   showing one.

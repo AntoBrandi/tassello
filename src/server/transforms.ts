@@ -53,6 +53,12 @@ export function compose(a: Transform, b: Transform): Transform {
   };
 }
 
+// A point given in a frame, in its parent: t is the frame's pose in it
+export function transformPoint(t: Transform, p: Vector3): Vector3 {
+  const r = rotate(t.rotation, p);
+  return { x: r.x + t.translation.x, y: r.y + t.translation.y, z: r.z + t.translation.z };
+}
+
 export function invert(a: Transform): Transform {
   const rotation = conjugate(a.rotation);
   const t = rotate(rotation, a.translation);

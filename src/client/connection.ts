@@ -42,6 +42,8 @@ import {
   type LogsSubscribe,
   type LogsUpdate,
   type NetworkUpdate,
+  type OverlaySubscribe,
+  type OverlayUpdate,
   type PathSubscribe,
   type PathUpdate,
   type PluginSubscribe,
@@ -70,6 +72,7 @@ export type ImageOptions = Omit<ImageSubscribe, 'type' | 'id'>;
 export type GridOptions = Omit<GridSubscribe, 'type' | 'id'>;
 export type TfOptions = Omit<TfSubscribe, 'type' | 'id'>;
 export type PathOptions = Omit<PathSubscribe, 'type' | 'id'>;
+export type OverlayOptions = Omit<OverlaySubscribe, 'type' | 'id'>;
 export type TopicOptions = Omit<TopicSubscribe, 'type' | 'id'>;
 export type ServicesOptions = Omit<ServicesSubscribe, 'type' | 'id'>;
 export type LogsOptions = Omit<LogsSubscribe, 'type' | 'id'>;
@@ -118,6 +121,11 @@ export interface DiagnosticsHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The statuses that changed, and their changes of level
   update: (update: DiagnosticsUpdate) => void;
+}
+
+export interface OverlayHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  overlay: (update: OverlayUpdate) => void;
 }
 
 export interface TopicMonitorHandlers {
@@ -170,6 +178,7 @@ type Request =
   | Omit<GridSubscribe, 'id'>
   | Omit<TfSubscribe, 'id'>
   | Omit<PathSubscribe, 'id'>
+  | Omit<OverlaySubscribe, 'id'>
   | Omit<TopicSubscribe, 'id'>
   | Omit<ServicesSubscribe, 'id'>
   | Omit<LogsSubscribe, 'id'>
@@ -194,6 +203,7 @@ interface Subscription {
   stream?: StreamHandlers;
   tf?: (update: TfUpdate) => void;
   path?: (update: PathUpdate) => void;
+  overlay?: OverlayHandlers;
   topic?: TopicHandlers;
   services?: (update: ServicesUpdate) => void;
   logs?: (update: LogsUpdate) => void;
@@ -320,6 +330,13 @@ export class Connection {
 
   subscribePath(options: PathOptions, callback: (update: PathUpdate) => void): () => void {
     return this.subscribe({ type: 'path.subscribe', ...options }, { path: callback });
+  }
+
+  // A laser scan's points, or a footprint's polygon (Nav2's
+  // published_footprint), put in a frame by TF as each arrives (see
+  // OverlaySubscribe). Returns the unsubscribe function.
+  subscribeOverlay(options: OverlayOptions, handlers: OverlayHandlers): () => void {
+    return this.subscribe({ type: 'overlay.subscribe', ...options }, { overlay: handlers });
   }
 
   subscribeTopic(options: TopicOptions, handlers: TopicHandlers): () => void {
@@ -666,7 +683,8 @@ export class Connection {
           subscription?.diagnostics ??
           subscription?.terminal ??
           subscription?.topicMonitor ??
-          subscription?.action
+          subscription?.action ??
+          subscription?.overlay
         )?.status(message.state, message.message);
         subscription?.plugin?.status?.(message.state, message.message);
         break;
@@ -679,6 +697,9 @@ export class Connection {
         break;
       case 'path':
         this.subscriptions.get(message.id)?.path?.(message);
+        break;
+      case 'overlay':
+        this.subscriptions.get(message.id)?.overlay?.overlay(message);
         break;
       case 'services':
         this.subscriptions.get(message.id)?.services?.(message);

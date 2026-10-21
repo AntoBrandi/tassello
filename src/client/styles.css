@@ -1429,11 +1429,21 @@ textarea {
   pointer-events: none;
 }
 
-.nav-readout {
+/* The robot's pose, and above it why the scan or the footprint is not shown */
+.nav-status {
   position: absolute;
   bottom: 8px;
   left: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   max-width: calc(100% - 16px);
+  pointer-events: none;
+}
+
+.nav-readout {
+  max-width: 100%;
   padding: 3px 8px;
   overflow: hidden;
   border-radius: 6px;
@@ -1444,6 +1454,12 @@ textarea {
   text-overflow: ellipsis;
   white-space: pre;
   pointer-events: none;
+}
+
+/* Long: wrapped */
+.nav-readout.nav-note {
+  font-family: var(--font);
+  white-space: normal;
 }
 
 .nav-readout.stale {

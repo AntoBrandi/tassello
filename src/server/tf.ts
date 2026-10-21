@@ -1,6 +1,7 @@
 // TF for the widgets: where a frame is in another, e.g. the robot in the map,
 // sent to the page at a fixed rate. /tf and /tf_static are only subscribed
-// while a page watches a transform: the robot's /tf is busy.
+// while a page watches a transform, or something placed by TF (overlays.ts):
+// the robot's /tf is busy.
 
 import rclnodejs from 'rclnodejs';
 
@@ -45,6 +46,25 @@ export class Tf {
   constructor(node: rclnodejs.Node, logger: Logger) {
     this.node = node;
     this.logger = logger;
+  }
+
+  // Follows /tf and /tf_static until the returned function is called, for the
+  // modules that look transforms up themselves (lookupTransform)
+  use(): () => void {
+    this.acquire();
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        this.release();
+      }
+    };
+  }
+
+  // The pose of source in target now, in 3D, and the age of the oldest
+  // dynamic transform it is made of. Throws if they are not connected.
+  lookupTransform(target: string, source: string): { transform: Transform; ageMs: number } {
+    return this.tree.lookup(target, source, Date.now());
   }
 
   // Calls back with the pose of source in target `rate` times a second, until

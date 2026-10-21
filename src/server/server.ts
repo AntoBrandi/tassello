@@ -25,6 +25,7 @@ import { createRequestHandler } from './http.ts';
 import { Interfaces } from './interfaces.ts';
 import { makeMessageCode } from './message_code.ts';
 import { Networking } from './networking.ts';
+import { Overlays } from './overlays.ts';
 import { PanelStore } from './panels.ts';
 import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
@@ -120,6 +121,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const streams = new FrameStreams(node, logger);
   const tf = new Tf(node, logger);
   const paths = new Paths(node, logger);
+  const overlays = new Overlays(node, logger, tf);
   const topics = new Topics(node, logger);
   const poses = new Poses(node);
   const commands = new CommandRunner(store, logger);
@@ -181,6 +183,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         streams,
         tf,
         paths,
+        overlays,
         topics,
         poses,
         commands,
