@@ -5,6 +5,26 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- ROS Monitor widget: the ROS graph, as the `ros2` command line shows it, on three sheets: its
+  topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's
+  messages (`ros2 topic echo`: a field of them, lists cut, the latest 100 kept while paused), their
+  rate, bandwidth and delay over a window (`hz`, `bw`, `delay`: from the serialized messages,
+  exact), its publishers and subscriptions with their QoS and those that cannot talk (`info -v`),
+  a message to publish, field by field or as JSON, once or at a rate (`pub`: QoS matching the
+  subscriptions, `now` stamps), going on while other topics are shown. A service to call, once
+  or at a rate (`ros2 service call`), its nodes (`info`) and its events (`echo`, since Jazzy).
+  Every goal of an action, whoever sent it, with its latest feedback, to cancel one or all; a
+  goal to send and follow to its result (`ros2 action send_goal`). Their types' definitions
+  (`ros2 interface show`).
+- rclnodejs's code of the ROS interfaces sourced since it was installed (a robot's own messages,
+  services and actions), or rebuilt with new ones, is made when the server starts: their topics,
+  services and actions work in every widget without `npx generate-ros-messages`. rclnodejs's own
+  fallback missed services' and actions' interfaces.
+- Plugins: `connection.subscribeGraph`, `subscribeTopicInfo`, `subscribeTopicMonitor`,
+  `publishTopic`, `interfaceInfo`, `subscribeAction`, `sendGoal`, `cancelGoal`, and `callService`'s
+  `checked` option, which makes the request from the service's definition: 64 bit integers, which
+  rclnodejs takes as BigInt only, now work. The types of `src/shared/monitor.ts`, and the
+  `MinusIcon`, `TopicIcon`, `ServiceIcon`, `ActionIcon`, `MonitorIcon` and `SendIcon` icons.
 - Behavior Tree Inspector widget: what a BT.CPP behavior tree is doing, from its
   `nav2_msgs/BehaviorTreeLog` (Nav2's `/behavior_tree_log`), on the tree of its XML file: the
   running branch, each node's status, last result, counts and ports, and the latest transitions,

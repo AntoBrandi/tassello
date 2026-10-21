@@ -6,6 +6,7 @@
 import type rclnodejs from 'rclnodejs';
 
 import type { StreamState } from './frame_stream.ts';
+import { missingCodeHint } from './message_code.ts';
 import { publishersQos } from './qos.ts';
 import { absoluteTopic, errorMessage, toJson, type Logger } from './util.ts';
 
@@ -92,7 +93,7 @@ class TopicSubscription {
         (raw: unknown) => this.onMessage(raw),
       );
     } catch (e) {
-      this.setState('error', `Cannot subscribe to ${this.topic}: ${errorMessage(e)}`);
+      this.setState('error', `Cannot subscribe to ${this.topic}: ${missingCodeHint(errorMessage(e))}`);
       return;
     }
     this.type = match.type;

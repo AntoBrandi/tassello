@@ -15,18 +15,22 @@ import rclnodejs from 'rclnodejs';
 import { WebSocketServer } from 'ws';
 
 import type { ServerMessage } from '../shared/protocol.ts';
+import { Actions } from './actions.ts';
 import { Arm } from './arm.ts';
 import { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import { BehaviorTrees } from './behavior_trees.ts';
 import { CommandRunner } from './commands.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { createRequestHandler } from './http.ts';
+import { Interfaces } from './interfaces.ts';
+import { makeMessageCode } from './message_code.ts';
 import { Networking } from './networking.ts';
 import { PanelStore } from './panels.ts';
 import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
 import { Poses } from './poses.ts';
 import { Ros } from './ros.ts';
+import { RosGraph } from './ros_graph.ts';
 import { Rosout } from './rosout.ts';
 import { Session } from './session.ts';
 import { FrameStreams } from './streams.ts';
@@ -34,6 +38,8 @@ import { SystemdServices } from './systemd.ts';
 import { Teleop } from './teleop.ts';
 import { Terminals } from './terminals.ts';
 import { Tf } from './tf.ts';
+import { TopicMonitors } from './topic_monitor.ts';
+import { TopicPublishing } from './topic_publishing.ts';
 import { Topics } from './topics.ts';
 import { defaultPanelsDirectory, errorMessage, ownPage, tasselloRoot } from './util.ts';
 
@@ -62,6 +68,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
   rclnodejs.removeSignalHandlers();
   const node = new rclnodejs.Node(options.nodeName);
   const logger = node.getLogger();
+  // Before anything uses them
+  await makeMessageCode(logger);
 
   function parameter(name: string, type: rclnodejs.ParameterType, value: unknown): unknown {
     return node.declareParameter(new rclnodejs.Parameter(name, type, value)).value;
@@ -117,7 +125,12 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const commands = new CommandRunner(store, logger);
   const systemd = new SystemdServices(logger);
   const arm = new Arm(node, topics, logger);
-  const ros = new Ros(node);
+  const interfaces = new Interfaces(node);
+  const ros = new Ros(node, interfaces);
+  const graph = new RosGraph(node, logger);
+  const topicMonitors = new TopicMonitors(node, logger, interfaces);
+  const publishing = new TopicPublishing(node, interfaces);
+  const actions = new Actions(node, interfaces, logger);
   const rosout = new Rosout(node, logger);
   const diagnostics = new Diagnostics(node, logger);
   const terminals = new Terminals(logger);
@@ -180,6 +193,11 @@ export async function startServer(options: ServerOptions): Promise<void> {
         networking,
         behaviorTrees,
         behaviorTreeFiles,
+        graph,
+        topicMonitors,
+        publishing,
+        interfaces,
+        actions,
         plugins: host,
         hostname: os.hostname(),
       },
@@ -231,6 +249,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     wss.close();
     server.close();
     behaviorTreeFiles.stopAll();
+    actions.stopAll();
     // Time for those last zero velocities to leave, and for the bags being
     // recorded to be completed
     void Promise.all([

@@ -11,8 +11,9 @@ and plugins add more.
 - **Every device**: a desktop canvas, and layouts of their own for tablets and phones.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
-  editor, the ROS log of every node, the robot's diagnostics, a file manager, a terminal, and
-  its networks: Wi-Fi joined, connections switched, the robot as an access point.
+  editor, the ROS log of every node, the robot's diagnostics, its topics, services and actions
+  as the `ros2` command line shows them, a file manager, a terminal, and its networks: Wi-Fi
+  joined, connections switched, the robot as an access point.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -39,6 +40,14 @@ tassello
 
 and open `http://<robot>:8080`. The first start creates the panels directory with two example
 panels, Teleoperation and Navigation.
+
+Source the workspaces whose messages the widgets use too, a robot's own (`/opt/<vendor>/…`, a
+colcon workspace's `install/setup.bash`): rclnodejs needs JavaScript code of every interface it
+uses, which it makes when installed for the packages then sourced. Tassello makes that of the
+others when it starts, and again for a package rebuilt with new interfaces, in a fraction of a
+second; rclnodejs keeps it in its `generated` folder, which the server's user must be able to
+write (else, run `npx generate-ros-messages` in Tassello's folder, with them sourced, as a user who
+can).
 
 ```text
 tassello [options] [--ros-args ...]
@@ -121,6 +130,7 @@ after the others on the devices already arranged.
 | **Behavior Tree Editor** | Edits a BT.CPP behavior tree's XML file of the robot as a graph: nodes from a palette (BT.CPP's, Nav2's, your libraries'), dragged where they go, moved with their children, their names and ports edited in a side panel. Subtrees, undo and redo, copy and paste, an XML view. Saves only what changed, never over changes made meanwhile |
 | **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
+| **ROS Monitor** | The ROS graph, as the `ros2` command line shows it, on three sheets: its topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's messages, their rate, bandwidth and delay, its publishers and subscriptions with their QoS and those that cannot talk, a message to publish once or at a rate (`ros2 topic echo`, `hz`, `bw`, `delay`, `info -v`, `pub`); a service to call, once or at a rate (`ros2 service call`, `info`, `echo`); every goal of an action, whoever sent it, with its feedback, and a goal to send or cancel (`ros2 action send_goal`, `info`); their types' definitions (`ros2 interface show`) |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 | **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
 | **Networking** | The robot's networks, through NetworkManager, as a phone's settings show them: the Wi-Fi networks in range, joined with their password; the connections saved, switched between, edited (their addresses by DHCP or static), forgotten; the robot as an access point, its network shared by a QR code; the interfaces, their state and addresses. Asks before a change that would cut the page off from the robot |
@@ -234,6 +244,53 @@ Notes on some of them:
   filter and view it opens with. The server follows the diagnostics for every page, and for 10
   minutes after the last page closes, keeping the latest status of each name and their latest
   1,000 changes of level.
+- **ROS Monitor** lists the topics (`ros2 topic list -v`: their types, publishers and
+  subscribers), the services and the actions (with the nodes serving and using them, asked node
+  by node as `ros2 action info` does), read again every 2 s. The filter keeps those whose name or
+  type contain any of its terms, separated by `;` (`ros2 topic find`), or match a regular
+  expression; the eye shows the hidden ones: names with a part starting with `_` (an action's
+  topics and services), and every node's parameter services. A topic, service or action clicked
+  shows its details in tabs, beside the list or under it; the arrow keys go through the list. The
+  widget's properties set the sheet and filter it opens with, and a topic, service or action to
+  open (one widget for `/odom`'s messages).
+
+  A topic's **Echo** shows its messages as `ros2 topic echo` prints them, folding: the latest,
+  at most 10 a second, or only a *field* of them (`pose.position`, `ranges[0]`); lists and
+  strings longer than the widget's *length* are cut (`--truncate-length`), NaN and infinities
+  written `.nan`, `.inf`. Pausing keeps the latest 100 to go back through. Copy writes a message
+  as YAML; the pencil edits it in the Publish tab. **Rate** shows, over the latest messages (the
+  *window*, `--window`), their rate and the spread of the intervals between them (`ros2 topic
+  hz`), their bandwidth and sizes, serialized (`ros2 topic bw`), and for messages with a header,
+  the delay from its stamp to their arrival on the ROS clock (`ros2 topic delay`). The server
+  takes the messages serialized: their sizes are exact, the stamps read from their bytes, and
+  only those shown are deserialized. **Info** lists the publishers and subscriptions with their
+  QoS (`ros2 topic info -v`), the dashboard's own named so, and says which do not talk and why: a
+  best effort publisher and a reliable subscription, a volatile publisher and a transient local
+  (latched) one, deadlines and liveliness that do not match, other types. **Publish** fills in a
+  message field by field, made from its type's definition (lists of numbers on a line, nested
+  messages folding, constants suggested), or as JSON; a time may be *now*, made the time of each
+  message as `ros2 topic pub` does (`"now"` in JSON, `"auto"` for a header). It is published
+  once, or at a rate, a number of times or until stopped (`-r`, `-t`), with its QoS: by default
+  reliable, and transient local if one of the topic's subscriptions is, which every subscription
+  matches. A new publisher waits up to a second for the subscriptions to match it, as a first
+  message would be lost. Publishing goes on while other topics are shown, until stopped from the
+  status line or the widget goes. **Type** shows the type's definition as `ros2 interface show`
+  prints it.
+
+  A service's **Call** fills in its request as Publish does a message, and calls it once or at
+  a rate (`ros2 service call -r`), with a timeout, showing its response and how long it took.
+  **Echo** shows its requests and responses as they go (`ros2 service echo`), when its node
+  introspects them: since Jazzy, with `configure_introspection`. An action's **Goals** are those
+  its servers have, whoever sent them, from its status topic, with the latest feedback of each:
+  what Nav2 is doing, goals sent from RViz included. Those sent from the dashboard have their
+  result too. Any goal is canceled with its button, all of them with *Cancel all*. **Send** fills
+  in a goal and sends it (`ros2 action send_goal -f`), following it to its result. The server
+  follows an action for the pages, and for 10 minutes after the last one: a page opened later
+  finds the goals sent and their results. **Info** lists the nodes serving and using a service
+  or an action (`ros2 service info`, `ros2 action info`).
+
+  Messages, requests and goals are made from rclnodejs's code of their types, which Tassello
+  makes when it starts for the workspaces sourced (see Install).
 - **File Manager** opens its *folder* (`~` by default; `/…`, `~/…`, `package://…`) and lists it
   with its entries' sizes and times, sorted by name (naturally: `run_2` before `run_10`), size or
   time, folders first; the chevrons unfold folders in place. Its places are home, the root, the
@@ -379,7 +436,8 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 
 ## Security
 
-Tassello has no login. **Anyone who can open the page can drive the robot, run any command as
+Tassello has no login. **Anyone who can open the page can drive the robot, publish on any topic,
+call any service and send or cancel any goal (the ROS Monitor), run any command as
 the server's user (the Terminal, a shell), read, write, upload, move and delete any of the
 files that user can (the File Manager), and change the robot's networks and read their passwords
 (Networking)**: keep it on a network you trust, or behind a reverse proxy

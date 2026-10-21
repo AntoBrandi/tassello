@@ -367,3 +367,30 @@ export const HotspotIcon = icon(
 );
 // A VPN
 export const ShieldIcon = icon(<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z" />);
+// The ROS monitor widget
+export const MinusIcon = icon(<path d="M5 12h14" />);
+// The graph's topics, services and actions: messages flowing one way; a
+// request and its answer; a goal followed to its end
+export const TopicIcon = icon(
+  <>
+    <circle cx="5" cy="12" r="2" />
+    <path d="M7 12h12M15 8l4 4-4 4" />
+  </>,
+);
+export const ServiceIcon = icon(<path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4" />);
+export const ActionIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" />
+  </>,
+);
+// The graph watched: a screen with a pulse
+export const MonitorIcon = icon(
+  <>
+    <rect x="3" y="4" width="18" height="13" rx="2" />
+    <path d="M6.5 11h2.5l1.5-3 3 6 1.5-3h2.5M9 21h6M12 17v4" />
+  </>,
+);
+// Published, called, sent
+export const SendIcon = icon(<path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7Z" />);

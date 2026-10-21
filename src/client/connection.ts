@@ -4,10 +4,21 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import type {
+  ActionGoal,
+  CancelResult,
+  GraphSnapshot,
+  InterfaceInfo,
+  PublishState,
+  TopicDetails,
+  TopicEcho,
+  TopicStats,
+} from '../shared/monitor.ts';
 import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
 import {
   FRAME_HEADER_BYTES,
   IMAGE_FORMATS,
+  type ActionSubscribe,
   type ArmSubscribe,
   type ArmUpdate,
   type BehaviorTreeFile,
@@ -25,6 +36,7 @@ import {
   type CommandState,
   type DiagnosticsSubscribe,
   type DiagnosticsUpdate,
+  type GraphSubscribe,
   type GridSubscribe,
   type ImageSubscribe,
   type LogsSubscribe,
@@ -46,6 +58,9 @@ import {
   type TerminalOutput,
   type TfSubscribe,
   type TfUpdate,
+  type TopicInfoSubscribe,
+  type TopicMonitorSubscribe,
+  type TopicPublish,
   type TopicSubscribe,
 } from '../shared/protocol.ts';
 
@@ -66,6 +81,9 @@ export type BehaviorTreeFileOptions = Omit<BehaviorTreeFileSubscribe, 'type' | '
 export type RosoutOptions = Omit<RosoutSubscribe, 'type' | 'id'>;
 export type DiagnosticsOptions = Omit<DiagnosticsSubscribe, 'type' | 'id'>;
 export type TerminalOptions = Pick<TerminalOpen, 'terminal' | 'command' | 'folder'>;
+export type TopicMonitorOptions = Omit<TopicMonitorSubscribe, 'type' | 'id'>;
+export type TopicPublishOptions = Omit<TopicPublish, 'type' | 'id'>;
+export type ActionOptions = Omit<ActionSubscribe, 'type' | 'id'>;
 
 export interface TopicHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
@@ -100,6 +118,20 @@ export interface DiagnosticsHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The statuses that changed, and their changes of level
   update: (update: DiagnosticsUpdate) => void;
+}
+
+export interface TopicMonitorHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // The figures of the latest messages, twice a second while they come
+  stats: (stats: TopicStats) => void;
+  // The latest message, if echoed
+  echo: (echo: TopicEcho) => void;
+}
+
+export interface ActionHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // Its goals, the latest accepted first
+  goals: (goals: ActionGoal[]) => void;
 }
 
 export interface TerminalHandlers {
@@ -149,7 +181,12 @@ type Request =
   | Omit<RosoutSubscribe, 'id'>
   | Omit<DiagnosticsSubscribe, 'id'>
   | Omit<TerminalOpen, 'id'>
-  | { type: 'network.subscribe' };
+  | { type: 'network.subscribe' }
+  | Omit<GraphSubscribe, 'id'>
+  | Omit<TopicInfoSubscribe, 'id'>
+  | Omit<TopicMonitorSubscribe, 'id'>
+  | Omit<TopicPublish, 'id'>
+  | Omit<ActionSubscribe, 'id'>;
 
 interface Subscription {
   // Or made anew on every connection
@@ -168,6 +205,11 @@ interface Subscription {
   diagnostics?: DiagnosticsHandlers;
   terminal?: TerminalHandlers;
   network?: (update: NetworkUpdate) => void;
+  graph?: (graph: GraphSnapshot) => void;
+  topicInfo?: (details: TopicDetails) => void;
+  topicMonitor?: TopicMonitorHandlers;
+  published?: (state: PublishState) => void;
+  action?: ActionHandlers;
 }
 
 const MIN_RETRY_MS = 500;
@@ -183,6 +225,9 @@ const RECORD_TIMEOUT_MS = 20_000;
 // Of a network action: NetworkManager is given a minute to activate a
 // connection
 const NETWORK_TIMEOUT_MS = 80_000;
+// Of sending a goal: the server waits 5 s for the action's server, then for
+// its answer
+const GOAL_TIMEOUT_MS = 15_000;
 // What is typed or pasted in a terminal goes in messages of at most this many
 // characters: the server takes messages of 1 MB at most
 const TERMINAL_INPUT_CHUNK = 64 * 1024;
@@ -211,6 +256,8 @@ export class Connection {
   private readonly requests = new Map<number, (error: string | null) => void>();
   private commands = new Map<string, CommandState>();
   private readonly commandListeners = new Set<() => void>();
+  // By type: they do not change while the page lives
+  private readonly interfaces = new Map<string, Promise<InterfaceInfo>>();
 
   connect(): void {
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
@@ -429,10 +476,87 @@ export class Connection {
     serviceType: string,
     request: unknown = {},
     timeoutMs = CALL_TIMEOUT_MS,
+    // checked: the request made from the service's definition (see RosCall)
+    options: { checked?: boolean } = {},
   ): Promise<T> {
     const id = this.nextId++;
-    const sent = this.send({ type: 'ros.call', id, service, serviceType, request, timeoutMs });
+    const sent = this.send({ type: 'ros.call', id, service, serviceType, request, timeoutMs, checked: options.checked });
     return this.result<T>(id, sent, timeoutMs + RESULT_MARGIN_MS);
+  }
+
+  // The ROS graph: its topics, services, actions and nodes, again whenever it
+  // changes. Returns the unsubscribe function.
+  subscribeGraph(callback: (graph: GraphSnapshot) => void): () => void {
+    return this.subscribe({ type: 'graph.subscribe' }, { graph: callback });
+  }
+
+  // A topic's publishers and subscriptions, with their QoS and what keeps
+  // them from talking (ros2 topic info --verbose), again whenever they change
+  subscribeTopicInfo(topic: string, callback: (details: TopicDetails) => void): () => void {
+    return this.subscribe({ type: 'topic.info.subscribe', topic }, { topicInfo: callback });
+  }
+
+  // A topic's figures (ros2 topic hz, bw, delay) and messages (ros2 topic
+  // echo). Returns the unsubscribe function.
+  subscribeTopicMonitor(options: TopicMonitorOptions, handlers: TopicMonitorHandlers): () => void {
+    return this.subscribe({ type: 'topic.monitor', ...options }, { topicMonitor: handlers });
+  }
+
+  // Publishes on a topic (ros2 topic pub): once, a number of times, or until
+  // the returned function is called, with the count published as it goes.
+  // Not renewed once done.
+  publishTopic(options: TopicPublishOptions, callback: (state: PublishState) => void): () => void {
+    let unsubscribe: () => void = () => {};
+    unsubscribe = this.subscribe(
+      { type: 'topic.publish', ...options },
+      {
+        published: (state) => {
+          if (state.done) {
+            unsubscribe();
+          }
+          callback(state);
+        },
+      },
+    );
+    return unsubscribe;
+  }
+
+  // An interface's definition (ros2 interface show), the schemas of its
+  // messages and their default values
+  interfaceInfo(interfaceType: string): Promise<InterfaceInfo> {
+    let known = this.interfaces.get(interfaceType);
+    if (!known) {
+      const id = this.nextId++;
+      const sent = this.send({ type: 'interface.get', id, interfaceType });
+      known = this.result<InterfaceInfo>(id, sent, REQUEST_TIMEOUT_MS);
+      this.interfaces.set(interfaceType, known);
+      // Asked again later, rather than failing for the page's life
+      known.catch(() => this.interfaces.delete(interfaceType));
+    }
+    return known;
+  }
+
+  // What an action's servers are doing: their goals, whoever sent them, with
+  // their latest feedback. Returns the unsubscribe function.
+  subscribeAction(options: ActionOptions, handlers: ActionHandlers): () => void {
+    return this.subscribe({ type: 'action.subscribe', ...options }, { action: handlers });
+  }
+
+  // Sends a goal (ros2 action send_goal): resolves with its UUID once
+  // accepted, rejects if refused. Its feedback and result come to the
+  // action's subscriptions.
+  sendGoal(action: string, actionType: string, goal: unknown): Promise<string> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'action.send', id, action, actionType, goal });
+    return this.result<string>(id, sent, GOAL_TIMEOUT_MS);
+  }
+
+  // Cancels a goal by its UUID, or all of the action's (null), whoever sent
+  // them
+  cancelGoal(action: string, actionType: string, goal: string | null): Promise<CancelResult> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'action.cancel', id, action, actionType, goal });
+    return this.result<CancelResult>(id, sent, GOAL_TIMEOUT_MS);
   }
 
   // A request to a plugin's server side (PluginContext.handle): resolves with
@@ -540,7 +664,9 @@ export class Connection {
           subscription?.behaviorTree ??
           subscription?.rosout ??
           subscription?.diagnostics ??
-          subscription?.terminal
+          subscription?.terminal ??
+          subscription?.topicMonitor ??
+          subscription?.action
         )?.status(message.state, message.message);
         subscription?.plugin?.status?.(message.state, message.message);
         break;
@@ -612,6 +738,24 @@ export class Connection {
         break;
       case 'network':
         this.subscriptions.get(message.id)?.network?.(message);
+        break;
+      case 'graph':
+        this.subscriptions.get(message.id)?.graph?.(message.graph);
+        break;
+      case 'topic.info':
+        this.subscriptions.get(message.id)?.topicInfo?.(message);
+        break;
+      case 'topic.stats':
+        this.subscriptions.get(message.id)?.topicMonitor?.stats(message.stats);
+        break;
+      case 'topic.echo':
+        this.subscriptions.get(message.id)?.topicMonitor?.echo(message);
+        break;
+      case 'topic.published':
+        this.subscriptions.get(message.id)?.published?.(message);
+        break;
+      case 'action.goals':
+        this.subscriptions.get(message.id)?.action?.goals(message.goals);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

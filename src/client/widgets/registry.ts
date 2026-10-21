@@ -17,6 +17,7 @@ import { diagnosticsWidget } from './diagnostics/DiagnosticsWidget.tsx';
 import { fileManagerWidget } from './file_manager/FileManagerWidget.tsx';
 import { imageWidget } from './ImageWidget.tsx';
 import { logsWidget } from './logs/LogsWidget.tsx';
+import { monitorWidget } from './monitor/MonitorWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
 import { networkingWidget } from './networking/NetworkingWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
@@ -40,6 +41,7 @@ const CORE: RegisteredWidget[] = [
   behaviorTreeEditorWidget,
   logsWidget,
   diagnosticsWidget,
+  monitorWidget,
   fileManagerWidget,
   terminalWidget,
   networkingWidget,

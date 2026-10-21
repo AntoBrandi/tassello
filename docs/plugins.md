@@ -161,7 +161,7 @@ function useArms() {
 | | |
 |---|---|
 | `publish(topic, type, message)` | Publishes a message, e.g. `publish('/beep', 'std_msgs/msg/Empty', {})`. `false` if not connected |
-| `callService(service, type, request, timeoutMs?)` | Resolves with the response, e.g. `callService('/reset', 'std_srvs/srv/Trigger')` |
+| `callService(service, type, request, timeoutMs?, { checked? })` | Resolves with the response, e.g. `callService('/reset', 'std_srvs/srv/Trigger')`. Checked, the request is made from the service's definition: 64 bit integers from numbers or text, `"now"` for a time, `"auto"` for a header, and a field it has not is an error |
 | `request(plugin, method, params?, timeoutMs?)` | Calls the plugin's server side (`ctx.handle`): resolves with what it returns, rejects with what it throws |
 | `subscribePlugin(plugin, stream, params, { data, status? })` | Follows a stream of the plugin's server side (`ctx.stream`). Returns the unsubscribe function |
 | `subscribeTopic({ topic, maxRate }, { message, status })` | Any topic's messages, as JSON. Returns the unsubscribe function |
@@ -180,6 +180,13 @@ function useArms() {
 | `restartTerminal(id)` | Hangs up the terminal's program, and starts it again |
 | `subscribeNetwork(callback)` | The robot's networks, as NetworkManager has them: its interfaces, the connections saved, the Wi-Fi networks in range, what the server's user may change and what the pages are having done, again whenever that changes, and `via`, the interface the page reaches the robot through (see `NetworkUpdate` in `src/shared/protocol.ts`, `NetworkState` in `src/shared/networking.ts`). Returns the unsubscribe function |
 | `networkAction(request)` | Changes them (`NetworkRequest`): `connect`, `disconnect`, `create` (a Wi-Fi network, an access point, a cable's: `NetworkSettings`), `modify`, `delete`, `wifi` (on or off), `rescan`; resolves once NetworkManager is done with `{ uuid, message }`, rejects with why not. `secrets` resolves with a Wi-Fi network's name and password (`NetworkSecrets`). The dashboard's own pages only |
+| `subscribeGraph(callback)` | The ROS graph: its topics with their publishers and subscribers, its services and actions with the nodes serving and using them, its nodes (`GraphSnapshot` in `src/shared/monitor.ts`), again whenever it changes. Returns the unsubscribe function |
+| `subscribeTopicInfo(topic, callback)` | A topic's publishers and subscriptions with their QoS, and those that cannot talk (`ros2 topic info -v`, `TopicDetails`) |
+| `subscribeTopicMonitor({ topic, window, echo }, { stats, echo, status })` | A topic's rate, bandwidth and delay over its latest `window` messages (`ros2 topic hz`, `bw`, `delay`, `TopicStats`), and its messages if `echo` (`{ field, truncate }`), at most 10 a second: JSON, but for lists and strings cut, 64 bit integers beyond JavaScript's and NaN (see `TruncatedValue` and the like) |
+| `publishTopic({ topic, messageType, message, rate, times, qos }, callback)` | Publishes as `ros2 topic pub`: once (`rate` 0), `times` times or until the returned function is called (`times` 0), the message made from its JSON as a checked call's request; the count published comes as it goes (`PublishState`) |
+| `interfaceInfo(type)` | An interface's definition (`ros2 interface show`), the schemas of its messages and their default values (`InterfaceInfo`) |
+| `subscribeAction({ action, actionType }, { goals, status })` | What an action's servers are doing: their goals, whoever sent them, with their status and latest feedback, and the results of those the dashboard sent (`ActionGoal`). Returns the unsubscribe function |
+| `sendGoal(action, type, goal)` / `cancelGoal(action, type, goal)` | Sends a goal: resolves with its UUID once accepted. Cancels one by its UUID, or all of the action's (`null`), whoever sent them |
 | `serverNow()` | Now, on the robot's clock |
 
 The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see

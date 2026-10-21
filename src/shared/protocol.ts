@@ -7,6 +7,15 @@
 // `unsubscribe`.
 
 import type { BtNodeModel } from './bt_nodes.ts';
+import type {
+  ActionGoal,
+  GraphSnapshot,
+  PublishQos,
+  PublishState,
+  TopicDetails,
+  TopicEcho,
+  TopicStats,
+} from './monitor.ts';
 import type { NetworkRequest, NetworkState } from './networking.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
@@ -205,6 +214,94 @@ export interface RosCall {
   request: unknown;
   // How long to wait for the service to exist, then for its response
   timeoutMs: number;
+  // The request is made from the service's definition: 64 bit integers from
+  // numbers or text, "now" for a builtin_interfaces/msg/Time, "auto" for a
+  // std_msgs/msg/Header, and a field it has not is refused; the response
+  // comes as monitored messages do (TruncatedValue... in monitor.ts)
+  checked?: boolean;
+}
+
+// The ROS graph: its topics, services, actions and nodes (GraphSnapshot), as
+// graph updates, again whenever it changes
+export interface GraphSubscribe {
+  type: 'graph.subscribe';
+  id: number;
+}
+
+// A topic's publishers and subscriptions, with their QoS (TopicDetails), as
+// topic.info updates, again whenever they change
+export interface TopicInfoSubscribe {
+  type: 'topic.info.subscribe';
+  id: number;
+  topic: string;
+}
+
+// A topic's figures (ros2 topic hz, bw and delay, over the latest window
+// messages) as topic.stats updates, twice a second while messages come, and
+// its messages (ros2 topic echo), at most ECHO_RATE a second, as topic.echo
+// updates. Its status comes as stream.status.
+export interface TopicMonitorSubscribe {
+  type: 'topic.monitor';
+  id: number;
+  topic: string;
+  window: number;
+  // Of the messages: their field at this path (all of them: ''), lists and
+  // strings cut to truncate items; null: not echoed
+  echo: { field: string; truncate: number } | null;
+}
+
+// Publishes on a topic (ros2 topic pub): message is made from the type's
+// definition as a checked RosCall's request is, again for each message.
+// Once (rate 0), times times, or until unsubscribed (times 0), at rate a
+// second; how many are published comes as topic.published updates.
+export interface TopicPublish {
+  type: 'topic.publish';
+  id: number;
+  topic: string;
+  messageType: string;
+  message: unknown;
+  rate: number;
+  times: number;
+  qos: PublishQos;
+}
+
+// An interface's definition, schemas and default values (InterfaceInfo):
+// answered by a result with the same id
+export interface InterfaceGet {
+  type: 'interface.get';
+  id: number;
+  // pkg/msg/Name, pkg/srv/Name, pkg/action/Name
+  interfaceType: string;
+}
+
+// What an action's servers are doing: their goals, whoever sent them, as
+// action.goals updates. Its status comes as stream.status.
+export interface ActionSubscribe {
+  type: 'action.subscribe';
+  id: number;
+  action: string;
+  actionType: string;
+}
+
+// Sends a goal (ros2 action send_goal), made as a checked RosCall's request
+// is: answered by a result with the same id, the goal's UUID once accepted.
+// Its feedback and result come to the action's subscriptions.
+export interface ActionSend {
+  type: 'action.send';
+  id: number;
+  action: string;
+  actionType: string;
+  goal: unknown;
+}
+
+// Cancels a goal, by its UUID, or all of the action's (null): answered by a
+// result with the same id (CancelResult)
+export interface ActionCancel {
+  type: 'action.cancel';
+  id: number;
+  action: string;
+  actionType: string;
+  goal: string | null;
 }
 
 // A request to a plugin's server side (PluginContext.handle), answered by a
@@ -433,7 +530,15 @@ export type ClientMessage =
   | TerminalAck
   | TerminalRestart
   | NetworkSubscribe
-  | NetworkAction;
+  | NetworkAction
+  | GraphSubscribe
+  | TopicInfoSubscribe
+  | TopicMonitorSubscribe
+  | TopicPublish
+  | InterfaceGet
+  | ActionSubscribe
+  | ActionSend
+  | ActionCancel;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -883,6 +988,44 @@ export interface NetworkUpdate extends NetworkState {
   canChange: boolean;
 }
 
+// Of a graph subscription
+export interface GraphUpdate {
+  type: 'graph';
+  id: number;
+  graph: GraphSnapshot;
+}
+
+// Of a topic.info subscription
+export interface TopicInfoUpdate extends TopicDetails {
+  type: 'topic.info';
+  id: number;
+}
+
+// Of a topic.monitor subscription
+export interface TopicStatsUpdate {
+  type: 'topic.stats';
+  id: number;
+  stats: TopicStats;
+}
+
+export interface TopicEchoUpdate extends TopicEcho {
+  type: 'topic.echo';
+  id: number;
+}
+
+// Of a topic.publish subscription
+export interface TopicPublished extends PublishState {
+  type: 'topic.published';
+  id: number;
+}
+
+// Of an action subscription: its goals, the latest accepted first
+export interface ActionGoals {
+  type: 'action.goals';
+  id: number;
+  goals: ActionGoal[];
+}
+
 export type ServerMessage =
   | Hello
   | CommandStates
@@ -908,6 +1051,12 @@ export type ServerMessage =
   | TerminalOutput
   | TerminalExit
   | NetworkUpdate
+  | GraphUpdate
+  | TopicInfoUpdate
+  | TopicStatsUpdate
+  | TopicEchoUpdate
+  | TopicPublished
+  | ActionGoals
   | PanelsChanged
   | ErrorMessage;
 

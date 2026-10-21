@@ -46,6 +46,11 @@ export {
   type FrameInfo,
   type ImageOptions,
   type TfOptions,
+  type TopicMonitorHandlers,
+  type TopicMonitorOptions,
+  type TopicPublishOptions,
+  type ActionHandlers,
+  type ActionOptions,
 } from '../connection.ts';
 export { imageUrl, fsApi, ApiError, type Upload } from '../api.ts';
 
@@ -83,6 +88,31 @@ export type {
   Transform2D,
 } from '../../shared/protocol.ts';
 export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
+export type {
+  ActionGoal,
+  BigIntValue,
+  CancelResult,
+  GoalStatus,
+  GraphEndpoints,
+  GraphSnapshot,
+  GraphTopic,
+  InterfaceInfo,
+  InterfaceKind,
+  MessageConstant,
+  MessageField,
+  MessageSchema,
+  PublishQos,
+  PublishState,
+  QosProblem,
+  QosProfile,
+  SpecialNumber,
+  Spread,
+  TopicDetails,
+  TopicEcho,
+  TopicEndpoint,
+  TopicStats,
+  TruncatedValue,
+} from '../../shared/monitor.ts';
 export type {
   ConnectionKind,
   NetworkActivity,

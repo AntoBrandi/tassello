@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 
 import { WebSocket } from 'ws';
 
+import { MAX_TRUNCATE, MAX_WINDOW } from '../shared/monitor.ts';
 import {
   FRAME_HEADER_BYTES,
   type ClientMessage,
@@ -13,6 +14,7 @@ import {
   type ImageTransport,
   type ServerMessage,
 } from '../shared/protocol.ts';
+import type { Actions } from './actions.ts';
 import type { PluginSession } from './api.ts';
 import type { Arm, ArmWatcher } from './arm.ts';
 import type { BehaviorTreeFiles } from './behavior_tree_files.ts';
@@ -21,18 +23,22 @@ import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
 import type { Diagnostics } from './diagnostics.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
+import type { Interfaces } from './interfaces.ts';
 import type { Networking } from './networking.ts';
 import { checkRequest, deviceOfAddress } from './networking_format.ts';
 import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
 import type { Ros } from './ros.ts';
+import type { RosGraph } from './ros_graph.ts';
 import type { Rosout } from './rosout.ts';
 import type { FrameStreams } from './streams.ts';
 import type { SystemdServices } from './systemd.ts';
 import type { Teleop } from './teleop.ts';
 import type { Terminals, TerminalView } from './terminals.ts';
 import type { Tf } from './tf.ts';
+import type { TopicMonitors } from './topic_monitor.ts';
+import type { TopicPublishing } from './topic_publishing.ts';
 import type { Topics } from './topics.ts';
 import { errorMessage, toJson } from './util.ts';
 
@@ -53,6 +59,11 @@ export interface SessionServices {
   networking: Networking;
   behaviorTrees: BehaviorTrees;
   behaviorTreeFiles: BehaviorTreeFiles;
+  graph: RosGraph;
+  topicMonitors: TopicMonitors;
+  publishing: TopicPublishing;
+  interfaces: Interfaces;
+  actions: Actions;
   plugins: PluginHost;
   hostname: string;
 }
@@ -86,6 +97,11 @@ function velocity(value: unknown): number {
 
 function optionalString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+// The value if one of these, else the first
+function oneOf<T extends string>(value: unknown, values: readonly T[]): T {
+  return values.includes(value as T) ? (value as T) : values[0];
 }
 
 function strings(value: unknown, field: string): string[] {
@@ -517,11 +533,128 @@ export class Session implements FrameSink, PluginSession {
       case 'ros.call':
         this.answer(
           message.id,
-          services.ros.call(
-            string(message.service, 'service'),
-            string(message.serviceType, 'serviceType'),
-            message.request,
-            number(message.timeoutMs, 1, 60_000, 5000),
+          // Its errors, a request the definition refuses, as its answer
+          Promise.resolve().then(() =>
+            services.ros.call(
+              string(message.service, 'service'),
+              string(message.serviceType, 'serviceType'),
+              message.request,
+              number(message.timeoutMs, 1, 60_000, 5000),
+              message.checked === true,
+            ),
+          ),
+        );
+        return;
+
+      case 'graph.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.graph.watch((graph) => this.send({ type: 'graph', id, graph })),
+        );
+        return;
+      }
+
+      case 'topic.info.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.graph.watchTopic(string(message.topic, 'topic'), (details) =>
+            this.send({ type: 'topic.info', id, ...details }),
+          ),
+        );
+        return;
+      }
+
+      case 'topic.monitor': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        const echo = message.echo;
+        this.subscriptions.set(
+          id,
+          services.topicMonitors.watch(string(message.topic, 'topic'), {
+            window: number(message.window, 2, MAX_WINDOW, 100),
+            echo:
+              echo && typeof echo === 'object'
+                ? { field: optionalString(echo.field), truncate: number(echo.truncate, 1, MAX_TRUNCATE, 128) }
+                : null,
+            onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+            onStats: (stats) => this.send({ type: 'topic.stats', id, stats }),
+            onEcho: (update) => this.send({ type: 'topic.echo', id, ...update }),
+          }),
+        );
+        return;
+      }
+
+      case 'topic.publish': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        const qos = message.qos ?? {};
+        this.subscriptions.set(
+          id,
+          services.publishing.publish(
+            {
+              topic: string(message.topic, 'topic'),
+              messageType: string(message.messageType, 'messageType'),
+              message: message.message,
+              rate: number(message.rate, 0, 1000, 0),
+              times: Math.round(number(message.times, 0, 1e9, 0)),
+              qos: {
+                reliability: oneOf(qos.reliability, ['auto', 'reliable', 'best_effort'] as const),
+                durability: oneOf(qos.durability, ['auto', 'volatile', 'transient_local'] as const),
+                depth: Math.round(number(qos.depth, 1, 1000, 10)),
+              },
+            },
+            (state) => this.send({ type: 'topic.published', id, ...state }),
+          ),
+        );
+        return;
+      }
+
+      case 'interface.get':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() => services.interfaces.info(string(message.interfaceType, 'interfaceType'))),
+        );
+        return;
+
+      case 'action.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        try {
+          this.subscriptions.set(
+            id,
+            services.actions.watch(string(message.action, 'action'), string(message.actionType, 'actionType'), {
+              onStatus: (state, text) => this.sendStreamStatus(id, state, text),
+              onGoals: (goals) => this.send({ type: 'action.goals', id, goals }),
+            }),
+          );
+        } catch (e) {
+          this.sendStreamStatus(id, 'error', errorMessage(e));
+        }
+        return;
+      }
+
+      case 'action.send':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() =>
+            services.actions.send(string(message.action, 'action'), string(message.actionType, 'actionType'), message.goal),
+          ),
+        );
+        return;
+
+      case 'action.cancel':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() =>
+            services.actions.cancel(
+              string(message.action, 'action'),
+              string(message.actionType, 'actionType'),
+              message.goal === null ? null : string(message.goal, 'goal'),
+            ),
           ),
         );
         return;
