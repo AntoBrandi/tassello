@@ -5,6 +5,17 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- System Monitor widget: the robot's computer, every second. The CPU's load, of each core (those
+  offline too), their frequencies and the load average; the memory, its cache and the swap; the
+  temperatures of the thermal zones and hwmon chips, by chip with their hottest, against their
+  own limits; the fans; a Raspberry Pi's throttling (under-voltage, frequency capped, throttled,
+  soft temperature limit, now and since boot); the GPUs: a Jetson's (devfreq), NVIDIA's
+  (`nvidia-smi`), AMD's (amdgpu); the power rails: a Jetson's INA3221 (L4T 32's too), hwmon's
+  power sensors, Intel's RAPL when readable; the disks' traffic and busy time, and the file
+  systems' space; the networks' traffic, of the device's own interfaces or those chosen. Charts
+  of the last 5 minutes, kept by the server, with the values at the pointer (or the arrow keys).
+  The board, its OS, uptime, and a Jetson's L4T release and power mode.
+- Plugins: `connection.subscribeSystem`, and the types of `src/shared/system.ts`.
 - Rosbags widget: the robot's rosbags, as `ros2 bag` makes and reads them. A folder's bags, the
   newest first, with their time span, size, storage and compression, and each topic's type,
   count and rate, from their `metadata.yaml` (Humble's and Jazzy's), else from their files (a

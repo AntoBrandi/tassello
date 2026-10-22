@@ -89,6 +89,7 @@ export type {
   RosoutUpdate,
   ServerMessage,
   StreamStatus,
+  SystemUpdate,
   TerminalExit,
   TerminalOutput,
   TfUpdate,
@@ -109,6 +110,17 @@ export type {
   RecordOptions,
   RecordRequest,
 } from '../../shared/rosbag.ts';
+export type {
+  DiskIo,
+  Fan,
+  Gpu,
+  NetworkIo,
+  PowerRail,
+  SystemInfo,
+  SystemSample,
+  Temperature,
+  TrendPoint,
+} from '../../shared/system.ts';
 export type {
   ActionGoal,
   BigIntValue,

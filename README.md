@@ -13,8 +13,9 @@ and plugins add more.
   images, command buttons, a systemd application manager, a behavior tree inspector and
   editor, the ROS log of every node, the robot's diagnostics, its topics, services and actions
   as the `ros2` command line shows them, its nodes' parameters, its rosbags (recorded, listed,
-  downloaded and played back), a file manager, a terminal, and its networks: Wi-Fi
-  joined, connections switched, the robot as an access point.
+  downloaded and played back), a file manager, a terminal, its networks (Wi-Fi
+  joined, connections switched, the robot as an access point), and its computer: CPU, memory,
+  temperatures, a Raspberry Pi's throttling, a Jetson's GPU and power, disks and networks.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
 
@@ -136,6 +137,7 @@ after the others on the devices already arranged.
 | **Rosbags** | The robot's rosbags, as `ros2 bag` makes and reads them: those of a folder, the newest first, with when, how long and how big, their storage and compression, each topic's type, count and rate (`ros2 bag info`); downloaded, deleted, or played on the robot's topics (`ros2 bag play`: paused, sought, sped up, looped, some topics only). New ones recorded (`ros2 bag record`): topics chosen from the graph, all of them, or matching an expression, with rosbag2's options: the storage (MCAP, SQLite) and its preset, a new file by size or duration, compression of each file or message. Every page sees the recordings and the playback, the behavior tree inspectors' too |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 | **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
+| **System Monitor** | The robot's computer, as top, sensors and a Jetson's jtop show it: the CPU's load, of each core, and their frequencies; the memory and swap; the temperatures by chip, and the fans; a Raspberry Pi's throttling (under-voltage, capped frequency, now and since boot); the GPUs (a Jetson's, NVIDIA's, AMD's) and the power rails (a Jetson's); the disks' traffic and space; the networks' traffic. With charts of the last 5 minutes |
 | **Networking** | The robot's networks, through NetworkManager, as a phone's settings show them: the Wi-Fi networks in range, joined with their password; the connections saved, switched between, edited (their addresses by DHCP or static), forgotten; the robot as an access point, its network shared by a QR code; the interfaces, their state and addresses. Asks before a change that would cut the page off from the robot |
 
 Their properties (topics, frames, speeds, colours, ...) are edited in the side panel of edit mode.
@@ -466,6 +468,21 @@ Notes on some of them:
   Without it, the widget says the networks cannot be changed. *Share…* reads the passwords with
   `nmcli --show-secrets`, which needs the same right; those a desktop's keyring keeps cannot be
   read.
+- **System Monitor** reads `/proc` and `/sys` every second, for every page at once, while one
+  shows it, and keeps the last 5 minutes for the charts (a page opened later has them at once).
+  The temperatures are the kernel's thermal zones and its hwmon chips' sensors (the chips that
+  are a thermal zone again, once), grouped by chip with the hottest of each; a sensor is hot from
+  its own limits (else 80 °C), and critical at its own critical (else 95 °C). A **Raspberry Pi**'s
+  throttling is its firmware's (`get_throttled` in `/sys`, else `vcgencmd get_throttled`): under-
+  voltage, frequency capped, throttled, soft temperature limit, now and since boot. A **Jetson**'s
+  GPU is devfreq's (its load and clock), its power the INA3221's rails (`VDD_IN` the whole
+  board's), its L4T release and power mode (`nvpmodel -q`) are shown with the board. NVIDIA's
+  GPUs are read with `nvidia-smi` every 2 s, AMD's from amdgpu's files; an Intel CPU's package
+  power from RAPL, if its counters are readable (root's only, since Linux 5.10). Cores taken
+  offline (a Jetson's power modes) show as such. The disks are the whole ones (not partitions,
+  loop devices, device mapper or RAID), their space the File Manager's; the networks are the
+  device's own interfaces (not docker's bridges, VPN clients' tunnels: their traffic is the
+  devices' too), or those of its *interfaces* (`wlan0, tun*`). Each section can be hidden.
 
 ## Plugins
 
@@ -517,6 +534,7 @@ own pages only too: those whose origin is the host they reached (the `Host` head
                                                                         ├─ python3: the terminals' pseudo-terminals
                                                                         ├─ nmcli: the networks (NetworkManager)
                                                                         ├─ ros2 bag: rosbags recorded and played
+                                                                        ├─ /proc, /sys, nvidia-smi: the system monitor
                                                                         └─ the plugins' server sides
 ```
 
@@ -554,6 +572,9 @@ Safety and bandwidth are the server's concern:
   one recording per folder, for every page (the behavior tree inspectors' among them), one
   playback. A folder of bags is read once for every page showing it, every 2 s, a bag's metadata
   again only when its files change; the recordings' sizes every second.
+- The system monitor's sensors are read once for every page, every second while one watches and
+  for 30 s after the last leaves; they are looked for again every 30 s (USB ones come and go).
+  Each page gets a sample a second, about 4 KB.
 - The File Manager's folders are read again every 3 s, and answered "unchanged" while they are;
   the largest are listed in part (5,000 entries), and only the rows in sight are drawn. Uploads
   and downloads are streamed, folders archived by `tar` as they are sent; saves replace files at

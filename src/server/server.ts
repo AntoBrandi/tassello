@@ -37,6 +37,7 @@ import { Rosbags } from './rosbags.ts';
 import { Rosout } from './rosout.ts';
 import { Session } from './session.ts';
 import { FrameStreams } from './streams.ts';
+import { SystemMonitor } from './system.ts';
 import { SystemdServices } from './systemd.ts';
 import { Teleop } from './teleop.ts';
 import { Terminals } from './terminals.ts';
@@ -140,6 +141,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const diagnostics = new Diagnostics(node, logger);
   const terminals = new Terminals(logger);
   const networking = new Networking(logger);
+  const system = new SystemMonitor(logger);
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
   const rosbags = new Rosbags(ros, logger);
@@ -207,6 +209,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         actions,
         parameters,
         rosbags,
+        system,
         plugins: host,
         hostname: os.hostname(),
       },
@@ -247,6 +250,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     systemd.stopAll();
     terminals.stopAll();
     networking.stopAll();
+    system.stop();
     // Stops the robot if a page was driving it, while the node still runs
     for (const session of sessions) {
       session.close();

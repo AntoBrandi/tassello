@@ -193,6 +193,7 @@ function useArms() {
 | `dumpParameters(node)` / `loadParameters(node, yaml)` | `ros2 param dump`: resolves with the YAML. `ros2 param load`: the node's parameters in the YAML set, resolves with what the node says of each |
 | `subscribeBags(folder, callback)` | The rosbags of a folder (`BagInfo` in `src/shared/rosbag.ts`: their metadata, topics, files, size), the robot's recordings and its playback, and what its rosbag2 offers (`BagsUpdate`), again whenever they change. Returns the unsubscribe function |
 | `bagsAction(request)` | `BagsRequest`: `record` (`ros2 bag record`: topics, all of them or a regular expression, `RecordOptions`) resolves with the `Recording`; `stop` with the bag's folder; `delete` with the paths deleted (bags only, the dashboard's own pages only); `play` (`ros2 bag play`: rate, loop, topics, offset, `/clock`) with the `Playback`; `pause`, `resume`, `seek`, `rate` and `stop-playback` control it |
+| `subscribeSystem(callback)` | The robot's computer (`SystemUpdate`): its description (`SystemInfo`) and the last 5 minutes' chart points (`TrendPoint`) first, then a `SystemSample` every second: the cores' load and frequencies, memory, temperatures, fans, a Raspberry Pi's throttling bits, GPUs, power rails, disks and networks (`src/shared/system.ts`), and the file systems' space when it changes. Returns the unsubscribe function |
 | `serverNow()` | Now, on the robot's clock |
 
 The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see

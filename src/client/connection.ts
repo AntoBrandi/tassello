@@ -25,6 +25,8 @@ import {
   type ArmUpdate,
   type BagsSubscribe,
   type BagsUpdate,
+  type SystemSubscribe,
+  type SystemUpdate,
   type BehaviorTreeFile,
   type BehaviorTreeFileSubscribe,
   type BehaviorTreeInfo,
@@ -210,7 +212,8 @@ type Request =
   | Omit<TopicMonitorSubscribe, 'id'>
   | Omit<TopicPublish, 'id'>
   | Omit<ActionSubscribe, 'id'>
-  | Omit<BagsSubscribe, 'id'>;
+  | Omit<BagsSubscribe, 'id'>
+  | Omit<SystemSubscribe, 'id'>;
 
 interface Subscription {
   // Or made anew on every connection
@@ -237,6 +240,7 @@ interface Subscription {
   published?: (state: PublishState) => void;
   action?: ActionHandlers;
   bags?: (update: BagsUpdate) => void;
+  system?: (update: SystemUpdate) => void;
 }
 
 const MIN_RETRY_MS = 500;
@@ -621,6 +625,14 @@ export class Connection {
     return this.subscribe({ type: 'bags.subscribe', folder }, { bags: callback });
   }
 
+  // The robot's computer: its processor, memory, temperatures, GPUs, power,
+  // disks and networks (see SystemUpdate), every second, with the last
+  // minutes' history first. Renewed on every connection. Returns the
+  // unsubscribe function.
+  subscribeSystem(callback: (update: SystemUpdate) => void): () => void {
+    return this.subscribe({ type: 'system.subscribe' }, { system: callback });
+  }
+
   // Records (ros2 bag record), stops a recording, deletes bags, plays one
   // (ros2 bag play) and controls its playback: see BagsRequest for what each
   // resolves with
@@ -866,6 +878,9 @@ export class Connection {
         break;
       case 'bags':
         this.subscriptions.get(message.id)?.bags?.(message);
+        break;
+      case 'system':
+        this.subscriptions.get(message.id)?.system?.(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

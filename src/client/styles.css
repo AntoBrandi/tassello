@@ -9493,3 +9493,557 @@ textarea {
     max-width: 100%;
   }
 }
+
+/* ── System monitor ────────────────────────────────────────────────────────── */
+
+/* The charts' two series (read and written, received and sent): blue and
+   orange, told apart with any colour vision on both themes */
+.sys {
+  --sys-series-1: var(--accent);
+  --sys-series-2: #d95926;
+  container-type: inline-size;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (prefers-color-scheme: light) {
+  .sys {
+    --sys-series-2: #eb6834;
+  }
+}
+
+.sys-empty {
+  margin: auto;
+  padding: 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sys-empty.error {
+  color: var(--danger);
+}
+
+.sys-about {
+  flex: none;
+  margin: 0;
+  padding: 8px 12px 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-about strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sys-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.sys-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.sys-card.warn {
+  border-color: var(--warning);
+}
+
+.sys-card.hot {
+  border-color: var(--danger);
+}
+
+.sys-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 8px;
+  min-width: 0;
+}
+
+.sys-card-head h3 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sys-figure {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.sys-detail {
+  margin-top: -6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Charts: a hairline grid, 2px lines, a wash under a lone one */
+.sys-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sys-chart-plot {
+  position: relative;
+  height: 56px;
+  border-radius: 4px;
+  outline-offset: 3px;
+  cursor: crosshair;
+}
+
+.sys-chart-plot svg {
+  display: block;
+  overflow: visible;
+}
+
+.sys-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.sys-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.sys-area {
+  opacity: 0.12;
+}
+
+.sys-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sys-crosshair {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.sys-marker {
+  stroke: var(--surface-2);
+  stroke-width: 2;
+}
+
+.sys-chart-max {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  padding: 0 4px 0 0;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.sys-chart-times {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.sys-tooltip {
+  position: absolute;
+  top: -4px;
+  z-index: 2;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sys-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sys-tooltip-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-tooltip-row > span:not(.sys-key),
+.sys-tooltip-time {
+  color: var(--text-muted);
+}
+
+.sys-tooltip-time {
+  font-size: 11px;
+}
+
+/* A series' line key */
+.sys-key {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.sys-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.sys-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sys-legend-item strong {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The cores, a column each: square at the bottom, rounded at the top */
+.sys-cores {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sys-cores.labelled {
+  height: 50px;
+}
+
+.sys-core {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: 24px;
+}
+
+.sys-core-bar {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent-soft);
+}
+
+.sys-core-fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--sys-series-1);
+  transition: height 0.3s ease-out;
+}
+
+.sys-core.off .sys-core-bar {
+  border: 1px solid var(--border);
+  background: none;
+}
+
+.sys-core-value {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Meters: the fill carries the tone, the track a lighter step of it */
+.sys-meter {
+  display: flex;
+  flex: none;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--accent-soft);
+}
+
+.sys-meter-fill {
+  flex: none;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--sys-series-1);
+}
+
+/* After a 2px gap */
+.sys-meter-extra {
+  flex: none;
+  height: 100%;
+  border-left: 2px solid var(--surface-2);
+  border-radius: 0 3px 3px 0;
+  background: color-mix(in srgb, var(--sys-series-1) 45%, transparent);
+}
+
+.sys-meter.warn {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.sys-meter.warn .sys-meter-fill {
+  background: var(--warning);
+}
+
+.sys-meter.hot {
+  background: var(--danger-soft);
+}
+
+.sys-meter.hot .sys-meter-fill {
+  background: var(--danger);
+}
+
+.sys-line-meter {
+  display: grid;
+  grid-template-columns: auto minmax(40px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.sys-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+  list-style: none;
+}
+
+.sys-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 25px;
+  padding: 2px 0;
+  border-top: 1px solid var(--border);
+}
+
+.sys-row:first-child {
+  border-top: 0;
+}
+
+.sys-row.down {
+  color: var(--text-muted);
+}
+
+.sys-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-row-name .sys-muted {
+  margin-left: 6px;
+}
+
+.sys-row-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sys-row-value.warn,
+.sys-row-value.hot {
+  font-weight: 700;
+}
+
+.sys-muted {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.sys-temperature {
+  grid-template-columns: minmax(0, 1fr) minmax(36px, 28%) 48px;
+}
+
+.sys-temperature.nested .sys-row-name {
+  padding-left: 16px;
+}
+
+.sys-disclosure {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sys-disclosure::before {
+  display: inline-block;
+  width: 12px;
+  color: var(--text-muted);
+  content: '▸';
+}
+
+.sys-disclosure[aria-expanded='true']::before {
+  content: '▾';
+}
+
+.sys-io {
+  grid-template-columns: minmax(0, 1fr) repeat(2, 76px);
+}
+
+.sys-io.disk {
+  grid-template-columns: minmax(0, 1fr) repeat(2, 76px) 36px;
+}
+
+.sys-busy {
+  color: var(--text-muted);
+}
+
+.sys-space .sys-row {
+  grid-template-columns: minmax(0, 1fr) minmax(36px, 28%) auto;
+}
+
+.sys-space,
+.sys-fans {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.sys-row-extra {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sys-rows .sys-row:has(> .sys-row-extra) {
+  grid-template-columns: minmax(0, 1fr) auto 64px;
+}
+
+.sys-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.sys-facts div {
+  display: flex;
+  gap: 6px;
+}
+
+.sys-facts dt {
+  color: var(--text-muted);
+}
+
+.sys-facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A state: a dot of its colour, and its word */
+.sys-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sys-figure .sys-state {
+  font-size: 15px;
+}
+
+.sys-state::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  content: '';
+}
+
+.sys-state.warn::before {
+  background: var(--warning);
+}
+
+.sys-state.hot::before {
+  background: var(--danger);
+}
+
+.sys-flag .sys-state:not(.warn, .hot) {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sys-link {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  vertical-align: 1px;
+}
+
+.sys-link.down {
+  background: var(--text-muted);
+}
+
+/* Narrow: the io rows' rates closer */
+@container (max-width: 300px) {
+  .sys-io {
+    grid-template-columns: minmax(0, 1fr) repeat(2, 68px);
+    gap: 4px 6px;
+  }
+
+  .sys-io.disk {
+    grid-template-columns: minmax(0, 1fr) repeat(2, 68px);
+  }
+
+  .sys-io .sys-busy {
+    display: none;
+  }
+
+  .sys-temperature {
+    grid-template-columns: minmax(0, 1fr) 32px 44px;
+    gap: 4px 6px;
+  }
+
+  .sys-row-name .sys-muted {
+    display: none;
+  }
+}

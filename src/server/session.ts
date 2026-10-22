@@ -37,6 +37,7 @@ import type { Rosbags } from './rosbags.ts';
 import type { RosGraph } from './ros_graph.ts';
 import type { Rosout } from './rosout.ts';
 import type { FrameStreams } from './streams.ts';
+import type { SystemMonitor } from './system.ts';
 import type { SystemdServices } from './systemd.ts';
 import type { Teleop } from './teleop.ts';
 import type { Terminals, TerminalView } from './terminals.ts';
@@ -71,6 +72,7 @@ export interface SessionServices {
   actions: Actions;
   parameters: Parameters;
   rosbags: Rosbags;
+  system: SystemMonitor;
   plugins: PluginHost;
   hostname: string;
 }
@@ -707,6 +709,16 @@ export class Session implements FrameSink, PluginSession {
           Promise.resolve().then(() => services.rosbags.act(checkBagsRequest(message.request), this.ownPage)),
         );
         return;
+
+      case 'system.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.system.watch((update) => this.send({ type: 'system', id, ...update })),
+        );
+        return;
+      }
 
       case 'action.subscribe': {
         const id = subscriptionId(message.id);

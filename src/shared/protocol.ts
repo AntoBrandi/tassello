@@ -7,6 +7,7 @@
 // `unsubscribe`.
 
 import type { BtNodeModel } from './bt_nodes.ts';
+import type { FsDisk } from './file_manager.ts';
 import type {
   ActionGoal,
   GraphSnapshot,
@@ -19,6 +20,7 @@ import type {
 import type { NetworkRequest, NetworkState } from './networking.ts';
 import type { ParamInfo, ParamValue } from './parameters.ts';
 import type { BagCapabilities, BagInfo, BagsRequest, Playback, Recording, RecordOptions } from './rosbag.ts';
+import type { SystemInfo, SystemSample, TrendPoint } from './system.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
@@ -295,6 +297,13 @@ export interface BagsAction {
   type: 'bags.action';
   id: number;
   request: BagsRequest;
+}
+
+// The robot's computer (see SystemSample), as system updates: a sample every
+// second, and the last minutes' when subscribing
+export interface SystemSubscribe {
+  type: 'system.subscribe';
+  id: number;
 }
 
 // The ROS graph: its topics, services, actions and nodes (GraphSnapshot), as
@@ -624,7 +633,8 @@ export type ClientMessage =
   | ParamsDump
   | ParamsLoad
   | BagsSubscribe
-  | BagsAction;
+  | BagsAction
+  | SystemSubscribe;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -1144,6 +1154,20 @@ export interface BagsUpdate {
   capabilities: BagCapabilities | null;
 }
 
+// Of a system subscription: all of it at first, then what changed
+export interface SystemUpdate {
+  type: 'system';
+  id: number;
+  info?: SystemInfo;
+  // The file systems, as the file manager lists them
+  space?: FsDisk[];
+  // The last minutes', oldest first
+  history?: TrendPoint[];
+  sample?: SystemSample;
+  // Not Linux
+  error?: string;
+}
+
 // Of an action subscription: its goals, the latest accepted first
 export interface ActionGoals {
   type: 'action.goals';
@@ -1185,6 +1209,7 @@ export type ServerMessage =
   | ActionGoals
   | ParamsUpdate
   | BagsUpdate
+  | SystemUpdate
   | PanelsChanged
   | ErrorMessage;
 

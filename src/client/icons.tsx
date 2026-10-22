@@ -392,5 +392,13 @@ export const MonitorIcon = icon(
     <path d="M6.5 11h2.5l1.5-3 3 6 1.5-3h2.5M9 21h6M12 17v4" />
   </>,
 );
+// A processor: a chip and its pins
+export const ChipIcon = icon(
+  <>
+    <rect x="6" y="6" width="12" height="12" rx="2" />
+    <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
+    <path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5" />
+  </>,
+);
 // Published, called, sent
 export const SendIcon = icon(<path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7Z" />);
