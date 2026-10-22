@@ -12,7 +12,8 @@ and plugins add more.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
   editor, the ROS log of every node, the robot's diagnostics, its topics, services and actions
-  as the `ros2` command line shows them, its nodes' parameters, its rosbags (recorded, listed,
+  as the `ros2` command line shows them, plots of their numbers over time, its nodes'
+  parameters, its rosbags (recorded, listed,
   downloaded and played back), a file manager, a terminal, its networks (Wi-Fi
   joined, connections switched, the robot as an access point), and its computer: CPU, memory,
   temperatures, a Raspberry Pi's throttling, a Jetson's GPU and power, disks and networks.
@@ -133,6 +134,7 @@ after the others on the devices already arranged.
 | **Logs** | The ROS log (`/rosout`), as rqt_console and swri_console show it: every node's messages coloured by level, the nodes running and those that logged with their counts, filtered by node, by level and by text (terms or a regular expression, to show or to hide). Pause, follow the newest, clear, download, and a message's details: where it was logged |
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
 | **ROS Monitor** | The ROS graph, as the `ros2` command line shows it, on three sheets: its topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's messages, their rate, bandwidth and delay, its publishers and subscriptions with their QoS and those that cannot talk, a message to publish once or at a rate (`ros2 topic echo`, `hz`, `bw`, `delay`, `info -v`, `pub`); a service to call, once or at a rate (`ros2 service call`, `info`, `echo`); every goal of an action, whoever sent it, with its feedback, and a goal to send or cancel (`ros2 action send_goal`, `info`); their types' definitions (`ros2 interface show`) |
+| **Plot** | Numbers of any topic over time, as rqt_plot and PlotJuggler plot them: `/odom.twist.twist.linear.x`, a battery's voltage, joints' efforts (named by their joints), up to 8 series on a chart, from every message. Paused, zoomed and scrolled through time, each series shown or hidden; what is shown exported as CSV. Its series are picked in the widget, from the topics of the graph and the fields of their messages, or listed in its properties |
 | **Parameters** | Nodes' parameters, as rqt_reconfigure and `ros2 param` show them: the nodes of the graph, and the parameters of the one chosen grouped by their prefixes, each edited in place (a switch, a slider within its range, a field), live as they change wherever they are set. Their descriptions, ranges and constraints (`ros2 param describe`); new ones set and undeclared ones deleted (`set`, `delete`); all of them dumped as YAML, downloaded or saved on the robot (`dump`), and loaded from a YAML file of the robot or of the page's device (`load`) |
 | **Rosbags** | The robot's rosbags, as `ros2 bag` makes and reads them: those of a folder, the newest first, with when, how long and how big, their storage and compression, each topic's type, count and rate (`ros2 bag info`); downloaded, deleted, or played on the robot's topics (`ros2 bag play`: paused, sought, sped up, looped, some topics only). New ones recorded (`ros2 bag record`): topics chosen from the graph, all of them, or matching an expression, with rosbag2's options: the storage (MCAP, SQLite) and its preset, a new file by size or duration, compression of each file or message. Every page sees the recordings and the playback, the behavior tree inspectors' too |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
@@ -308,6 +310,26 @@ Notes on some of them:
 
   Messages, requests and goals are made from rclnodejs's code of their types, which Tassello
   makes when it starts for the workspaces sourced (see Install).
+- **Plot** draws up to 8 series on one value axis: a topic, a dot and its field
+  (`/odom.twist.twist.linear.x`, `/joint_states.effort[2]`, list items by their index), then a
+  label if any, one a line in its *series* property. *Series…* picks them in the widget, in view
+  mode, and saves them with the panel: a topic of the graph, then fields among those of its
+  latest message that are numbers, with their values (a `JointState`'s by joint name), or a field
+  typed. Numbers, booleans (0 or 1) and times (in seconds, a header's stamp) are plotted; NaN and
+  infinities break the line, as does a topic that stopped. The server reads every message of the
+  topics plotted, not 10 a second, and sends the numbers of the fields asked for ten times a
+  second; each sample is on the server's clock, when its message came. The page keeps the
+  latest 10 minutes of each series (200,000 samples at most, 200 s of a 1 kHz topic), from when
+  the widget opened.
+
+  Live, it shows the latest *time shown* (30 s), the value axis fitted to what is shown or
+  *fixed*. Drag across it to zoom in on that span, which pauses it; the wheel zooms around the
+  pointer (live, a shorter or longer span to now), Shift+wheel or a sideways swipe scrolls
+  through time, two fingers pinch; *Live* or a double click goes on. Space pauses, the arrow keys
+  scroll, `+` and `-` zoom, Escape goes back live. The pointer shows each series' value at its
+  time, the legend the values at the right edge; clicking a series in the legend hides it. The
+  download button exports what is shown as CSV: the time (s since the epoch), then a column a
+  series, a row a message (those of a topic's series on the same rows).
 - **Parameters** lists the nodes of the graph (but the hidden ones, as `ros2 node list` does), or
   shows one node only, its *node* (a panel to tune `/controller_server`). A node's parameters are
   read through its parameter services (`rcl_interfaces`), grouped by the prefixes of their names
@@ -572,6 +594,10 @@ Safety and bandwidth are the server's concern:
   one recording per folder, for every page (the behavior tree inspectors' among them), one
   playback. A folder of bags is read once for every page showing it, every 2 s, a bag's metadata
   again only when its files change; the recordings' sizes every second.
+- A topic plotted is followed once for every page (the ROS Monitor's subscription, with its
+  publishers' QoS): its messages are deserialized only while a page plots it, and each page gets
+  the numbers of its own fields, ten batches a second: for a 200 Hz topic, about 3 KB a second
+  for when its messages came, and 4 KB for each field.
 - The system monitor's sensors are read once for every page, every second while one watches and
   for 30 s after the last leaves; they are looked for again every 30 s (USB ones come and go).
   Each page gets a sample a second, about 4 KB.

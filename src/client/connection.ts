@@ -12,6 +12,7 @@ import type {
   PublishState,
   TopicDetails,
   TopicEcho,
+  TopicSamples,
   TopicStats,
 } from '../shared/monitor.ts';
 import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
@@ -146,9 +147,11 @@ export interface OverlayHandlers {
 export interface TopicMonitorHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The figures of the latest messages, twice a second while they come
-  stats: (stats: TopicStats) => void;
+  stats?: (stats: TopicStats) => void;
   // The latest message, if echoed
-  echo: (echo: TopicEcho) => void;
+  echo?: (echo: TopicEcho) => void;
+  // The numbers of the messages since the last, if sampled
+  samples?: (samples: TopicSamples) => void;
 }
 
 export interface ActionHandlers {
@@ -543,8 +546,9 @@ export class Connection {
     return this.subscribe({ type: 'topic.info.subscribe', topic }, { topicInfo: callback });
   }
 
-  // A topic's figures (ros2 topic hz, bw, delay) and messages (ros2 topic
-  // echo). Returns the unsubscribe function.
+  // A topic's figures (ros2 topic hz, bw, delay), messages (ros2 topic
+  // echo) and the numbers of all of them at some fields (a plot's). Returns
+  // the unsubscribe function.
   subscribeTopicMonitor(options: TopicMonitorOptions, handlers: TopicMonitorHandlers): () => void {
     return this.subscribe({ type: 'topic.monitor', ...options }, { topicMonitor: handlers });
   }
@@ -862,10 +866,13 @@ export class Connection {
         this.subscriptions.get(message.id)?.topicInfo?.(message);
         break;
       case 'topic.stats':
-        this.subscriptions.get(message.id)?.topicMonitor?.stats(message.stats);
+        this.subscriptions.get(message.id)?.topicMonitor?.stats?.(message.stats);
         break;
       case 'topic.echo':
-        this.subscriptions.get(message.id)?.topicMonitor?.echo(message);
+        this.subscriptions.get(message.id)?.topicMonitor?.echo?.(message);
+        break;
+      case 'topic.samples':
+        this.subscriptions.get(message.id)?.topicMonitor?.samples?.(message);
         break;
       case 'topic.published':
         this.subscriptions.get(message.id)?.published?.(message);

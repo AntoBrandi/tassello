@@ -10,6 +10,7 @@ import {
   nestedFieldType,
   parseType,
   partTypes,
+  sampleValue,
   toRosMessage,
 } from './message_format.ts';
 
@@ -102,6 +103,19 @@ test('a field of a message by its path', () => {
   assert.equal(fieldAt(message, 'points.0.x'), 7);
   assert.equal(fieldAt(message, 'pose.orientation'), undefined);
   assert.equal(fieldAt(message, 'ranges[2]'), undefined);
+});
+
+test('fields as numbers to plot: integers, booleans, times; nothing else', () => {
+  assert.equal(sampleValue(0.25), 0.25);
+  assert.equal(sampleValue(12n), 12);
+  assert.equal(sampleValue(true), 1);
+  assert.equal(sampleValue(false), 0);
+  assert.equal(sampleValue({ sec: 1_729_600_000, nanosec: 250_000_000 }), 1_729_600_000.25);
+  assert.equal(sampleValue(Number.NaN), null);
+  assert.equal(sampleValue(Number.POSITIVE_INFINITY), null);
+  assert.equal(sampleValue('3'), null);
+  assert.equal(sampleValue({ x: 1 }), null);
+  assert.equal(sampleValue(undefined), null);
 });
 
 test('echoed: long lists and strings cut, big integers as text, NaN and infinities named', () => {

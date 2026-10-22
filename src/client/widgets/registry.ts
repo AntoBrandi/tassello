@@ -21,6 +21,7 @@ import { monitorWidget } from './monitor/MonitorWidget.tsx';
 import { navigationWidget } from './NavigationWidget.tsx';
 import { networkingWidget } from './networking/NetworkingWidget.tsx';
 import { parametersWidget } from './parameters/ParametersWidget.tsx';
+import { plotWidget } from './plot/PlotWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
 import { rosbagsWidget } from './rosbags/RosbagsWidget.tsx';
 import { systemMonitorWidget } from './system/SystemMonitorWidget.tsx';
@@ -45,6 +46,7 @@ const CORE: RegisteredWidget[] = [
   logsWidget,
   diagnosticsWidget,
   monitorWidget,
+  plotWidget,
   parametersWidget,
   rosbagsWidget,
   fileManagerWidget,

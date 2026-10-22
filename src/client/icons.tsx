@@ -400,5 +400,8 @@ export const ChipIcon = icon(
     <path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5" />
   </>,
 );
+// Numbers over time: a plot's
+export const PlotIcon = icon(<path d="M3 3v18h18M7 15l3.5-5 3 3L20 6" />);
+export const CheckIcon = icon(<path d="m5 12.5 4.5 4.5L19 7.5" />);
 // Published, called, sent
 export const SendIcon = icon(<path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7Z" />);

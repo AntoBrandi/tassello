@@ -339,6 +339,28 @@ export function fieldAt(message: unknown, path: string): unknown {
   return value;
 }
 
+// A field's value as a plot takes it: numbers, 64 bit integers, booleans (0
+// or 1), times and durations (in seconds); null for anything else, and for
+// NaN and infinities
+export function sampleValue(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  if (value !== null && typeof value === 'object' && 'sec' in value && 'nanosec' in value) {
+    const { sec, nanosec } = value as { sec: unknown; nanosec: unknown };
+    if (typeof sec === 'number' && typeof nanosec === 'number') {
+      return sec + nanosec / 1e9;
+    }
+  }
+  return null;
+}
+
 function number(value: number): unknown {
   if (Number.isFinite(value)) {
     return value;

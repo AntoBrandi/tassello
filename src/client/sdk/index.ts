@@ -143,6 +143,7 @@ export type {
   TopicDetails,
   TopicEcho,
   TopicEndpoint,
+  TopicSamples,
   TopicStats,
   TruncatedValue,
 } from '../../shared/monitor.ts';

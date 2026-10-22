@@ -5,6 +5,19 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Plot widget: numbers of any topic over time, as rqt_plot and PlotJuggler plot them
+  (`/odom.twist.twist.linear.x`, a battery's voltage, joints' efforts), up to 8 series on a
+  chart, from every message. Live over the latest *time shown*; paused, zoomed (drag across it,
+  the wheel, a pinch) and scrolled through time (Shift+wheel, a swipe, the arrow keys); the value
+  axis fitted to what is shown or fixed; the values at the pointer; series hidden from the
+  legend. What is shown exported as CSV, a row a message. The series are picked in the widget,
+  from the topics of the graph and the numeric fields of their latest message (a `JointState`'s
+  named by joint), and saved with the panel, or listed in its properties.
+- The topic monitor (`topic.monitor`) samples: the numbers of every message at some fields, sent
+  ten times a second (`TopicSamples`). Plugins: `subscribeTopicMonitor`'s `samples`; its `stats`
+  and `echo` handlers are optional.
+- Plugins: widgets get `updateConfig`, which changes their properties and saves the panel, as the
+  side panel does.
 - System Monitor widget: the robot's computer, every second. The CPU's load, of each core (those
   offline too), their frequencies and the load average; the memory, its cache and the swap; the
   temperatures of the thermal zones and hwmon chips, by chip with their hottest, against their

@@ -9,6 +9,7 @@
 import {
   Component,
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -80,6 +81,8 @@ export interface BoardProps {
   onSelect: (id: string | null) => void;
   onPlace: (id: string, rect: Rect) => void;
   onRemove: (id: string) => void;
+  // A widget's own changes of its properties (WidgetProps.updateConfig)
+  onConfigure: (id: string, changes: Record<string, unknown>) => void;
   // Tablets and phones only: hides the widget on the device
   onHide?: (id: string) => void;
   // Columns visible without scrolling, for placing new widgets
@@ -96,6 +99,7 @@ export function Board({
   onSelect,
   onPlace,
   onRemove,
+  onConfigure,
   onHide,
   onVisibleColumns,
 }: BoardProps) {
@@ -231,7 +235,7 @@ export function Board({
               onPointerUp={end}
               onPointerCancel={end}
             >
-              <WidgetView instance={widget} panelId={panel.id} editing={editing} />
+              <WidgetView instance={widget} panelId={panel.id} editing={editing} onConfigure={onConfigure} />
               {editing && (
                 <div className="widget-chrome">
                   <span className="widget-tag">
@@ -281,15 +285,21 @@ const WidgetView = memo(function WidgetView({
   instance,
   panelId,
   editing,
+  onConfigure,
 }: {
   instance: WidgetInstance;
   panelId: string;
   editing: boolean;
+  onConfigure: BoardProps['onConfigure'];
 }) {
   const definition = widgetDefinition(instance.type);
   const config = useMemo(
     () => (definition ? resolveConfig(definition, instance.config) : {}),
     [definition, instance.config],
+  );
+  const updateConfig = useCallback(
+    (changes: Record<string, unknown>) => onConfigure(instance.id, changes),
+    [onConfigure, instance.id],
   );
   return (
     <div className="widget-card">
@@ -297,7 +307,13 @@ const WidgetView = memo(function WidgetView({
       <div className="widget-body">
         {definition ? (
           <WidgetErrorBoundary resetKey={config}>
-            <definition.component config={config} instance={instance} panelId={panelId} editing={editing} />
+            <definition.component
+              config={config}
+              instance={instance}
+              panelId={panelId}
+              editing={editing}
+              updateConfig={updateConfig}
+            />
           </WidgetErrorBoundary>
         ) : (
           <div className="widget-message">

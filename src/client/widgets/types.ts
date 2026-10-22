@@ -54,6 +54,10 @@ export interface WidgetProps<C> {
   panelId: string;
   // Edit mode: the widget is shown, not used
   editing: boolean;
+  // Changes some of its properties, saved with the panel as the properties
+  // panel's changes are: what people choose in the widget itself, e.g. a
+  // plot's series
+  updateConfig: (changes: Partial<C>) => void;
 }
 
 export interface WidgetDefinition<C> {

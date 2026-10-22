@@ -608,9 +608,11 @@ export class Session implements FrameSink, PluginSession {
               echo && typeof echo === 'object'
                 ? { field: optionalString(echo.field), truncate: number(echo.truncate, 1, MAX_TRUNCATE, 128) }
                 : null,
+            samples: message.samples === undefined ? null : strings(message.samples, 'samples'),
             onStatus: (state, text) => this.sendStreamStatus(id, state, text),
             onStats: (stats) => this.send({ type: 'topic.stats', id, stats }),
             onEcho: (update) => this.send({ type: 'topic.echo', id, ...update }),
+            onSamples: (samples) => this.send({ type: 'topic.samples', id, ...samples }),
           }),
         );
         return;

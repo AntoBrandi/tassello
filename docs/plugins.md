@@ -118,6 +118,7 @@ The component receives:
 | `instance` | The widget in its panel: `id`, `type`, `title`, position and size |
 | `panelId` | The panel's id |
 | `editing` | Edit mode: the widget is shown, not used. Disable its controls |
+| `updateConfig(changes)` | Changes some of its properties, saved with the panel as the side panel's changes are: what people choose in the widget itself (the Plot's series) |
 
 A widget fills its cell (`height: 100%` works). A widget that throws shows its error instead of
 breaking the board.
@@ -183,7 +184,7 @@ function useArms() {
 | `networkAction(request)` | Changes them (`NetworkRequest`): `connect`, `disconnect`, `create` (a Wi-Fi network, an access point, a cable's: `NetworkSettings`), `modify`, `delete`, `wifi` (on or off), `rescan`; resolves once NetworkManager is done with `{ uuid, message }`, rejects with why not. `secrets` resolves with a Wi-Fi network's name and password (`NetworkSecrets`). The dashboard's own pages only |
 | `subscribeGraph(callback)` | The ROS graph: its topics with their publishers and subscribers, its services and actions with the nodes serving and using them, its nodes (`GraphSnapshot` in `src/shared/monitor.ts`), again whenever it changes. Returns the unsubscribe function |
 | `subscribeTopicInfo(topic, callback)` | A topic's publishers and subscriptions with their QoS, and those that cannot talk (`ros2 topic info -v`, `TopicDetails`) |
-| `subscribeTopicMonitor({ topic, window, echo }, { stats, echo, status })` | A topic's rate, bandwidth and delay over its latest `window` messages (`ros2 topic hz`, `bw`, `delay`, `TopicStats`), and its messages if `echo` (`{ field, truncate }`), at most 10 a second: JSON, but for lists and strings cut, 64 bit integers beyond JavaScript's and NaN (see `TruncatedValue` and the like) |
+| `subscribeTopicMonitor({ topic, window, echo, samples }, { stats, echo, samples, status })` | A topic's rate, bandwidth and delay over its latest `window` messages (`ros2 topic hz`, `bw`, `delay`, `TopicStats`), and its messages if `echo` (`{ field, truncate }`), at most 10 a second: JSON, but for lists and strings cut, 64 bit integers beyond JavaScript's and NaN (see `TruncatedValue` and the like). With `samples`, fields' paths (`twist.twist.linear.x`, `effort[2]`), the numbers of every message at them, ten batches a second (`TopicSamples`: when each message came, and each field's numbers, `null` where it has none) |
 | `publishTopic({ topic, messageType, message, rate, times, qos }, callback)` | Publishes as `ros2 topic pub`: once (`rate` 0), `times` times or until the returned function is called (`times` 0), the message made from its JSON as a checked call's request; the count published comes as it goes (`PublishState`) |
 | `interfaceInfo(type)` | An interface's definition (`ros2 interface show`), the schemas of its messages and their default values (`InterfaceInfo`) |
 | `subscribeAction({ action, actionType }, { goals, status })` | What an action's servers are doing: their goals, whoever sent them, with their status and latest feedback, and the results of those the dashboard sent (`ActionGoal`). Returns the unsubscribe function |

@@ -15,6 +15,7 @@ import type {
   PublishState,
   TopicDetails,
   TopicEcho,
+  TopicSamples,
   TopicStats,
 } from './monitor.ts';
 import type { NetworkRequest, NetworkState } from './networking.ts';
@@ -324,7 +325,8 @@ export interface TopicInfoSubscribe {
 // A topic's figures (ros2 topic hz, bw and delay, over the latest window
 // messages) as topic.stats updates, twice a second while messages come, and
 // its messages (ros2 topic echo), at most ECHO_RATE a second, as topic.echo
-// updates. Its status comes as stream.status.
+// updates; the numbers of every message at some fields, as topic.samples
+// updates every SAMPLES_PERIOD_MS. Its status comes as stream.status.
 export interface TopicMonitorSubscribe {
   type: 'topic.monitor';
   id: number;
@@ -333,6 +335,9 @@ export interface TopicMonitorSubscribe {
   // Of the messages: their field at this path (all of them: ''), lists and
   // strings cut to truncate items; null: not echoed
   echo: { field: string; truncate: number } | null;
+  // Paths of fields, as echo's (twist.twist.linear.x, effort[2]), at most
+  // MAX_SAMPLED_FIELDS; none: not sampled
+  samples?: string[];
 }
 
 // Publishes on a topic (ros2 topic pub): message is made from the type's
@@ -1121,6 +1126,11 @@ export interface TopicEchoUpdate extends TopicEcho {
   id: number;
 }
 
+export interface TopicSamplesUpdate extends TopicSamples {
+  type: 'topic.samples';
+  id: number;
+}
+
 // Of a topic.publish subscription
 export interface TopicPublished extends PublishState {
   type: 'topic.published';
@@ -1205,6 +1215,7 @@ export type ServerMessage =
   | TopicInfoUpdate
   | TopicStatsUpdate
   | TopicEchoUpdate
+  | TopicSamplesUpdate
   | TopicPublished
   | ActionGoals
   | ParamsUpdate

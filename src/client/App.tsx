@@ -326,6 +326,16 @@ export function App() {
     [updatePanel],
   );
 
+  // What a widget changes of its own config (WidgetProps.updateConfig)
+  const configureWidget = useCallback(
+    (id: string, changes: Record<string, unknown>) =>
+      updatePanel((p) => ({
+        ...p,
+        widgets: p.widgets.map((w) => (w.id === id ? { ...w, config: { ...w.config, ...changes } } : w)),
+      })),
+    [updatePanel],
+  );
+
   // On the device shown (a tablet or a phone), or shown again
   const hideWidget = useCallback(
     (id: string, hide = true) => {
@@ -654,6 +664,7 @@ export function App() {
                   onSelect={setSelectedId}
                   onPlace={placeWidget}
                   onRemove={removeWidget}
+                  onConfigure={configureWidget}
                   onHide={device === 'desktop' ? undefined : hideWidget}
                   onVisibleColumns={onVisibleColumns}
                 />

@@ -130,6 +130,16 @@ export interface SpecialNumber {
   $number: 'nan' | 'inf' | '-inf';
 }
 
+// Of every message, the numbers at the fields asked for (a plot's): see
+// sampleValue in src/server/message_format.ts
+export interface TopicSamples {
+  // When each message came, on the server's clock (ms since the epoch),
+  // oldest first
+  at: number[];
+  // By field asked for, of each message: its number, null if it has none
+  values: (number | null)[][];
+}
+
 export interface TopicEcho {
   // Of the messages received since the page started following the topic:
   // those between two echoes are not sent
@@ -242,3 +252,7 @@ export const ECHO_RATE = 10;
 export const MAX_WINDOW = 10_000;
 // Of ros2 topic echo's --truncate-length: the page asks for less
 export const MAX_TRUNCATE = 10_000;
+// Fields sampled of a topic, at most, for a page
+export const MAX_SAMPLED_FIELDS = 64;
+// How often the samples of the messages since the last are sent
+export const SAMPLES_PERIOD_MS = 100;
