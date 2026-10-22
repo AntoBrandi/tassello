@@ -9,22 +9,25 @@
 // outlives its last page for LINGER_MS: a page reloaded, or a panel shown
 // again, finds the nodes as they are, which the log only says when they change.
 //
-// A topic is recorded into a rosbag (ros2 bag record) when a page asks, until
-// one asks to stop: every page following it is told. A bag is played back for
-// the page that opens it (behavior_tree_playback.ts).
+// A topic is recorded into a rosbag when a page asks, until one asks to stop
+// (or a Rosbags widget stops it): every page following it is told. The
+// recording is the server's rosbags' (rosbags.ts), as the Rosbags widgets'
+// are. A bag is played back for the page that opens it
+// (behavior_tree_playback.ts).
 
 import { promises as fs } from 'node:fs';
 
 import type rclnodejs from 'rclnodejs';
 
 import { BT_RATE, type BehaviorTreeRecording, type BehaviorTreeUpdate } from '../shared/protocol.ts';
+import { DEFAULT_RECORD_OPTIONS, type RecordOptions } from '../shared/rosbag.ts';
 import { readTree, type TreeInfo } from './behavior_tree_file.ts';
 import { logTransitions, type LogTransition } from './behavior_tree_log.ts';
 import { BehaviorTreePlayback, type PlaybackWatcher } from './behavior_tree_playback.ts';
 import { BehaviorTreeState } from './behavior_tree_state.ts';
 import type { StreamState } from './frame_stream.ts';
 import { publishersQos } from './qos.ts';
-import { BagRecorder, newBagFolder } from './rosbag.ts';
+import type { Rosbags } from './rosbags.ts';
 import { absoluteTopic, errorMessage, type Logger } from './util.ts';
 
 // How often the graph is checked for the topic's publishers, until it has one
@@ -288,13 +291,6 @@ async function version(file: string): Promise<string> {
   return stat ? `${stat.size}-${stat.mtimeMs}` : '';
 }
 
-interface Recording {
-  path: string;
-  since: number;
-  // null while it starts
-  recorder: BagRecorder | null;
-}
-
 export class BehaviorTrees {
   private readonly node: rclnodejs.Node;
   private readonly logger: Logger;
@@ -302,13 +298,24 @@ export class BehaviorTrees {
   private readonly topics = new Map<string, LogTopic>();
   // By topic, then tree source
   private readonly monitors = new Map<string, Map<string, TreeMonitor>>();
-  // By topic
-  private readonly recordings = new Map<string, Recording>();
+  private readonly rosbags: Rosbags;
+  // By topic: the folder it is recorded into, '' while it starts
+  private readonly recordings = new Map<string, string>();
 
-  constructor(node: rclnodejs.Node, logger: Logger, uploadsDir: string) {
+  constructor(node: rclnodejs.Node, logger: Logger, uploadsDir: string, rosbags: Rosbags) {
     this.node = node;
     this.logger = logger;
     this.uploadsDir = uploadsDir;
+    this.rosbags = rosbags;
+    // A recording stopped elsewhere, or by itself
+    rosbags.onChange(() => {
+      for (const [topic, folder] of this.recordings) {
+        if (folder && !rosbags.recording(folder)) {
+          this.recordings.delete(topic);
+          this.announce(topic);
+        }
+      }
+    });
   }
 
   // Until the returned function is called
@@ -343,42 +350,32 @@ export class BehaviorTrees {
 
   // Records the topic into a new folder, or stops (path null): resolves with
   // the bag's folder, null if it was not recording
-  async record(topic: string, path: string | null): Promise<string | null> {
+  async record(topic: string, path: string | null, options: RecordOptions = DEFAULT_RECORD_OPTIONS): Promise<string | null> {
     const name = absoluteTopic(topic);
     const current = this.recordings.get(name);
     if (path === null) {
-      if (!current?.recorder) {
+      if (!current) {
         return null;
       }
       this.recordings.delete(name);
       this.announce(name);
-      await current.recorder.stop();
-      this.logger.info(`Recorded ${name} into ${current.path}`);
-      return current.path;
+      return this.rosbags.stop(current);
     }
-    if (current) {
-      throw new Error(`${name} is being recorded already, into ${current.path}`);
+    if (current !== undefined) {
+      throw new Error(`${name} is being recorded already${current ? `, into ${current}` : ''}`);
     }
-    const recording: Recording = { path: '', since: 0, recorder: null };
-    this.recordings.set(name, recording);
+    this.recordings.set(name, '');
+    let folder: string;
     try {
-      recording.path = await newBagFolder(path);
-      recording.recorder = await BagRecorder.start(recording.path, [name]);
+      const request = { path, topics: [name], all: false, regex: '', exclude: '', options };
+      folder = (await this.rosbags.record(request, 'behavior-tree')).path;
     } catch (e) {
       this.recordings.delete(name);
       throw new Error(`Cannot record ${name}: ${errorMessage(e)}`);
     }
-    recording.since = Date.now();
-    recording.recorder.onExit = (reason) => {
-      if (this.recordings.get(name) === recording) {
-        this.recordings.delete(name);
-        this.announce(name);
-        this.logger.warn(`Recording ${name} stopped: ${reason}`);
-      }
-    };
-    this.logger.info(`Recording ${name} into ${recording.path}`);
+    this.recordings.set(name, folder);
     this.announce(name);
-    return recording.path;
+    return folder;
   }
 
   // A bag played back for a page, until closed
@@ -386,16 +383,10 @@ export class BehaviorTrees {
     return new BehaviorTreePlayback({ bag, topic, tree: tree.trim(), uploadsDir: this.uploadsDir, logger: this.logger }, watcher);
   }
 
-  // The recordings completed, as the server stops
-  async stopAll(): Promise<void> {
-    const recorders = [...this.recordings.values()].flatMap((recording) => recording.recorder ?? []);
-    this.recordings.clear();
-    await Promise.all(recorders.map((recorder) => recorder.stop()));
-  }
-
   private recordingOf(topic: string): RecordingInfo {
-    const recording = this.recordings.get(topic);
-    return recording?.recorder ? { path: recording.path, since: recording.since } : null;
+    const folder = this.recordings.get(topic);
+    const recording = folder ? this.rosbags.recording(folder) : null;
+    return recording ? { path: recording.path, since: recording.since } : null;
   }
 
   private announce(topic: string): void {

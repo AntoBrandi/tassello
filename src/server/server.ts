@@ -33,6 +33,7 @@ import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
 import { Poses } from './poses.ts';
 import { Ros } from './ros.ts';
 import { RosGraph } from './ros_graph.ts';
+import { Rosbags } from './rosbags.ts';
 import { Rosout } from './rosout.ts';
 import { Session } from './session.ts';
 import { FrameStreams } from './streams.ts';
@@ -141,7 +142,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const networking = new Networking(logger);
   // Next to the panels
   const uploadsDir = path.join(path.dirname(panelsDir), 'images');
-  const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir);
+  const rosbags = new Rosbags(ros, logger);
+  const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir, rosbags);
   const behaviorTreeFiles = new BehaviorTreeFiles(uploadsDir, logger);
   const host = new PluginHost(plugins);
   await host.activate({
@@ -204,6 +206,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         interfaces,
         actions,
         parameters,
+        rosbags,
         plugins: host,
         hostname: os.hostname(),
       },
@@ -260,7 +263,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     // recorded to be completed
     void Promise.all([
       host.shutdown(logger),
-      behaviorTrees.stopAll(),
+      rosbags.stopAll(),
       new Promise((resolve) => setTimeout(resolve, 200)),
     ]).finally(() => {
       node.destroy();

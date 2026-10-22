@@ -32,6 +32,8 @@ import type { Poses } from './poses.ts';
 import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
 import type { Ros } from './ros.ts';
+import { checkBagsRequest, checkRecordOptions } from './rosbag_format.ts';
+import type { Rosbags } from './rosbags.ts';
 import type { RosGraph } from './ros_graph.ts';
 import type { Rosout } from './rosout.ts';
 import type { FrameStreams } from './streams.ts';
@@ -68,6 +70,7 @@ export interface SessionServices {
   interfaces: Interfaces;
   actions: Actions;
   parameters: Parameters;
+  rosbags: Rosbags;
   plugins: PluginHost;
   hostname: string;
 }
@@ -336,9 +339,12 @@ export class Session implements FrameSink, PluginSession {
       case 'bt.record':
         this.answer(
           message.id,
-          services.behaviorTrees.record(
-            string(message.topic, 'topic'),
-            message.path === null ? null : string(message.path, 'path'),
+          Promise.resolve().then(() =>
+            services.behaviorTrees.record(
+              string(message.topic, 'topic'),
+              message.path === null ? null : string(message.path, 'path'),
+              checkRecordOptions(message.options),
+            ),
           ),
         );
         return;
@@ -682,6 +688,23 @@ export class Session implements FrameSink, PluginSession {
             }
             return services.parameters.load(string(message.node, 'node'), message.yaml);
           }),
+        );
+        return;
+
+      case 'bags.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.rosbags.watch(optionalString(message.folder) || '~', (update) => this.send({ type: 'bags', id, ...update })),
+        );
+        return;
+      }
+
+      case 'bags.action':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() => services.rosbags.act(checkBagsRequest(message.request), this.ownPage)),
         );
         return;
 

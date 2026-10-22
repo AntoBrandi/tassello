@@ -18,6 +18,7 @@ import type {
 } from './monitor.ts';
 import type { NetworkRequest, NetworkState } from './networking.ts';
 import type { ParamInfo, ParamValue } from './parameters.ts';
+import type { BagCapabilities, BagInfo, BagsRequest, Playback, Recording, RecordOptions } from './rosbag.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
@@ -277,6 +278,25 @@ export interface ParamsLoad {
   yaml: string;
 }
 
+// The rosbags of a folder (/…, ~/…), the newest first, with what their
+// metadata says (BagInfo), and the robot's recordings and playback, as bags
+// updates: again whenever they change. The folder is read every few seconds
+// while followed.
+export interface BagsSubscribe {
+  type: 'bags.subscribe';
+  id: number;
+  folder: string;
+}
+
+// Records, stops, deletes, plays a bag and controls its playback (see
+// BagsRequest): answered by a result with the same id. Bags are deleted from
+// the dashboard's own pages only.
+export interface BagsAction {
+  type: 'bags.action';
+  id: number;
+  request: BagsRequest;
+}
+
 // The ROS graph: its topics, services, actions and nodes (GraphSnapshot), as
 // graph updates, again whenever it changes
 export interface GraphSubscribe {
@@ -397,13 +417,16 @@ export interface BehaviorTreeSubscribe {
 }
 
 // Records a behavior tree's log into a rosbag (ros2 bag record into the new
-// folder path), or stops recording it (path null): answered by a result, the
-// bag's folder. Every page following the topic is told (bt.recording).
+// folder path, with options: rosbag2's defaults if not given), or stops
+// recording it (path null): answered by a result, the bag's folder. Every
+// page following the topic is told (bt.recording), and the recording is one
+// of the Rosbags widgets' (bags).
 export interface BehaviorTreeRecord {
   type: 'bt.record';
   id: number;
   topic: string;
   path: string | null;
+  options?: RecordOptions;
 }
 
 // A rosbag of a behavior tree's log, played back for this page: as a bt
@@ -599,7 +622,9 @@ export type ClientMessage =
   | ParamsSubscribe
   | ParamsSet
   | ParamsDump
-  | ParamsLoad;
+  | ParamsLoad
+  | BagsSubscribe
+  | BagsAction;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -1103,6 +1128,22 @@ export interface ParamsUpdate {
   deleted: string[];
 }
 
+// Of a bags subscription
+export interface BagsUpdate {
+  type: 'bags';
+  id: number;
+  // Absolute
+  folder: string;
+  // null until read, or if it cannot be (error)
+  bags: BagInfo[] | null;
+  error: string | null;
+  // All of the robot's, wherever they record
+  recordings: Recording[];
+  playback: Playback | null;
+  // null until known
+  capabilities: BagCapabilities | null;
+}
+
 // Of an action subscription: its goals, the latest accepted first
 export interface ActionGoals {
   type: 'action.goals';
@@ -1143,6 +1184,7 @@ export type ServerMessage =
   | TopicPublished
   | ActionGoals
   | ParamsUpdate
+  | BagsUpdate
   | PanelsChanged
   | ErrorMessage;
 

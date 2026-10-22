@@ -85,6 +85,7 @@ export type {
   OverlayKind,
   OverlayUpdate,
   ParamsUpdate,
+  BagsUpdate,
   RosoutUpdate,
   ServerMessage,
   StreamStatus,
@@ -95,6 +96,19 @@ export type {
 } from '../../shared/protocol.ts';
 export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
 export type { ParamDescriptor, ParamInfo, ParamResult, ParamScalar, ParamType, ParamValue } from '../../shared/parameters.ts';
+export type {
+  BagCapabilities,
+  BagFile,
+  BagInfo,
+  BagsRequest,
+  BagTopic,
+  CompressionMode,
+  Playback,
+  PlayRequest,
+  Recording,
+  RecordOptions,
+  RecordRequest,
+} from '../../shared/rosbag.ts';
 export type {
   ActionGoal,
   BigIntValue,

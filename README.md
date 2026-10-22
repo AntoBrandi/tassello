@@ -12,7 +12,8 @@ and plugins add more.
 - **Built in**: teleop pads, a Nav2 map with goals, the robot's URDF in 3D, an arm jogger, cameras,
   images, command buttons, a systemd application manager, a behavior tree inspector and
   editor, the ROS log of every node, the robot's diagnostics, its topics, services and actions
-  as the `ros2` command line shows them, its nodes' parameters, a file manager, a terminal, and its networks: Wi-Fi
+  as the `ros2` command line shows them, its nodes' parameters, its rosbags (recorded, listed,
+  downloaded and played back), a file manager, a terminal, and its networks: Wi-Fi
   joined, connections switched, the robot as an access point.
 - **Plugins**: widgets of your own, with server-side code if they need it, as npm or ROS packages.
 - **One process**: a ROS 2 node in Node.js. Nothing to install on the robot but Node.js.
@@ -132,6 +133,7 @@ after the others on the devices already arranged.
 | **Diagnostics** | The robot's diagnostics (`/diagnostics`, or the aggregator's `/diagnostics_agg`), as rqt_robot_monitor shows them: each status's level, the groups with the worst under them, those with problems unfolded. As a tree, as a list (the worst first) or as the latest changes of level, filtered by level and by text; a widget can be for some statuses only. A status's details: its message, hardware ID, values and latest changes. Pause, download, and forget the statuses no longer published |
 | **ROS Monitor** | The ROS graph, as the `ros2` command line shows it, on three sheets: its topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's messages, their rate, bandwidth and delay, its publishers and subscriptions with their QoS and those that cannot talk, a message to publish once or at a rate (`ros2 topic echo`, `hz`, `bw`, `delay`, `info -v`, `pub`); a service to call, once or at a rate (`ros2 service call`, `info`, `echo`); every goal of an action, whoever sent it, with its feedback, and a goal to send or cancel (`ros2 action send_goal`, `info`); their types' definitions (`ros2 interface show`) |
 | **Parameters** | Nodes' parameters, as rqt_reconfigure and `ros2 param` show them: the nodes of the graph, and the parameters of the one chosen grouped by their prefixes, each edited in place (a switch, a slider within its range, a field), live as they change wherever they are set. Their descriptions, ranges and constraints (`ros2 param describe`); new ones set and undeclared ones deleted (`set`, `delete`); all of them dumped as YAML, downloaded or saved on the robot (`dump`), and loaded from a YAML file of the robot or of the page's device (`load`) |
+| **Rosbags** | The robot's rosbags, as `ros2 bag` makes and reads them: those of a folder, the newest first, with when, how long and how big, their storage and compression, each topic's type, count and rate (`ros2 bag info`); downloaded, deleted, or played on the robot's topics (`ros2 bag play`: paused, sought, sped up, looped, some topics only). New ones recorded (`ros2 bag record`): topics chosen from the graph, all of them, or matching an expression, with rosbag2's options: the storage (MCAP, SQLite) and its preset, a new file by size or duration, compression of each file or message. Every page sees the recordings and the playback, the behavior tree inspectors' too |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 | **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
 | **Networking** | The robot's networks, through NetworkManager, as a phone's settings show them: the Wi-Fi networks in range, joined with their password; the connections saved, switched between, edited (their addresses by DHCP or static), forgotten; the robot as an access point, its network shared by a QR code; the interfaces, their state and addresses. Asks before a change that would cut the page off from the robot |
@@ -198,12 +200,14 @@ Notes on some of them:
   shows how it last ended.
 
   Its record button records the log on the robot with `ros2 bag record`, into a new folder
-  (`<recordings folder>/behavior_tree_<date>_<time>` by default), until pressed again: every
-  page showing the topic shows it recording. Its playback button opens a rosbag of the robot
+  (`<recordings folder>/behavior_tree_<date>_<time>` by default), with the Rosbags widget's
+  advanced options, until pressed again: every page showing the topic shows it recording, and
+  the Rosbags widgets list it (and may stop it). Its playback button opens a rosbag of the robot
   (a bag's folder, or its `.mcap` or `.db3` file, e.g. of a whole run recorded with
   `ros2 bag record -a`) and plays its log in the widget, on the tree of its file, without
   publishing anything: pause, seek and choose the speed (0.1× to 16×). Bags of Humble and of
-  Jazzy are read either way; SQLite bags need Node.js 22.13, zstd compressed MCAP 22.15.
+  Jazzy are read either way, compressed by rosbag2 (zstd, each file or each message) or not;
+  SQLite bags need Node.js 22.13, zstd compressed ones 22.15.
 - **Behavior Tree Editor** edits one BehaviorTree of the file at a time (its toolbar switches
   between them, adds new ones, and double clicking a subtree opens its tree, even in an included
   file). Add a node from the palette by dragging it where it goes (into a node, or beside one), or
@@ -320,6 +324,29 @@ Notes on some of them:
   node's section, and the `/**` one) and sets its parameters one by one, saying which the node
   refused and why. Parameter files are read and written by Python's yaml, as `ros2 param` does. A
   widget can be *view only*.
+- **Rosbags** lists the bags of its *folder* (`~/bags` by default; the toolbar browses for
+  another): its folders holding a bag, and its lone `.mcap` and `.db3` files, the newest first,
+  read again every 2 s while shown. What a bag holds is read from its `metadata.yaml` (Humble's
+  and Jazzy's); a bag without it (its recording killed) from its files: MCAP's summary, SQLite's
+  tables (up to 64 MB), and it says so (`ros2 bag reindex` makes the metadata). A bag's details
+  give its path, its time span, its files, and its topics with their types, counts and rates.
+  *Download* sends a folder as a `.tar.gz`, a file as it is; *Delete* deletes bags only, a folder
+  holding anything else than a bag's files being refused (the File Manager deletes those).
+  *Record* runs `ros2 bag record` into a new folder (`<folder>/rosbag2_<date>_<time>`): the
+  topics chosen from the graph (the widget's *topics to record* chosen first, others typed in),
+  or all of them, and those matching a regular expression, but those matching another. Its
+  *Advanced* options are `ros2 bag record`'s: the storage (the distribution's default, MCAP or
+  SQLite, as `ros2 bag list storage` lists them) and its preset (MCAP's `fastwrite`, `zstd_fast`,
+  `zstd_small`, SQLite's `resilient`), a new file at a size or a duration (`-b`, `-d`), the
+  compression of each file or of each message and its format (`ros2 bag list compressor`: zstd;
+  MCAP compresses its chunks with its presets instead, each message is refused), the cache, the
+  hidden topics and sim time. The page remembers them for the next recording, the behavior tree
+  inspector's too. Recordings show above the bags with their time and size, stopped as Ctrl+C
+  stops them, which completes the bag; the server stops them too when it stops. *Play* runs
+  `ros2 bag play`, one bag at a time: its messages published again on the robot's topics, at a
+  rate, looped, from an offset, some topics only, `/clock` published or not, started paused.
+  Pause, seek and the rate go through the player's services (`/rosbag2_player/…`); where it is
+  is the server's reckoning from them. A widget can be *view only*.
 - **File Manager** opens its *folder* (`~` by default; `/…`, `~/…`, `package://…`) and lists it
   with its entries' sizes and times, sorted by name (naturally: `run_2` before `run_10`), size or
   time, folders first; the chevrons unfold folders in place. Its places are home, the root, the
@@ -467,16 +494,16 @@ and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
 
 Tassello has no login. **Anyone who can open the page can drive the robot, publish on any topic,
 call any service and send or cancel any goal (the ROS Monitor), change any node's parameters
-(Parameters), run any command as
+(Parameters), record, play and delete rosbags (Rosbags), run any command as
 the server's user (the Terminal, a shell), read, write, upload, move and delete any of the
 files that user can (the File Manager), and change the robot's networks and read their passwords
 (Networking)**: keep it on a network you trust, or behind a reverse proxy
 with authentication (it serves everything under `/`, its WebSocket at `/ws`). Changes to the files
 are accepted from the dashboard's own pages only (they send a header that another site's page
 cannot), and the root, the home folder and the system's top folders (`/usr`, `/etc`…) are never
-deleted nor moved. Terminals open, and networks change, from the dashboard's own pages only too:
-those whose origin is the host they reached (the `Host` header, or the `X-Forwarded-Host` a
-reverse proxy sets), which another site's page cannot pretend.
+deleted nor moved. Terminals open, networks change and rosbags are deleted from the dashboard's
+own pages only too: those whose origin is the host they reached (the `Host` header, or the
+`X-Forwarded-Host` a reverse proxy sets), which another site's page cannot pretend.
 
 ## How it works
 
@@ -489,6 +516,7 @@ reverse proxy sets), which another site's page cannot pretend.
                                                                         ├─ bash: the buttons' commands
                                                                         ├─ python3: the terminals' pseudo-terminals
                                                                         ├─ nmcli: the networks (NetworkManager)
+                                                                        ├─ ros2 bag: rosbags recorded and played
                                                                         └─ the plugins' server sides
 ```
 
@@ -522,6 +550,10 @@ Safety and bandwidth are the server's concern:
   and every 3 s for the signals of the Wi-Fi networks in range, which are scanned for when a page
   opens the widget (at most every 30 s) or asks. Passwords are on `nmcli`'s command line only for
   the moment it takes to save them, activating a connection being another command.
+- Rosbags are recorded and played by `ros2 bag`, the robot's own, as children of the server:
+  one recording per folder, for every page (the behavior tree inspectors' among them), one
+  playback. A folder of bags is read once for every page showing it, every 2 s, a bag's metadata
+  again only when its files change; the recordings' sizes every second.
 - The File Manager's folders are read again every 3 s, and answered "unchanged" while they are;
   the largest are listed in part (5,000 entries), and only the rows in sight are drawn. Uploads
   and downloads are streamed, folders archived by `tar` as they are sent; saves replace files at

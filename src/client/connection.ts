@@ -16,12 +16,15 @@ import type {
 } from '../shared/monitor.ts';
 import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
 import type { ParamResult, ParamValue } from '../shared/parameters.ts';
+import type { BagsRequest, Playback, Recording, RecordOptions } from '../shared/rosbag.ts';
 import {
   FRAME_HEADER_BYTES,
   IMAGE_FORMATS,
   type ActionSubscribe,
   type ArmSubscribe,
   type ArmUpdate,
+  type BagsSubscribe,
+  type BagsUpdate,
   type BehaviorTreeFile,
   type BehaviorTreeFileSubscribe,
   type BehaviorTreeInfo,
@@ -206,7 +209,8 @@ type Request =
   | Omit<TopicInfoSubscribe, 'id'>
   | Omit<TopicMonitorSubscribe, 'id'>
   | Omit<TopicPublish, 'id'>
-  | Omit<ActionSubscribe, 'id'>;
+  | Omit<ActionSubscribe, 'id'>
+  | Omit<BagsSubscribe, 'id'>;
 
 interface Subscription {
   // Or made anew on every connection
@@ -232,6 +236,7 @@ interface Subscription {
   topicMonitor?: TopicMonitorHandlers;
   published?: (state: PublishState) => void;
   action?: ActionHandlers;
+  bags?: (update: BagsUpdate) => void;
 }
 
 const MIN_RETRY_MS = 500;
@@ -242,8 +247,16 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const CALL_TIMEOUT_MS = 5000;
 // Time for the answer to travel, on top of the server's own timeout
 const RESULT_MARGIN_MS = 2000;
-// Of ros2 bag record, to start or to complete the bag
+// Of ros2 bag record, to start or to complete the bag; of ros2 bag play, to
+// open it
 const RECORD_TIMEOUT_MS = 20_000;
+// Of the rosbags' actions: deleting large ones takes a while
+const BAGS_TIMEOUTS: Partial<Record<BagsRequest['action'], number>> = {
+  record: RECORD_TIMEOUT_MS,
+  stop: RECORD_TIMEOUT_MS,
+  play: RECORD_TIMEOUT_MS,
+  delete: 60_000,
+};
 // Of a network action: NetworkManager is given a minute to activate a
 // connection
 const NETWORK_TIMEOUT_MS = 80_000;
@@ -369,11 +382,12 @@ export class Connection {
     return this.subscribe({ type: 'bt.subscribe', ...options }, { behaviorTree: handlers });
   }
 
-  // Records a behavior tree's log into a rosbag, in the new folder path, or
-  // stops recording it (null): resolves with the bag's folder
-  recordBehaviorTree(topic: string, path: string | null): Promise<string | null> {
+  // Records a behavior tree's log into a rosbag, in the new folder path (with
+  // ros2 bag record's options, else its defaults), or stops recording it
+  // (null): resolves with the bag's folder
+  recordBehaviorTree(topic: string, path: string | null, options?: RecordOptions): Promise<string | null> {
     const id = this.nextId++;
-    const sent = this.send({ type: 'bt.record', id, topic, path });
+    const sent = this.send({ type: 'bt.record', id, topic, path, options });
     return this.result<string | null>(id, sent, RECORD_TIMEOUT_MS);
   }
 
@@ -598,6 +612,27 @@ export class Connection {
     const id = this.nextId++;
     const sent = this.send({ type: 'params.load', id, node, yaml });
     return this.result<ParamResult[]>(id, sent, REQUEST_TIMEOUT_MS);
+  }
+
+  // The rosbags of a folder, the robot's recordings and its playback (see
+  // BagsUpdate), again whenever they change. Renewed on every connection.
+  // Returns the unsubscribe function.
+  subscribeBags(folder: string, callback: (update: BagsUpdate) => void): () => void {
+    return this.subscribe({ type: 'bags.subscribe', folder }, { bags: callback });
+  }
+
+  // Records (ros2 bag record), stops a recording, deletes bags, plays one
+  // (ros2 bag play) and controls its playback: see BagsRequest for what each
+  // resolves with
+  bagsAction(request: Extract<BagsRequest, { action: 'record' }>): Promise<Recording>;
+  bagsAction(request: Extract<BagsRequest, { action: 'play' }>): Promise<Playback>;
+  bagsAction(request: Extract<BagsRequest, { action: 'stop' }>): Promise<string | null>;
+  bagsAction(request: Extract<BagsRequest, { action: 'delete' }>): Promise<string[]>;
+  bagsAction(request: BagsRequest): Promise<null>;
+  bagsAction(request: BagsRequest): Promise<unknown> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'bags.action', id, request });
+    return this.result(id, sent, BAGS_TIMEOUTS[request.action] ?? REQUEST_TIMEOUT_MS);
   }
 
   // What an action's servers are doing: their goals, whoever sent them, with
@@ -828,6 +863,9 @@ export class Connection {
         break;
       case 'params':
         this.subscriptions.get(message.id)?.params?.update(message);
+        break;
+      case 'bags':
+        this.subscriptions.get(message.id)?.bags?.(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

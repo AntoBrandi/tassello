@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 
 import { decodeLog, logLayout } from './behavior_tree_log.ts';
 import { BehaviorTreePlayback, readLog, type PlaybackState } from './behavior_tree_playback.ts';
-import { bagFiles, newBagFolder, readBag } from './rosbag.ts';
+import { bagFiles, bagInfo, listBags, newBagFolder, openBag, readBag, type BagCache } from './rosbag.ts';
 
 const LOG_TYPE = 'nav2_msgs/msg/BehaviorTreeLog';
 
@@ -265,5 +265,123 @@ test('a bag is played back: seeked, at its speed, to its end', async () => {
     assert.equal(states.at(-1)?.time, 1400);
     assert.equal(states.at(-1)?.speed, 64);
     playback.close();
+  });
+});
+
+// ── Listing, metadata, compression ──
+
+const statistics = (start: number, end: number, counts: [number, number][]) => {
+  const map = Buffer.concat(counts.map(([id, count]) => Buffer.concat([u16(id), u64(count)])));
+  const total = counts.reduce((sum, [, count]) => sum + count, 0);
+  return record(0x0b, u64(total), u16(1), u32(counts.length), u32(0), u32(0), u32(1), u64(BigInt(start) * 1_000_000n), u64(BigInt(end) * 1_000_000n), u32(map.length), map);
+};
+
+function metadata({ storage, files, start, count, mode = '' }: { storage: string; files: string[]; start: number; count: number; mode?: string }) {
+  return [
+    'rosbag2_bagfile_information:',
+    '  version: 5',
+    `  storage_identifier: ${storage}`,
+    '  duration:',
+    '    nanoseconds: 2000000000',
+    '  starting_time:',
+    `    nanoseconds_since_epoch: ${start}000000`,
+    `  message_count: ${count}`,
+    '  topics_with_message_count:',
+    '    - topic_metadata:',
+    '        name: /behavior_tree_log',
+    `        type: ${LOG_TYPE}`,
+    '        serialization_format: cdr',
+    '        offered_qos_profiles: ""',
+    `      message_count: ${count}`,
+    `  compression_format: ${mode ? 'zstd' : '""'}`,
+    `  compression_mode: ${mode || '""'}`,
+    '  relative_file_paths:',
+    ...files.map((file) => `    - ${file}`),
+    '',
+  ].join('\n');
+}
+
+test('a folder’s bags: what their metadata says, else their files', async () => {
+  await withDir(async (dir) => {
+    const summary = [schema(1, LOG_TYPE), channel(1, 1, '/behavior_tree_log'), schema(2, 'sensor_msgs/msg/Image'), channel(2, 2, '/camera')];
+    await mkdir(path.join(dir, 'described'));
+    await writeFile(path.join(dir, 'described', 'run_0.mcap'), mcap([logChunk], summary, true));
+    await writeFile(path.join(dir, 'described', 'metadata.yaml'), metadata({ storage: 'mcap', files: ['run_0.mcap'], start: 3000, count: 2 }));
+    // Its recording killed: no metadata, but MCAP's summary
+    await mkdir(path.join(dir, 'killed'));
+    await writeFile(path.join(dir, 'killed', 'run_0.mcap'), mcap([logChunk, imageChunk], [...summary, statistics(1000, 2000, [[1, 2], [2, 1]])], true));
+    // Cut short: not even a summary
+    await writeFile(path.join(dir, 'lone.mcap'), mcap([logChunk], [], false).subarray(0, 40));
+    await mkdir(path.join(dir, 'notes'));
+    await writeFile(path.join(dir, 'notes', 'todo.txt'), 'nothing');
+    await mkdir(path.join(dir, '.hidden'));
+    await writeFile(path.join(dir, '.hidden', 'metadata.yaml'), '');
+
+    const cache: BagCache = new Map();
+    const bags = await listBags(dir, cache);
+    // The newest first: by their first message, else by their files' time
+    assert.deepEqual(bags.map((bag) => bag.name), ['lone.mcap', 'described', 'killed']);
+    const [lone, described, killed] = bags;
+    assert.equal(described.storage, 'mcap');
+    assert.equal(described.start, 3000);
+    assert.equal(described.duration, 2000);
+    assert.deepEqual(described.topics, [{ name: '/behavior_tree_log', type: LOG_TYPE, count: 2 }]);
+    assert.deepEqual(described.files.map((file) => file.name), ['run_0.mcap']);
+    assert.equal(described.problem, null);
+    assert.deepEqual(killed.topics, [
+      { name: '/behavior_tree_log', type: LOG_TYPE, count: 2 },
+      { name: '/camera', type: 'sensor_msgs/msg/Image', count: 1 },
+    ]);
+    assert.deepEqual([killed.start, killed.duration, killed.messages], [1000, 1000, 3]);
+    assert.match(killed.problem ?? '', /No metadata.yaml/);
+    assert.deepEqual([lone.path, lone.start, lone.topics], [path.join(dir, 'lone.mcap'), null, []]);
+    assert.equal(lone.size, 40);
+
+    // Read again only when their files change
+    assert.equal((await listBags(dir, cache))[1], described);
+    await utimes(path.join(dir, 'described', 'metadata.yaml'), new Date(), new Date(Date.now() + 5000));
+    assert.notEqual((await listBags(dir, cache))[1], described);
+    await assert.rejects(bagInfo(path.join(dir, 'notes')), /No rosbag in/);
+    assert.deepEqual(await listBags(path.join(dir, 'missing')), []);
+  });
+});
+
+test('bags compressed by rosbag2: each file, or each message', async (t) => {
+  await withDir(async (dir) => {
+    const records = [schema(1, LOG_TYPE), channel(1, 1, '/behavior_tree_log'), message(1, 1000, cdr([SPIN], true))];
+    const file = path.join(dir, 'files');
+    await mkdir(file);
+    await writeFile(path.join(file, 'run_0.mcap.zstd'), zlib.zstdCompressSync(mcap([{ records, compression: '', channels: [1] }], [], false)));
+    // What a playback of it leaves: not what is read
+    await writeFile(path.join(file, 'run_0.mcap'), 'left over');
+    await writeFile(path.join(file, 'metadata.yaml'), metadata({ storage: 'mcap', files: ['run_0.mcap.zstd'], start: 1000, count: 1, mode: 'FILE' }));
+    assert.deepEqual(await bagFiles(file), [path.join(file, 'run_0.mcap.zstd')]);
+    const read = await readBag(await openBag(file), () => true);
+    assert.equal(decodeLog(read.get('/behavior_tree_log')!.messages[0].data, true)[0].name, 'Spin');
+    assert.deepEqual((await bagInfo(file)).compression, { mode: 'file', format: 'zstd' });
+
+    let sqlite: typeof import('node:sqlite');
+    try {
+      sqlite = await import('node:sqlite');
+    } catch {
+      t.skip('node:sqlite is not available');
+      return;
+    }
+    const messages = path.join(dir, 'messages');
+    await mkdir(messages);
+    const db = new sqlite.DatabaseSync(path.join(messages, 'run_0.db3'));
+    db.exec(`CREATE TABLE topics (id INTEGER PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
+               serialization_format TEXT NOT NULL, offered_qos_profiles TEXT NOT NULL);
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, topic_id INTEGER NOT NULL, timestamp INTEGER NOT NULL, data BLOB NOT NULL);
+             INSERT INTO topics VALUES (1, '/behavior_tree_log', '${LOG_TYPE}', 'cdr', '');`);
+    db.prepare('INSERT INTO messages (topic_id, timestamp, data) VALUES (?, ?, ?)').run(1, 2_000_000_000n, zlib.zstdCompressSync(cdr([WAIT], true)));
+    db.close();
+    await writeFile(path.join(messages, 'metadata.yaml'), metadata({ storage: 'sqlite3', files: ['run_0.db3'], start: 2000, count: 1, mode: 'MESSAGE' }));
+    const log = (await readBag(await openBag(messages), () => true)).get('/behavior_tree_log')!;
+    assert.deepEqual(decodeLog(log.messages[0].data, true).map((transition) => transition.name), ['Wait']);
+    // Without its metadata, what the database says: counted
+    await rm(path.join(messages, 'metadata.yaml'));
+    const info = await bagInfo(messages);
+    assert.deepEqual([info.storage, info.start, info.duration, info.messages], ['sqlite3', 2000, 0, 1]);
   });
 });

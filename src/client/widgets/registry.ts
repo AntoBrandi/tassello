@@ -22,6 +22,7 @@ import { navigationWidget } from './NavigationWidget.tsx';
 import { networkingWidget } from './networking/NetworkingWidget.tsx';
 import { parametersWidget } from './parameters/ParametersWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
+import { rosbagsWidget } from './rosbags/RosbagsWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
 import type { RegisteredWidget, TasselloClientPlugin } from './types.ts';
@@ -44,6 +45,7 @@ const CORE: RegisteredWidget[] = [
   diagnosticsWidget,
   monitorWidget,
   parametersWidget,
+  rosbagsWidget,
   fileManagerWidget,
   terminalWidget,
   networkingWidget,

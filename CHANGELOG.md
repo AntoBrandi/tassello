@@ -5,6 +5,22 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Rosbags widget: the robot's rosbags, as `ros2 bag` makes and reads them. A folder's bags, the
+  newest first, with their time span, size, storage and compression, and each topic's type,
+  count and rate, from their `metadata.yaml` (Humble's and Jazzy's), else from their files (a
+  recording killed: MCAP's summary, SQLite's tables). Downloaded (folders as `.tar.gz`), deleted
+  (bags only, from the dashboard's own pages), or played on the robot's topics with
+  `ros2 bag play`: paused, sought, sped up, looped, from an offset, some topics only, `/clock`
+  published. New ones recorded with `ros2 bag record`: topics chosen from the graph, all of them,
+  or matching a regular expression, but those matching another; with its advanced options, the
+  storage (MCAP, SQLite) and its preset, a new file by size or duration, the compression of each
+  file or message and its format, the cache, hidden topics, sim time. The recordings and the
+  playback are the robot's: every page sees them, and stops them.
+- Behavior Tree Inspector: its recordings are made by the same rosbags service, with the same
+  advanced options, and listed (and stopped) by the Rosbags widgets. Bags compressed by rosbag2
+  (zstd, each file or each message) are played back too.
+- Plugins: `connection.subscribeBags`, `bagsAction`, `recordBehaviorTree`'s options, and the
+  types of `src/shared/rosbag.ts`.
 - Parameters widget: nodes' parameters, as rqt_reconfigure and `ros2 param` show them. A node's
   parameters grouped by their prefixes, each edited in place (a switch, a slider within its range,
   a field), with what the node refuses and why; changes made elsewhere followed live on

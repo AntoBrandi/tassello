@@ -168,7 +168,7 @@ function useArms() {
 | `subscribeTf({ targetFrame, sourceFrame, rate }, callback)` | A frame's 2D pose in another |
 | `subscribeOverlay({ kind, topic, frame }, { overlay, status })` | A laser scan's points (`kind: 'scan'`, `sensor_msgs/msg/LaserScan`) or a footprint's polygon (`'footprint'`, `geometry_msgs/msg/PolygonStamped`), put in `frame` by TF as each arrives: `{ points, error }`, `points` as x0, y0, x1, y1, ... at most 5 times a second. Returns the unsubscribe function |
 | `subscribeBehaviorTree({ topic, tree }, { tree, update, status, recording? })` | A behavior tree's log (`nav2_msgs/msg/BehaviorTreeLog`), on the tree of its XML file: its nodes, then their states and transitions as they change (see `src/shared/protocol.ts`) |
-| `recordBehaviorTree(topic, path)` | Records the log into a rosbag in the new folder `path`, or stops (`null`): resolves with the bag's folder |
+| `recordBehaviorTree(topic, path, options?)` | Records the log into a rosbag in the new folder `path`, with `ros2 bag record`'s options (`RecordOptions`, rosbag2's defaults if not given), or stops (`null`): resolves with the bag's folder |
 | `subscribeBehaviorTreePlayback({ bag, topic, tree }, handlers)` | A rosbag's log played back, as `subscribeBehaviorTree` follows a live one, with `playback(state)`: returns `{ id, unsubscribe }` |
 | `controlBehaviorTreePlayback(id, { playing?, speed?, time? })` | Plays, pauses, sets the speed of, or seeks the playback |
 | `subscribeRosout({ topic }, { update, status })` | The ROS log (`rcl_interfaces/msg/Log`, `topic` usually `/rosout`): the messages the server keeps, then the new ones, and the nodes of the ROS graph (see `RosoutUpdate` in `src/shared/protocol.ts`). Returns the unsubscribe function |
@@ -191,6 +191,8 @@ function useArms() {
 | `subscribeParameters(node, { update, status })` | A node's parameters (`ros2 param list`, `get`, `describe`: `ParamInfo` in `src/shared/parameters.ts`), all of them, then those that change, whoever sets them. Returns the unsubscribe function |
 | `setParameters(node, [{ name, value }], atomically?)` | `ros2 param set` (`value`: `{ type, value }`, `ParamValue`); a value of type `not_set` deletes the parameter. Resolves with what the node says of each: `{ name, successful, reason }` |
 | `dumpParameters(node)` / `loadParameters(node, yaml)` | `ros2 param dump`: resolves with the YAML. `ros2 param load`: the node's parameters in the YAML set, resolves with what the node says of each |
+| `subscribeBags(folder, callback)` | The rosbags of a folder (`BagInfo` in `src/shared/rosbag.ts`: their metadata, topics, files, size), the robot's recordings and its playback, and what its rosbag2 offers (`BagsUpdate`), again whenever they change. Returns the unsubscribe function |
+| `bagsAction(request)` | `BagsRequest`: `record` (`ros2 bag record`: topics, all of them or a regular expression, `RecordOptions`) resolves with the `Recording`; `stop` with the bag's folder; `delete` with the paths deleted (bags only, the dashboard's own pages only); `play` (`ros2 bag play`: rate, loop, topics, offset, `/clock`) with the `Playback`; `pause`, `resume`, `seek`, `rate` and `stop-playback` control it |
 | `serverNow()` | Now, on the robot's clock |
 
 The robot's files, as the File Manager widget has them (its REST API, `/api/fs`, see

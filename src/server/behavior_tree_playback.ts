@@ -9,7 +9,7 @@ import { readTree } from './behavior_tree_file.ts';
 import { decodeLog, logLayout, type LogTransition } from './behavior_tree_log.ts';
 import { BehaviorTreeState } from './behavior_tree_state.ts';
 import type { BehaviorTreeWatcher } from './behavior_trees.ts';
-import { bagFiles, readBag } from './rosbag.ts';
+import { openBag, readBag } from './rosbag.ts';
 import { absoluteTopic, errorMessage, type Logger } from './util.ts';
 
 const TICK_MS = 50;
@@ -43,7 +43,7 @@ interface Timed {
 
 // The bag's log: of the topic if it has it, else its first
 export async function readLog(bag: string, topic: string): Promise<{ topic: string; messages: Timed[] }> {
-  const logs = await readBag(await bagFiles(bag), (t) => /\/BehaviorTreeLog$/.test(t.type));
+  const logs = await readBag(await openBag(bag), (t) => /\/BehaviorTreeLog$/.test(t.type));
   const found = (topic && logs.get(absoluteTopic(topic))) || [...logs.values()][0];
   if (!found) {
     throw new Error(`No behavior tree log in ${bag}: no nav2_msgs/msg/BehaviorTreeLog topic`);
