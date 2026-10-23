@@ -132,6 +132,7 @@ after the others on the devices already arranged.
 | **Arm Teleop** | Jogs an arm driven by ros2_control `JointTrajectoryController`s: a slider per joint, or pads moving the end effector in a straight line (damped least squares on the URDF's kinematics, collision checked by MoveIt's move_group when it runs) |
 | **Camera** | An image topic, raw (`sensor_msgs/Image`) or compressed (`sensor_msgs/CompressedImage`) |
 | **Image Viewer** | A static image: a file of the robot, typed (`/…`, `~/…`, `package://…`) or picked by browsing its folders, or an image uploaded from the page's device |
+| **Web Page** | Another web page in the panel, e.g. a server's own interface: the robot's router, a camera's, Grafana, Foxglove, a robot's web UI. Its address may be a port alone (`:8081/`), on the host the dashboard was opened by. An address bar to reload it and open it in a new tab, and a zoom to fit a page made for a large screen |
 | **Button** | Runs a bash command on the robot, showing its output. Takes its running colour until the command finishes, on every page showing it; pressing it again stops the command |
 | **Application Manager** | The robot's systemd services matching a name: their state, whether they start at boot, buttons to start, stop and restart them, and their journal |
 | **Behavior Tree Inspector** | What a BT.CPP behavior tree is doing, from its log (Nav2's `/behavior_tree_log`): the tree of its XML file with the running branch lit, each node's status, last result, counts and ports, and the latest transitions. As a graph (pan, zoom, follow the running nodes) or a list. Records the log into rosbags, and plays rosbags back at any speed |
@@ -196,6 +197,15 @@ Notes on some of them:
 - **Image Viewer** reads only images (PNG, JPEG, GIF, WebP, BMP, SVG). Uploads are kept next to
   the panels (`~/.local/share/tassello/images`). Images are served sandboxed: an SVG cannot run
   scripts in the dashboard.
+- **Web Page** shows the page in a frame, loaded by the browser, not through the robot: the page's
+  server must be reachable from the browser's device. Its address is `http(s)://…`, `host:port/…`
+  (over HTTP), `:port/…` (on the host in the dashboard's address bar, whichever name or address it
+  was opened by, so that a panel works from any network), or `/…` (on the dashboard's own server,
+  e.g. another app behind the same reverse proxy: such a page runs in the dashboard's origin, so
+  embed only apps you trust there). Some sites refuse to be framed (`X-Frame-Options`,
+  `Content-Security-Policy: frame-ancestors`), and the browser shows an error in their place: open
+  those in a new tab. A dashboard served over HTTPS cannot frame `http://` pages, but those of
+  `localhost`.
 - **Behavior Tree Inspector** follows a `nav2_msgs/BehaviorTreeLog` topic, which BT.CPP trees
   log with Nav2's `RosTopicLogger`: Nav2's bt_navigator on `/behavior_tree_log`. Its *tree file*
   is the XML the robot runs (`/…`, `~/…`, `package://…`, browsed or uploaded), read with its

@@ -405,3 +405,12 @@ export const PlotIcon = icon(<path d="M3 3v18h18M7 15l3.5-5 3 3L20 6" />);
 export const CheckIcon = icon(<path d="m5 12.5 4.5 4.5L19 7.5" />);
 // Published, called, sent
 export const SendIcon = icon(<path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7Z" />);
+// The world's meridians and parallels: a web page
+export const GlobeIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+  </>,
+);
+// Out of the page, into a tab of its own
+export const ExternalLinkIcon = icon(<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />);

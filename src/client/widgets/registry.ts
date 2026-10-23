@@ -28,6 +28,7 @@ import { systemMonitorWidget } from './system/SystemMonitorWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
 import type { RegisteredWidget, TasselloClientPlugin } from './types.ts';
+import { webPageWidget } from './web_page/WebPageWidget.tsx';
 import { WidgetRegistry } from './widget_registry.ts';
 
 export { resolveConfig, type WidgetEntry } from './widget_registry.ts';
@@ -39,6 +40,7 @@ const CORE: RegisteredWidget[] = [
   armTeleopWidget,
   cameraWidget,
   imageWidget,
+  webPageWidget,
   buttonWidget,
   applicationsWidget,
   behaviorTreeWidget,

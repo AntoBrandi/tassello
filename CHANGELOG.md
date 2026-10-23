@@ -5,6 +5,12 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Web Page widget: another web page in the panel, e.g. a server's interface (the robot's router,
+  a camera's, Grafana, Foxglove). Its address may be a port alone (`:8081/`), on the host the
+  dashboard was opened by, so that a panel works from any network. An address bar with the
+  address, Reload and Open in a new tab (hidden if not wanted), and a zoom from 25 to 200 %. Only
+  `http(s)` pages; not the dashboard itself, nor `http://` pages in a dashboard served over HTTPS
+  (browsers block them), which are offered in a new tab instead.
 - Panels are exported (**⋯ → Export panel**) as their JSON file, `<id>.json`, with their
   desktop, tablet and phone layouts, and imported from such files (**⋯ → Import panel…**, or
   from the page without panels), several at once: each a new panel, named as in its file, with

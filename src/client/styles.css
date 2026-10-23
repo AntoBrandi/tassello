@@ -1761,6 +1761,74 @@ textarea {
   place-items: center;
 }
 
+/* ── Web page ──────────────────────────────────────────────────────────────── */
+
+.web-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.web-page-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.web-page-bar svg {
+  flex: none;
+}
+
+.web-page-address {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-page-bar .overlay-button {
+  width: 28px;
+  height: 28px;
+}
+
+.web-page-bar .loading svg {
+  animation: web-page-spin 0.9s linear infinite;
+}
+
+@keyframes web-page-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.web-page-view {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Zoomed: made larger, then scaled down to the widget (or the other way) */
+.web-page-view iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  transform-origin: 0 0;
+}
+
 .file-input {
   display: flex;
   flex-direction: column;
