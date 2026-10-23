@@ -5,6 +5,12 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Panels are exported (**⋯ → Export panel**) as their JSON file, `<id>.json`, with their
+  desktop, tablet and phone layouts, and imported from such files (**⋯ → Import panel…**, or
+  from the page without panels), several at once: each a new panel, named as in its file, with
+  “(2)” after it if the name is taken. The file is the same as in the panels directory, so
+  either can be imported or copied there.
+- Duplicating a panel keeps its tablet and phone layouts; the copy had the desktop's only.
 - Plot widget: numbers of any topic over time, as rqt_plot and PlotJuggler plot them
   (`/odom.twist.twist.linear.x`, a battery's voltage, joints' efforts), up to 8 series on a
   chart, from every message. Live over the latest *time shown*; paused, zoomed (drag across it,

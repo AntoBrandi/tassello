@@ -6,6 +6,9 @@
 // The board shows the layout of the window's kind of device (desktop, tablet,
 // phone: see board/layouts.ts). Edit mode can show and arrange those of the
 // others, at their width.
+//
+// A panel is exported as its file, the layouts of every device included, and
+// files are imported as new panels (see panel_files.ts).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -30,6 +33,7 @@ import {
   UndoIcon,
 } from './icons.tsx';
 import { notify, Notifications } from './notifications.tsx';
+import { freeName, panelFile, panelFileName, panelFileText, readPanelFile } from './panel_files.ts';
 import { widgetDefinition } from './widgets/registry.ts';
 import type { RegisteredWidget } from './widgets/types.ts';
 
@@ -77,6 +81,15 @@ function newWidgetId(type: string): string {
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function download(name: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // Saves the panel shortly after the last change, one save at a time, in order
@@ -164,6 +177,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
   const undoStack = useRef<Panel[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   const visibleCols = useRef(12);
@@ -414,12 +428,47 @@ export function App() {
     }
     try {
       await saver.flush();
-      const copy = await api.createPanel({ name: `${current.name} (copy)`, widgets: current.widgets });
+      const copy = await api.createPanel({ ...panelFile(current), name: `${current.name} (copy)` });
       await refreshPanels();
       showPanel(copy.id);
     } catch (e) {
       notify(`Could not duplicate the panel: ${errorText(e)}`, 'error');
     }
+  };
+
+  const exportPanel = () => {
+    setMenuOpen(false);
+    const current = panelRef.current;
+    if (current) {
+      download(panelFileName(current), panelFileText(current));
+    }
+  };
+
+  // Each file a new panel, never over another: named as in the file, unless
+  // a panel has that name already. Shows the last one.
+  const importPanels = async (files: File[]) => {
+    const taken = (panels ?? []).map((p) => p.name);
+    let last: Panel | null = null;
+    for (const file of files) {
+      try {
+        const content = readPanelFile(await file.text());
+        const created = await api.createPanel({ ...content, name: freeName(content.name, taken) });
+        taken.push(created.name);
+        last = created;
+        notify(`Imported “${created.name}”`);
+      } catch (e) {
+        notify(`Could not import ${file.name}: ${errorText(e)}`, 'error');
+      }
+    }
+    if (last) {
+      await refreshPanels();
+      showPanel(last.id);
+    }
+  };
+
+  const chooseImport = () => {
+    setMenuOpen(false);
+    importRef.current?.click();
   };
 
   const deletePanel = async () => {
@@ -567,6 +616,9 @@ export function App() {
                   <button type="button" role="menuitem" onClick={createPanel}>
                     New panel…
                   </button>
+                  <button type="button" role="menuitem" onClick={chooseImport}>
+                    Import panel…
+                  </button>
                   {panel && (
                     <>
                       <button type="button" role="menuitem" onClick={renamePanel}>
@@ -574,6 +626,9 @@ export function App() {
                       </button>
                       <button type="button" role="menuitem" onClick={duplicatePanel}>
                         Duplicate panel
+                      </button>
+                      <button type="button" role="menuitem" onClick={exportPanel}>
+                        Export panel
                       </button>
                       <button type="button" role="menuitem" className="danger" onClick={deletePanel}>
                         Delete panel…
@@ -602,9 +657,14 @@ export function App() {
           <div className="empty-state">
             <h1>No panels yet</h1>
             <p>A panel is a board of widgets: create one for each task, e.g. teleoperation or navigation.</p>
-            <button type="button" className="button primary" onClick={createPanel}>
-              <PlusIcon /> Create a panel
-            </button>
+            <div className="empty-state-actions">
+              <button type="button" className="button primary" onClick={createPanel}>
+                <PlusIcon /> Create a panel
+              </button>
+              <button type="button" className="button" onClick={chooseImport}>
+                Import a panel…
+              </button>
+            </div>
           </div>
         ) : loadError ? (
           <div className="empty-state">
@@ -696,6 +756,18 @@ export function App() {
       </main>
 
       {paletteOpen && <WidgetPalette onAdd={addWidget} onClose={() => setPaletteOpen(false)} />}
+      <input
+        ref={importRef}
+        type="file"
+        accept=".json,application/json"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = [...(event.target.files ?? [])];
+          event.target.value = '';
+          void importPanels(files);
+        }}
+      />
       <Notifications />
     </div>
   );

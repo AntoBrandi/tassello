@@ -378,6 +378,13 @@ textarea {
   margin: 0 0 18px;
 }
 
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
 /* ── Board ─────────────────────────────────────────────────────────────────── */
 
 .board-column {

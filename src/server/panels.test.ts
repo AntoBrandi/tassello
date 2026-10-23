@@ -103,3 +103,24 @@ test('the store creates, lists, saves and deletes panels', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('a panel created from a file keeps the layouts of every device, as the file has them', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'dieletrikbot-web-'));
+  try {
+    const store = new PanelStore(path.join(root, 'panels'), [], silent);
+    await store.init();
+    const file = {
+      name: 'Drive',
+      widgets: [{ id: 'w1', type: 'button', title: '', x: 0, y: 0, w: 2, h: 1, config: { command: 'true' } }],
+      layouts: {
+        tablet: { rects: { w1: { x: 4, y: 0, w: 4, h: 2 } }, hidden: [] },
+        phone: { rects: {}, hidden: ['w1'] },
+      },
+    };
+    const created = await store.create(file, null);
+    assert.deepEqual(await store.get(created.id), { id: 'drive', ...file });
+    assert.equal(await readFile(path.join(root, 'panels', 'drive.json'), 'utf8'), `${JSON.stringify(file, null, 2)}\n`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

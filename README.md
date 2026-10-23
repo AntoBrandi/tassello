@@ -92,13 +92,18 @@ manipulation, ...) and the top bar switches between them. It has two modes:
 
 - **View**: the widgets work: drive, watch, press.
 - **Edit**: add widgets (**Add widget**), drag them to move them, drag their corner to resize
-  them, click one to edit its properties in the side panel, and create, rename, duplicate or
-  delete panels (**⋯**). Every change is saved as you make it; **Ctrl+Z** undoes it, the
-  arrow keys move the selected widget and **Delete** removes it.
+  them, click one to edit its properties in the side panel, and create, rename, duplicate,
+  export, import or delete panels (**⋯**). Every change is saved as you make it; **Ctrl+Z**
+  undoes it, the arrow keys move the selected widget and **Delete** removes it.
 
 The URL names the panel (`#/teleoperation`), so a panel can be bookmarked, e.g. on a phone's
 home screen. Each panel is a JSON file, `<panels dir>/<id>.json`: copy it to copy the panel to
-another robot.
+another robot, or download it from the page (**⋯ → Export panel**) and import it on the other
+robot's (**⋯ → Import panel…**, several files at once). The file holds the panel's widgets and
+its desktop, tablet and phone layouts. An import always makes a new panel, never replaces one:
+named as in the file, with “(2)” after it if a panel has that name already. Files uploaded from
+the page (images, behavior trees) stay on the robot, not in the panel's file: on another robot,
+upload them again.
 
 ### Phones and tablets
 

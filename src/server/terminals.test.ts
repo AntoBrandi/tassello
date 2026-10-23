@@ -50,7 +50,9 @@ test('a terminal runs its command on a pseudo-terminal of the page’s size', as
   try {
     const page = new Page();
     const view = terminals.open(request('t1', 'stty size; tty; read line; echo "got:$line"; exit 3'), page);
-    await until('the size', () => page.text.includes('30 100'));
+    // stty and tty are two processes: their output may come in two batches
+    await until('tty’s answer', () => /\/dev\/pts\/\d+|not a tty/.test(page.text));
+    assert.match(page.text, /30 100/);
     assert.match(page.text, /\/dev\/pts\/\d+/);
     assert.deepEqual(page.statuses, ['streaming']);
     view.input('abc\r');
