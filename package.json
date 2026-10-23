@@ -1,6 +1,6 @@
 {
   "name": "tassello",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Web dashboard for ROS 2 robots: panels of widgets arranged in the browser, on any device, extensible with plugins",
   "keywords": [
     "ros",
