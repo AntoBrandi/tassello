@@ -412,5 +412,13 @@ export const GlobeIcon = icon(
     <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
   </>,
 );
+// A dial and its needle
+export const SpeedometerIcon = icon(
+  <>
+    <path d="M4.2 18.5A9 9 0 1 1 19.8 18.5" />
+    <path d="m12 14 3.5-4.5" />
+    <circle cx="12" cy="14" r="1" />
+  </>,
+);
 // Out of the page, into a tab of its own
 export const ExternalLinkIcon = icon(<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />);

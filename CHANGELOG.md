@@ -5,6 +5,18 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Speedometer widget: the robot's speed on a dial, from its velocity commands (`Twist` or
+  `TwistStamped`, e.g. `cmd_vel`, told apart by their type): the speed of the linear velocity
+  (x, and y for omnidirectional robots), with a minus going backwards, on a scale from 0 to its
+  max speed, at round steps (faster commands pegged at the end, in red), and the angular
+  velocity under it. A command not renewed within its timeout (0.5 s, as base controllers'
+  `cmd_vel_timeout`) shows as a stop: the latest may be the last of a publisher gone.
+- Edit mode selects several widgets: Ctrl+click (⌘, Shift) adds one, or takes a selected one
+  out; a band dragged across the board from an empty place selects those it touches (with Ctrl
+  or Shift, added to those selected). Dragging any of them moves them together, refused as a
+  whole if one would land on another widget; the arrow keys move them too, Delete removes them,
+  Esc unselects them, each a single change that Ctrl+Z undoes. The side panel shows a widget's
+  properties when it is the only one selected.
 - Web Page widget: another web page in the panel, e.g. a server's interface (the robot's router,
   a camera's, Grafana, Foxglove). Its address may be a port alone (`:8081/`), on the host the
   dashboard was opened by, so that a panel works from any network. An address bar with the

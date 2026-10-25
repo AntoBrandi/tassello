@@ -16,7 +16,7 @@ import type { Device, Panel, PanelSummary, Rect, WidgetInstance } from '../share
 import { api } from './api.ts';
 import { Board } from './board/Board.tsx';
 import { freeSpot } from './board/geometry.ts';
-import { DEVICES, deviceFor, fits, layoutFor, withHidden, withoutLayout, withRect } from './board/layouts.ts';
+import { DEVICES, deviceFor, fits, layoutFor, withHidden, withoutLayout, withRects } from './board/layouts.ts';
 import { connection, useConnectionStatus } from './connection.ts';
 import { useDialogs } from './dialogs.tsx';
 import { PropertiesPanel } from './editor/PropertiesPanel.tsx';
@@ -174,7 +174,8 @@ export function App() {
   const panelRef = useRef<Panel | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('view');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The ids of the widgets selected, in the order they were
+  const [selection, setSelection] = useState<string[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -228,7 +229,7 @@ export function App() {
     if (previous) {
       setPanel(previous);
       saver.schedule(previous);
-      setSelectedId((id) => (id && previous.widgets.some((w) => w.id === id) ? id : null));
+      setSelection((ids) => ids.filter((id) => previous.widgets.some((w) => w.id === id)));
     }
   }, [saver, setPanel]);
 
@@ -281,7 +282,7 @@ export function App() {
       if (current) {
         undoStack.current = [];
         setCanUndo(false);
-        setSelectedId(null);
+        setSelection([]);
         void loadPanel(panelId);
       }
     });
@@ -311,7 +312,7 @@ export function App() {
   const switchMode = async (next: Mode) => {
     if (next === 'view') {
       // Buttons run the saved command: save before they can be pressed
-      setSelectedId(null);
+      setSelection([]);
       setEditDevice(null);
       await saver.flush();
     }
@@ -330,13 +331,13 @@ export function App() {
     const rect = freeSpot(current.widgets, definition.defaultSize, columns);
     const widget: WidgetInstance = { id: newWidgetId(definition.type), type: definition.type, title: '', ...rect, config: {} };
     updatePanel((p) => ({ ...p, widgets: [...p.widgets, widget] }));
-    setSelectedId(widget.id);
+    setSelection([widget.id]);
   };
 
   // In the layout of the device shown
-  const placeWidget = useCallback(
-    (id: string, rect: Rect) =>
-      updatePanel((p) => withRect(p, deviceRef.current, layoutFor(p, deviceRef.current, minSize), id, rect)),
+  const placeWidgets = useCallback(
+    (rects: Map<string, Rect>) =>
+      updatePanel((p) => withRects(p, deviceRef.current, layoutFor(p, deviceRef.current, minSize), rects)),
     [updatePanel],
   );
 
@@ -358,23 +359,31 @@ export function App() {
         return;
       }
       updatePanel((p) => withHidden(p, shown, layoutFor(p, shown, minSize), id, hide));
-      setSelectedId((selected) => (selected === id ? null : selected));
+      setSelection((ids) => ids.filter((selected) => selected !== id));
     },
     [updatePanel],
   );
 
-  const removeWidget = useCallback(
-    (id: string) => {
-      const widget = panelRef.current?.widgets.find((w) => w.id === id);
-      updatePanel((p) => ({ ...p, widgets: p.widgets.filter((w) => w.id !== id) }));
-      setSelectedId((selected) => (selected === id ? null : selected));
-      if (widget) {
-        const name = widget.title || widgetDefinition(widget.type)?.name || widget.type;
-        notify(`Removed “${name}”`, 'info', { label: 'Undo', run: undo });
+  // In one change, undone at once
+  const removeWidgets = useCallback(
+    (ids: string[]) => {
+      const removed = panelRef.current?.widgets.filter((w) => ids.includes(w.id)) ?? [];
+      if (removed.length === 0) {
+        return;
       }
+      updatePanel((p) => ({ ...p, widgets: p.widgets.filter((w) => !ids.includes(w.id)) }));
+      setSelection((selected) => selected.filter((id) => !ids.includes(id)));
+      const [widget] = removed;
+      const name =
+        removed.length > 1
+          ? `${removed.length} widgets`
+          : `“${widget.title || widgetDefinition(widget.type)?.name || widget.type}”`;
+      notify(`Removed ${name}`, 'info', { label: 'Undo', run: undo });
     },
     [updatePanel, undo],
   );
+
+  const removeWidget = useCallback((id: string) => removeWidgets([id]), [removeWidgets]);
 
   const duplicateWidget = (id: string) => {
     const current = panelRef.current;
@@ -386,7 +395,7 @@ export function App() {
     const rect = freeSpot(current.widgets, { w: widget.w, h: widget.h }, columns);
     const copy = { ...widget, ...rect, id: newWidgetId(widget.type), config: structuredClone(widget.config) };
     updatePanel((p) => ({ ...p, widgets: [...p.widgets, copy] }));
-    setSelectedId(copy.id);
+    setSelection([copy.id]);
   };
 
   // ── Panels ──
@@ -495,7 +504,7 @@ export function App() {
     }
   };
 
-  // ── Keyboard: undo, remove and move the selected widget ──
+  // ── Keyboard: undo, unselect, remove and move the selected widgets ──
   useEffect(() => {
     if (!editing) {
       return;
@@ -510,31 +519,46 @@ export function App() {
         undo();
         return;
       }
-      const widget = panelRef.current?.widgets.find((w) => w.id === selectedId);
-      if (!widget) {
+      const current = panelRef.current;
+      const ids = selection.filter((id) => current?.widgets.some((w) => w.id === id));
+      if (!current || ids.length === 0) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        setSelection([]);
         return;
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        removeWidget(widget.id);
+        removeWidgets(ids);
         return;
       }
       const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
-      const shown = layoutFor(panelRef.current!, deviceRef.current, minSize);
-      const current = shown.rects.get(widget.id);
-      if (step && current) {
+      if (!step) {
+        return;
+      }
+      const shown = layoutFor(current, deviceRef.current, minSize);
+      const rects = new Map(
+        ids
+          .filter((id) => shown.rects.has(id))
+          .map((id) => {
+            const rect = shown.rects.get(id)!;
+            return [id, { ...rect, x: rect.x + step[0], y: rect.y + step[1] }];
+          }),
+      );
+      if (rects.size > 0) {
         event.preventDefault();
-        const rect = { ...current, x: current.x + step[0], y: current.y + step[1] };
-        if (fits(rect, shown, DEVICES[deviceRef.current].columns, widget.id)) {
-          placeWidget(widget.id, rect);
+        if (fits(rects, shown, DEVICES[deviceRef.current].columns)) {
+          placeWidgets(rects);
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editing, selectedId, undo, removeWidget, placeWidget]);
+  }, [editing, selection, undo, removeWidgets, placeWidgets]);
 
-  const selected = editing ? panel?.widgets.find((w) => w.id === selectedId) : undefined;
+  const selected =
+    editing && selection.length === 1 ? panel?.widgets.find((w) => w.id === selection[0]) : undefined;
   const statusText = { connecting: 'Connecting…', open: `Connected to ${connection.hostname}`, closed: 'Disconnected, reconnecting…' }[status];
 
   return (
@@ -589,7 +613,7 @@ export function App() {
                   aria-label={`${DEVICES[option].label} layout`}
                   onClick={() => {
                     setEditDevice(option);
-                    setSelectedId(null);
+                    setSelection([]);
                   }}
                 >
                   <Icon />
@@ -720,9 +744,9 @@ export function App() {
                   layout={layout}
                   previewWidth={device !== windowDevice ? DEVICES[device].previewWidth : null}
                   editing={editing}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                  onPlace={placeWidget}
+                  selection={selection}
+                  onSelect={setSelection}
+                  onPlace={placeWidgets}
                   onRemove={removeWidget}
                   onConfigure={configureWidget}
                   onHide={device === 'desktop' ? undefined : hideWidget}
@@ -748,7 +772,7 @@ export function App() {
                 }
                 onDuplicate={() => duplicateWidget(selected.id)}
                 onRemove={() => removeWidget(selected.id)}
-                onClose={() => setSelectedId(null)}
+                onClose={() => setSelection([])}
               />
             )}
           </>

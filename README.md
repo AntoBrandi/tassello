@@ -93,8 +93,11 @@ manipulation, ...) and the top bar switches between them. It has two modes:
 - **View**: the widgets work: drive, watch, press.
 - **Edit**: add widgets (**Add widget**), drag them to move them, drag their corner to resize
   them, click one to edit its properties in the side panel, and create, rename, duplicate,
-  export, import or delete panels (**⋯**). Every change is saved as you make it; **Ctrl+Z**
-  undoes it, the arrow keys move the selected widget and **Delete** removes it.
+  export, import or delete panels (**⋯**). Select several widgets with **Ctrl**+click (⌘,
+  **Shift**), or by dragging a band across them from an empty place of the board (with **Ctrl**
+  or **Shift**: added to those selected), and drag any of them to move them together. Every
+  change is saved as you make it; **Ctrl+Z** undoes it, the arrow keys move the selected widgets,
+  **Delete** removes them and **Esc** unselects them.
 
 The URL names the panel (`#/teleoperation`), so a panel can be bookmarked, e.g. on a phone's
 home screen. Each panel is a JSON file, `<panels dir>/<id>.json`: copy it to copy the panel to
@@ -127,6 +130,7 @@ after the others on the devices already arranged.
 | Widget | What it does |
 |---|---|
 | **Teleop** | Publishes velocity commands (`Twist` or `TwistStamped`) while its pads are held: one pad (x, z), or two in omnidirectional mode (x and y, z). Then one zero, and nothing, so that the lower priorities of a twist_mux, e.g. navigation, take over again |
+| **Speedometer** | The robot's speed on a dial, from its velocity commands (`Twist` or `TwistStamped`, e.g. `cmd_vel`): the linear speed (x, and y for omnidirectional robots), with a minus going backwards, on a scale up to a max speed (faster ones in red), and the angular velocity. A command not renewed within the timeout (0.5 s, as base controllers' `cmd_vel_timeout`) shows as a stop |
 | **Navigation** | The map, optionally the global and local costmaps and the planned path, the laser scan, and the robot where TF puts it, drawn with Nav2's footprint. Its tools set the pose estimate and send navigation goals, as RViz's do: press where the robot is or should go, drag towards where it faces. Pan, zoom, fit the map or follow the robot |
 | **Robot Model** | The robot in 3D, from its URDF and meshes, posed by the joint states. The links of moving joints turn orange, with an arrow at the joint in the direction of the motion |
 | **Arm Teleop** | Jogs an arm driven by ros2_control `JointTrajectoryController`s: a slider per joint, or pads moving the end effector in a straight line (damped least squares on the URDF's kinematics, collision checked by MoveIt's move_group when it runs) |

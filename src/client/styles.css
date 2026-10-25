@@ -492,6 +492,20 @@ textarea {
   background: var(--danger-soft);
 }
 
+/* Dragged across the board, selecting the widgets it touches */
+.selection-band {
+  position: absolute;
+  z-index: 20;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
+.board-scroll.selecting {
+  user-select: none;
+}
+
 .widget {
   position: absolute;
   display: flex;
@@ -1203,6 +1217,111 @@ textarea {
 }
 
 .teleop-readout .offline {
+  color: var(--danger);
+}
+
+/* ── Speedometer ───────────────────────────────────────────────────────────── */
+
+.speedometer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 10px 10px;
+}
+
+.speedometer-dial {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.speedometer-track,
+.speedometer-value {
+  fill: none;
+  stroke-width: 10;
+}
+
+.speedometer-track {
+  stroke: var(--surface-3);
+}
+
+.speedometer-value {
+  stroke: var(--accent);
+  transition: stroke-dasharray 0.12s linear;
+}
+
+.speedometer-value.over {
+  stroke: var(--danger);
+}
+
+.speedometer-tick {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.speedometer-tick.major {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+.speedometer-label {
+  fill: var(--text-muted);
+  font: 10px var(--font);
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.speedometer-needle {
+  fill: var(--text);
+  transition: transform 0.12s linear;
+}
+
+.speedometer-speed {
+  fill: var(--text);
+  font: 600 26px var(--font);
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+}
+
+.speedometer-speed.over {
+  fill: var(--danger);
+}
+
+.speedometer-unit {
+  fill: var(--text-muted);
+  font: 11px var(--font);
+  text-anchor: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speedometer-value,
+  .speedometer-needle {
+    transition: none;
+  }
+}
+
+.speedometer-readout {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  max-width: 100%;
+  color: var(--text-muted);
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.speedometer-topic {
+  opacity: 0.7;
+}
+
+.speedometer-readout .error {
   color: var(--danger);
 }
 

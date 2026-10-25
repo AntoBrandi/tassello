@@ -35,17 +35,35 @@ function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-// No other widget in the way, and within the columns (if any)
-export function fits(rect: Rect, layout: Layout, columns: number | null, ignoreId?: string): boolean {
-  if (rect.x < 0 || rect.y < 0 || (columns !== null && rect.x + rect.w > columns)) {
-    return false;
-  }
-  for (const [id, other] of layout.rects) {
-    if (id !== ignoreId && overlaps(rect, other)) {
+// The widgets placed there, by id: each within the columns (if any), and no
+// other widget in the way
+export function fits(rects: ReadonlyMap<string, Rect>, layout: Layout, columns: number | null): boolean {
+  for (const rect of rects.values()) {
+    if (rect.x < 0 || rect.y < 0 || (columns !== null && rect.x + rect.w > columns)) {
       return false;
+    }
+    for (const [id, other] of layout.rects) {
+      if (!rects.has(id) && overlaps(rect, other)) {
+        return false;
+      }
     }
   }
   return true;
+}
+
+// The widgets moved together by this many cells, as far as the board lets
+// them go: not past its top and left, nor its columns (if any)
+export function movedBy(
+  rects: ReadonlyMap<string, Rect>,
+  dx: number,
+  dy: number,
+  columns: number | null,
+): Map<string, Rect> {
+  const all = [...rects.values()];
+  const right = Math.max(...all.map((r) => r.x + r.w));
+  const x = Math.max(-Math.min(...all.map((r) => r.x)), columns === null ? dx : Math.min(columns - right, dx));
+  const y = Math.max(-Math.min(...all.map((r) => r.y)), dy);
+  return new Map([...rects].map(([id, r]) => [id, { ...r, x: r.x + x, y: r.y + y }]));
 }
 
 // The first free place of this size, from the row given on
@@ -100,15 +118,13 @@ function withLayout(panel: Panel, device: SmallDevice, layout: DeviceLayout): Pa
   return { ...panel, layouts: { ...panel.layouts, [device]: layout } };
 }
 
-// The widget moved or resized on the device: on a tablet or phone, the
-// layout shown becomes the device's own, the automatic places included
-export function withRect(panel: Panel, device: Device, current: Layout, id: string, rect: Rect): Panel {
+// The widgets moved or resized on the device, by id: on a tablet or phone,
+// the layout shown becomes the device's own, the automatic places included
+export function withRects(panel: Panel, device: Device, current: Layout, rects: ReadonlyMap<string, Rect>): Panel {
   if (device === 'desktop') {
-    return { ...panel, widgets: panel.widgets.map((w) => (w.id === id ? { ...w, ...rect } : w)) };
+    return { ...panel, widgets: panel.widgets.map((w) => (rects.has(w.id) ? { ...w, ...rects.get(w.id) } : w)) };
   }
-  const rects = Object.fromEntries(current.rects);
-  rects[id] = rect;
-  return withLayout(panel, device, { rects, hidden: current.hidden });
+  return withLayout(panel, device, { rects: Object.fromEntries([...current.rects, ...rects]), hidden: current.hidden });
 }
 
 // The widget hidden on the device, or shown again: in an automatic layout the

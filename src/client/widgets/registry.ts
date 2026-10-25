@@ -24,6 +24,7 @@ import { parametersWidget } from './parameters/ParametersWidget.tsx';
 import { plotWidget } from './plot/PlotWidget.tsx';
 import { robotModelWidget } from './robot_model/RobotModelWidget.tsx';
 import { rosbagsWidget } from './rosbags/RosbagsWidget.tsx';
+import { speedometerWidget } from './speedometer/SpeedometerWidget.tsx';
 import { systemMonitorWidget } from './system/SystemMonitorWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
@@ -35,6 +36,7 @@ export { resolveConfig, type WidgetEntry } from './widget_registry.ts';
 
 const CORE: RegisteredWidget[] = [
   teleopWidget,
+  speedometerWidget,
   navigationWidget,
   robotModelWidget,
   armTeleopWidget,
