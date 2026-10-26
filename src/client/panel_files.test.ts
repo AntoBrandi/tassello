@@ -26,6 +26,10 @@ test('a panel file has the name, the widgets and the layouts of every device', (
   assert.ok(panelFileText(panel).endsWith('}\n'));
 });
 
+test('a panel file is named after the panel, renamed or not', () => {
+  assert.equal(panelFileName({ ...panel, name: 'Drive & Dock' }), 'drive-dock.json');
+});
+
 test('a panel file leaves out the places of widgets removed, and layouts if none', () => {
   const removed: Panel = { ...panel, widgets: [panel.widgets[0]] };
   assert.deepEqual(panelFile(removed).layouts, {

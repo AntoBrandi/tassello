@@ -58,3 +58,16 @@ export interface TopicInfo {
 // Panel ids are file names: no path separators, no hidden files
 export const PANEL_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 export const WIDGET_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+// A panel's id, made of its name: "Pick & Place #2" -> "pick-place-2"
+export function slugify(name: string): string {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
+    .replace(/-+$/, '');
+  return slug || 'panel';
+}

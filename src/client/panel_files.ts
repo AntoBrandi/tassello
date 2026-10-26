@@ -1,10 +1,10 @@
 // Panels exported to a file and imported from one. The file is the panel's own
 // file on the server (<panels dir>/<id>.json, see src/server/panels.ts): its
 // name, its widgets with their desktop places, and the tablet's and phone's
-// layouts. An exported file can be imported, or copied into a panels
-// directory, and the other way round.
+// layouts, named after the panel's name, renamed or not. An exported file can
+// be imported, or copied into a panels directory, and the other way round.
 
-import { SMALL_DEVICES, type Panel } from '../shared/panel.ts';
+import { SMALL_DEVICES, slugify, type Panel } from '../shared/panel.ts';
 
 export type PanelFile = Omit<Panel, 'id'>;
 
@@ -34,9 +34,10 @@ export function panelFileText(panel: Panel): string {
   return `${JSON.stringify(panelFile(panel), null, 2)}\n`;
 }
 
-// teleoperation.json: copied into a panels directory, the same panel id
+// teleoperation.json: the id a panel of this name is created with. Not the
+// panel's id, which stays that of the name it was created with when renamed.
 export function panelFileName(panel: Panel): string {
-  return `${panel.id}.json`;
+  return `${slugify(panel.name)}.json`;
 }
 
 // The panel of a file, checked enough to tell it from other JSON files (a

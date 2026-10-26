@@ -23,9 +23,9 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
   address, Reload and Open in a new tab (hidden if not wanted), and a zoom from 25 to 200 %. Only
   `http(s)` pages; not the dashboard itself, nor `http://` pages in a dashboard served over HTTPS
   (browsers block them), which are offered in a new tab instead.
-- Panels are exported (**⋯ → Export panel**) as their JSON file, `<id>.json`, with their
-  desktop, tablet and phone layouts, and imported from such files (**⋯ → Import panel…**, or
-  from the page without panels), several at once: each a new panel, named as in its file, with
+- Panels are exported (**⋯ → Export panel**) as their JSON file, named after the panel (its
+  latest name, if renamed), with their desktop, tablet and phone layouts, and imported from
+  such files (**⋯ → Import panel…**, or from the page without panels), several at once: each a new panel, named as in its file, with
   “(2)” after it if the name is taken. The file is the same as in the panels directory, so
   either can be imported or copied there.
 - Duplicating a panel keeps its tablet and phone layouts; the copy had the desktop's only.

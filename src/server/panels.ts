@@ -9,6 +9,7 @@ import path from 'node:path';
 import {
   PANEL_ID_PATTERN,
   SMALL_DEVICES,
+  slugify,
   WIDGET_ID_PATTERN,
   type DeviceLayout,
   type Panel,
@@ -136,19 +137,6 @@ function sanitizeLayouts(value: unknown, ids: Set<string>): Panel['layouts'] | u
     layouts[device] = sanitized;
   }
   return Object.keys(layouts).length > 0 ? layouts : undefined;
-}
-
-// "Pick & Place #2" -> "pick-place-2"
-export function slugify(name: string): string {
-  const slug = name
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
-    .replace(/-+$/, '');
-  return slug || 'panel';
 }
 
 interface PanelEvents {

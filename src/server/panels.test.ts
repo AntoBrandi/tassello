@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { HttpError, PanelStore, sanitizePanel, slugify } from './panels.ts';
+import { slugify } from '../shared/panel.ts';
+import { HttpError, PanelStore, sanitizePanel } from './panels.ts';
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
