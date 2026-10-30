@@ -5,6 +5,12 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Edit mode on tablets and phones: widgets are moved and resized by touch again. Pressing a
+  widget selects it when the press ends, not as it begins: the properties it opened moved the
+  board from under the finger (a tablet's cells shrank to make room for the side panel, a
+  phone's board was covered by the sheet). The sheet steps aside while a widget is dragged, the
+  resize corner is larger on touch screens, and on iOS a long press no longer selects text or
+  opens a callout, losing the drag.
 - Speedometer widget: the robot's speed on a dial, from its velocity commands (`Twist` or
   `TwistStamped`, e.g. `cmd_vel`, told apart by their type): the speed of the linear velocity
   (x, and y for omnidirectional robots), with a minus going backwards, on a scale from 0 to its

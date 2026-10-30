@@ -57,6 +57,11 @@ interface Drag {
   moved: boolean;
   // The selection if the press turns out a click, not a drag
   click: string[] | null;
+  // The selection once the press ends, if it turns out a drag, and shown
+  // until then. Not made as the press begins: the properties panel it opens
+  // would move the board under the finger (a tablet's cells shrink to make
+  // room for it, a phone's board is covered by it)
+  select: string[] | null;
 }
 
 // A band dragged across the board, from where it started to the pointer, in
@@ -167,9 +172,11 @@ export function Board({
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     // A selected widget drags the selection along: clicked, it is selected
-    // alone, or taken out of the selection (Ctrl, ⌘, Shift)
+    // alone, or taken out of the selection (Ctrl, ⌘, Shift). Another is
+    // selected (or added to the selection) when the press ends
     let dragged = [widget.id];
     let click: string[] | null = null;
+    let select: string[] | null = null;
     if (kind === 'move' && selection.includes(widget.id)) {
       dragged = selection;
       click = adding(event) ? selection.filter((id) => id !== widget.id) : [widget.id];
@@ -177,7 +184,7 @@ export function Board({
       if (kind === 'move' && adding(event)) {
         dragged = [...selection, widget.id];
       }
-      onSelect(dragged);
+      click = select = dragged;
     }
     const origins = new Map(dragged.filter((id) => layout.rects.has(id)).map((id) => [id, layout.rects.get(id)!]));
     const scroll = scrollRef.current!;
@@ -195,6 +202,7 @@ export function Board({
       dy: 0,
       moved: false,
       click,
+      select,
     });
   };
 
@@ -230,13 +238,16 @@ export function Board({
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
-    const { rects, origins, moved, click } = drag;
+    const { rects, origins, moved, click, select } = drag;
     setDrag(null);
     if (!moved) {
       if (click && event.type === 'pointerup') {
         onSelect(click);
       }
       return;
+    }
+    if (select) {
+      onSelect(select);
     }
     const changed = [...rects].some(([id, rect]) => {
       const origin = origins.get(id)!;
@@ -297,7 +308,7 @@ export function Board({
   };
 
   const dropValid = drag ? fits(drag.rects, layout, columns) : true;
-  const selected = band?.moved ? bandSelection(band, layout.rects, cell) : selection;
+  const selected = band?.moved ? bandSelection(band, layout.rects, cell) : (drag?.select ?? selection);
 
   return (
     <div

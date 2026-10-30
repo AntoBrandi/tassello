@@ -560,6 +560,9 @@ textarea {
 .widget.editing {
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
+  /* iOS: a long press selects text or opens a callout, and the drag is lost */
+  -webkit-touch-callout: none;
   cursor: grab;
 }
 
@@ -610,12 +613,17 @@ textarea {
   opacity: 1;
 }
 
-/* Touch screens: no hover to reveal them */
+/* Touch screens: no hover to reveal them, and a corner a finger can take */
 @media (hover: none) {
   .widget.editing .widget-tag,
   .widget.editing .widget-buttons,
   .widget.editing .resize-handle::after {
     opacity: 1;
+  }
+
+  .resize-handle {
+    width: 36px;
+    height: 36px;
   }
 }
 
@@ -715,6 +723,11 @@ textarea {
     border-left: 0;
     border-radius: 14px 14px 0 0;
     box-shadow: var(--shadow);
+  }
+
+  /* Out of the way of the widgets dragged under it */
+  .workspace:has(.widget.dragging) .properties {
+    visibility: hidden;
   }
 }
 
