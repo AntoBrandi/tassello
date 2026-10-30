@@ -1,26 +1,43 @@
+import type { ComponentType, SVGProps } from 'react';
+
 import { Modal } from '../dialogs.tsx';
-import { widgetEntries, type WidgetEntry } from '../widgets/registry.ts';
-import type { RegisteredWidget } from '../widgets/types.ts';
+
+interface Definition {
+  type: string;
+  name: string;
+  description: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+}
+
+interface Entry<D> {
+  definition: D;
+  plugin: string | null;
+}
 
 // Tassello's widgets, then each plugin's
-function groups(): { plugin: string | null; entries: WidgetEntry[] }[] {
-  const byPlugin = new Map<string | null, WidgetEntry[]>();
-  for (const entry of widgetEntries()) {
+function groups<D>(all: Entry<D>[]): { plugin: string | null; entries: Entry<D>[] }[] {
+  const byPlugin = new Map<string | null, Entry<D>[]>();
+  for (const entry of all) {
     byPlugin.set(entry.plugin, [...(byPlugin.get(entry.plugin) ?? []), entry]);
   }
   return [...byPlugin].map(([plugin, entries]) => ({ plugin, entries }));
 }
 
-export function WidgetPalette({
+// The widgets of the board, or the status bar's
+export function WidgetPalette<D extends Definition>({
+  title,
+  entries: all,
   onAdd,
   onClose,
 }: {
-  onAdd: (definition: RegisteredWidget) => void;
+  title: string;
+  entries: Entry<D>[];
+  onAdd: (definition: D) => void;
   onClose: () => void;
 }) {
-  const sections = groups();
+  const sections = groups(all);
   return (
-    <Modal title="Add a widget" onClose={onClose} wide>
+    <Modal title={title} onClose={onClose} wide>
       <div className="palette-scroll">
         {sections.map(({ plugin, entries }) => (
           <section key={plugin ?? ''}>

@@ -5,6 +5,28 @@ change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as n
 
 ## Unreleased
 
+- Status bars: each panel has its own, above its board, of readings at a glance. Its first
+  status widgets: **Wi-Fi**, the network the robot is on and its signal, as NetworkManager has
+  them (yellow when weak, red when too weak or disconnected, thresholds of its own; the robot's
+  own access point shown as such; which interface, with several); **CPU**, the load of all the
+  cores or of the busiest, against its thresholds, with a chart of the last minute. It is one row
+  of 24 columns stretched to the window's width: what is at its right end stays there on any
+  screen, and a status widget shows what fits its width (the icon or the value, both, a label, a
+  chart). In edit mode, as on the board, **＋ Status** adds one (after the one selected, else in
+  the first free place); they are dragged to move them and by their corner to resize them, a move
+  or resize onto another being refused; selected to edit their properties in the side panel,
+  removed with their × or Delete, moved a column at a time with the arrow keys; every change is
+  saved, followed by the other pages, and undone with Ctrl+Z as the panel's are. Hidden in view
+  mode while empty. It is part of the panel's file (`statusBar`: each status widget's `id`,
+  `type`, `x` and `w` in columns, `config`), so exported, imported and duplicated with it; the
+  example panels have the Wi-Fi and the CPU.
+- Plugins: status widgets of their own, `statusWidgets: [defineStatusWidget({ ... })]`, made as
+  widgets are, with a width in the bar's columns (`defaultWidth`, `minWidth`, `STATUS_COLUMNS`);
+  `StatusReadout` lays out an icon, a value, a label and a chart as Tassello's do, keeping what
+  fits the width. Their types and widgets' are unique across both; `defaults` apply to either.
+  `subscribeNetwork(callback, { scan: false })` follows the networks without looking for those
+  in range (`network.subscribe`'s `scan`).
+
 - Edit mode on tablets and phones: widgets are moved and resized by touch again. Pressing a
   widget selects it when the press ends, not as it begins: the properties it opened moved the
   board from under the finger (a tablet's cells shrank to make room for the side panel, a

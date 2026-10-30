@@ -461,9 +461,9 @@ const WidgetView = memo(function WidgetView({
   );
 });
 
-// One broken widget must not take the board down. Retried when its config
-// changes.
-class WidgetErrorBoundary extends Component<
+// One broken widget must not take the board (or the status bar) down.
+// Retried when its config changes.
+export class WidgetErrorBoundary extends Component<
   { resetKey: unknown; children: ReactNode },
   { error: Error | null }
 > {

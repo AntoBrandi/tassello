@@ -8,10 +8,12 @@ npm run build       # dist/client: the widgets; dist/server: the server's side
 tassello --plugin . # with ROS sourced: http://localhost:8080
 ```
 
-Then edit a panel, **Add widget**: the plugin's widgets have a section of their own. After a
-change, `npm run build` and reload the page; restart Tassello for a change of the server's side.
+Then edit a panel, **Add widget**: the plugin's widgets have a section of their own, as its
+status widgets have in the status bar's **＋ Status**. After a change, `npm run build` and reload
+the page; restart Tassello for a change of the server's side.
 
-- `src/client/index.tsx`: the widgets, exported by `definePlugin({ widgets })`.
+- `src/client/index.tsx`: the widgets and status widgets, exported by
+  `definePlugin({ widgets, statusWidgets })`.
 - `src/client/style.css`: their styles.
 - `src/server/index.ts`: the server's side, `activate(ctx)`: requests (`ctx.handle`) and streams
   (`ctx.stream`) for the widgets, with the server's ROS node. Delete it, and `"server"` in

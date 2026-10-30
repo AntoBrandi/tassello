@@ -1,6 +1,7 @@
 // The panels, one JSON file each in the panels directory, named after the
-// panel's id. The files hold the name and the widgets: the id is the file name,
-// so a panel can be copied between machines by copying its file.
+// panel's id. The files hold the name, the widgets and the status bar's: the
+// id is the file name, so a panel can be copied between machines by copying
+// its file.
 
 import { EventEmitter } from 'node:events';
 import { promises as fs } from 'node:fs';
@@ -10,10 +11,12 @@ import {
   PANEL_ID_PATTERN,
   SMALL_DEVICES,
   slugify,
+  STATUS_COLUMNS,
   WIDGET_ID_PATTERN,
   type DeviceLayout,
   type Panel,
   type PanelSummary,
+  type StatusWidgetInstance,
   type WidgetInstance,
 } from '../shared/panel.ts';
 import type { Logger } from './util.ts';
@@ -32,6 +35,7 @@ const MAX_WIDGETS = 200;
 // Generous bounds that keep a malformed panel from blowing up the page
 const MAX_POSITION = 1000;
 const MAX_SIZE = 100;
+const MAX_STATUS_WIDGETS = 50;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -96,6 +100,10 @@ export function sanitizePanel(value: unknown, id: string): Panel {
   if (layouts) {
     sanitized.layouts = layouts;
   }
+  const statusBar = sanitizeStatusBar(value.statusBar);
+  if (statusBar.length > 0) {
+    sanitized.statusBar = statusBar;
+  }
   return sanitized;
 }
 
@@ -137,6 +145,47 @@ function sanitizeLayouts(value: unknown, ids: Set<string>): Panel['layouts'] | u
     layouts[device] = sanitized;
   }
   return Object.keys(layouts).length > 0 ? layouts : undefined;
+}
+
+// The status bar's widgets. One without a place (x) goes after the one before
+// it, e.g. in a file written by hand.
+function sanitizeStatusBar(value: unknown): StatusWidgetInstance[] {
+  const widgets = value ?? [];
+  if (!Array.isArray(widgets) || widgets.length > MAX_STATUS_WIDGETS) {
+    throw new HttpError(400, `statusBar must be an array of at most ${MAX_STATUS_WIDGETS} status widgets`);
+  }
+  const ids = new Set<string>();
+  let next = 0;
+  return widgets.map((widget: unknown, index): StatusWidgetInstance => {
+    const where = `statusBar[${index}]`;
+    if (!isObject(widget)) {
+      throw new HttpError(400, `${where} must be an object`);
+    }
+    if (typeof widget.id !== 'string' || !WIDGET_ID_PATTERN.test(widget.id)) {
+      throw new HttpError(400, `${where}.id must match ${WIDGET_ID_PATTERN}`);
+    }
+    if (ids.has(widget.id)) {
+      throw new HttpError(400, `${where}.id "${widget.id}" is not unique`);
+    }
+    ids.add(widget.id);
+    if (typeof widget.type !== 'string' || !widget.type) {
+      throw new HttpError(400, `${where}.type must be a non-empty string`);
+    }
+    if (widget.config !== undefined && !isObject(widget.config)) {
+      throw new HttpError(400, `${where}.config must be an object`);
+    }
+    const w = gridNumber(widget.w, `${where}.w`, 1, STATUS_COLUMNS);
+    const x =
+      widget.x === undefined ? Math.min(next, STATUS_COLUMNS - w) : gridNumber(widget.x, `${where}.x`, 0, STATUS_COLUMNS - 1);
+    next = x + w;
+    return {
+      id: widget.id,
+      type: widget.type,
+      x,
+      w,
+      config: (widget.config as Record<string, unknown> | undefined) ?? {},
+    };
+  });
 }
 
 interface PanelEvents {

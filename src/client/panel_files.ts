@@ -1,7 +1,7 @@
 // Panels exported to a file and imported from one. The file is the panel's own
 // file on the server (<panels dir>/<id>.json, see src/server/panels.ts): its
-// name, its widgets with their desktop places, and the tablet's and phone's
-// layouts, named after the panel's name, renamed or not. An exported file can
+// name, its widgets with their desktop places, the tablet's and phone's
+// layouts, and its status bar, named after the panel's name, renamed or not. An exported file can
 // be imported, or copied into a panels directory, and the other way round.
 
 import { SMALL_DEVICES, slugify, type Panel } from '../shared/panel.ts';
@@ -25,6 +25,9 @@ export function panelFile(panel: Panel): PanelFile {
   const file: PanelFile = { name: panel.name, widgets: panel.widgets };
   if (Object.keys(layouts).length > 0) {
     file.layouts = layouts;
+  }
+  if (panel.statusBar && panel.statusBar.length > 0) {
+    file.statusBar = panel.statusBar;
   }
   return file;
 }

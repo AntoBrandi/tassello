@@ -33,5 +33,21 @@
         "topic": "/camera/image_raw"
       }
     }
+  ],
+  "statusBar": [
+    {
+      "id": "wifi",
+      "type": "wifi-status",
+      "x": 0,
+      "w": 3,
+      "config": {}
+    },
+    {
+      "id": "cpu",
+      "type": "cpu-status",
+      "x": 21,
+      "w": 3,
+      "config": {}
+    }
   ]
 }

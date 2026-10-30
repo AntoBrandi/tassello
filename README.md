@@ -108,6 +108,23 @@ named as in the file, with “(2)” after it if a panel has that name already. 
 the page (images, behavior trees) stay on the robot, not in the panel's file: on another robot,
 upload them again.
 
+### The status bar
+
+Above its board, each panel has a **status bar** of readings at a glance, its own: e.g. the
+**Wi-Fi** network the robot is on and its signal (in yellow when weak, red when too weak or
+disconnected), the **CPU**'s load, of all the cores or of the busiest, with its last minute. It is
+one row of 24 columns stretched to the window's width, so that what is at its right end stays
+there on any screen; narrower, a status widget shows less (the icon or the value, then both, the
+network's name, the CPU's chart). In edit mode, as on the board, **＋ Status** at its end adds
+status widgets, after the one selected; drag one to move it and its corner to resize it, a move
+or resize onto another being refused; click it to edit its properties, and remove it with its
+**×** or **Delete**. Every change is saved and undone like the panel's; the arrow keys move the
+status widget selected a column at a time. Hidden in view mode while empty.
+
+The status bar is part of the panel: saved in its file (`statusBar`), exported, imported and
+duplicated with it. The example panels have the Wi-Fi and the CPU; plugins add status widgets of
+their own (see [docs/plugins.md](docs/plugins.md)).
+
 ### Phones and tablets
 
 A panel has a layout per kind of device, chosen by the width of the window: **desktop** (from
@@ -545,8 +562,9 @@ Plugins are found:
 - as npm packages named `tassello-plugin-*` (or `@scope/tassello-plugin-*`), installed next to
   Tassello (e.g. both with `npm install -g`) or in the working directory's `node_modules`.
 
-A plugin can also give Tassello's widgets new defaults (a robot's topic names and speed limits)
-and ship example panels. See **[docs/plugins.md](docs/plugins.md)**.
+A plugin can also add status widgets to the status bar (a battery's charge, a robot's mode), give
+Tassello's widgets new defaults (a robot's topic names and speed limits) and ship example panels.
+See **[docs/plugins.md](docs/plugins.md)**.
 
 ## Security
 

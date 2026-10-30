@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { defineWidget, type RegisteredWidget } from './types.ts';
-import { resolveConfig, WidgetRegistry } from './widget_registry.ts';
+import { defineStatusWidget, defineWidget, type RegisteredStatusWidget, type RegisteredWidget } from './types.ts';
+import { resolveConfig, StatusWidgetRegistry, WidgetRegistry } from './widget_registry.ts';
 
 function widget(type: string): RegisteredWidget {
   return defineWidget<{ topic: string; speed: number; mode: 'a' | 'b' }>({
@@ -83,4 +83,49 @@ test('selects with options known at run time keep any value of their type', () =
   });
   assert.deepEqual(resolveConfig(robot, { robot: 'tiago-1' }), { robot: 'tiago-1' });
   assert.deepEqual(resolveConfig(robot, { robot: 1 }), { robot: '' });
+});
+
+function statusWidget(type: string): RegisteredStatusWidget {
+  return defineStatusWidget<{ warnAbove: number }>({
+    type,
+    name: type,
+    description: '',
+    icon: () => null,
+    defaultWidth: 3,
+    minWidth: 1,
+    component: () => null,
+    properties: [{ key: 'warnAbove', label: 'Warn above', kind: 'number', default: 75 }],
+  });
+}
+
+test('status widgets: a registry of their own, their types unique across both', () => {
+  const widgets: WidgetRegistry = new WidgetRegistry([widget('teleop')], (type) => statuses.owner(type));
+  const statuses: StatusWidgetRegistry = new StatusWidgetRegistry([statusWidget('cpu-status')], (type) => widgets.owner(type));
+  const register = (name: string, plugin: Parameters<WidgetRegistry['registerPlugin']>[1]) => [
+    ...widgets.registerPlugin(name, plugin),
+    ...statuses.registerPlugin(name, plugin),
+  ];
+  assert.deepEqual(
+    register('robot', { widgets: [widget('robot.battery')], statusWidgets: [statusWidget('robot.battery-status')] }),
+    [],
+  );
+  assert.deepEqual(
+    statuses.entries().map((e) => [e.definition.type, e.plugin]),
+    [
+      ['cpu-status', null],
+      ['robot.battery-status', 'robot'],
+    ],
+  );
+  assert.equal(widgets.entries().length, 2);
+  // Taken in the other registry, or in this one
+  assert.deepEqual(register('other', { widgets: [widget('cpu-status')], statusWidgets: [statusWidget('teleop'), statusWidget('robot.battery-status')] }), [
+    'its widget type "cpu-status" is already Tassello\'s, as a status widget',
+    'its status widget type "teleop" is already Tassello\'s, as a widget',
+    'its status widget type "robot.battery-status" is already robot\'s',
+  ]);
+
+  // The defaults go to the registry of their type; only its own are checked
+  assert.deepEqual(register('defaults', { defaults: { 'cpu-status': { warnAbove: 90 }, teleop: { speed: 1 } } }), []);
+  assert.deepEqual(resolveConfig(statuses.definition('cpu-status')!, {}), { warnAbove: 90 });
+  assert.equal(register('wrong', { defaults: { 'cpu-status': { warnAbove: 'high' } } }).length, 1);
 });

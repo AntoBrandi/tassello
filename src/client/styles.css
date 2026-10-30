@@ -698,6 +698,286 @@ textarea {
   content: '';
 }
 
+/* ── Status bar ────────────────────────────────────────────────────────────── */
+
+/* A panel's, under the top bar, above its board: a row of columns stretched
+   to its width (status_bar.ts's STATUS_COLUMNS), STATUS_GAP between its
+   widgets */
+.statusbar {
+  position: relative;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* Room for the remove buttons over the widgets' corners */
+.statusbar.editing {
+  padding-top: 9px;
+  padding-bottom: 7px;
+}
+
+.statusbar-grid {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+
+.statusbar.editing .statusbar-grid {
+  outline: 1px solid var(--grid-line);
+  background-image: linear-gradient(to right, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--status-column) 100%;
+}
+
+.statusbar-grid .drop-target {
+  top: 0;
+  height: 100%;
+  border-radius: 7px;
+}
+
+.statusbar-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.statusbar-add {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.status-widget {
+  position: absolute;
+  top: 0;
+  display: flex;
+  height: 100%;
+  border-radius: 7px;
+  /* What its readout shows depends on its width */
+  container: status / inline-size;
+}
+
+.status-widget .widget-message {
+  align-self: center;
+  margin: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Edit mode: moved, not used */
+.status-widget.editing {
+  background: var(--surface-2);
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+}
+
+.status-widget.editing > :not(.status-remove, .status-resize) {
+  pointer-events: none;
+}
+
+.status-widget.selected {
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.status-widget.dragging {
+  z-index: 10;
+  opacity: 0.88;
+  box-shadow: var(--shadow);
+  cursor: grabbing;
+}
+
+/* Over another: it would not be dropped there */
+.status-widget.refused {
+  outline: 2px solid var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-soft);
+}
+
+.status-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  cursor: pointer;
+}
+
+.status-remove:hover {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.status-widget.editing:hover .status-remove,
+.status-widget.selected .status-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The board's resize corner, shown on every status widget in edit mode: they
+   resize in width only */
+.status-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.status-resize::after {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-bottom-right-radius: 2px;
+  content: '';
+}
+
+/* Touch screens (a laptop's too): the remove buttons without hovering, and an
+   edge a finger can take */
+@media (hover: none), (any-pointer: coarse) {
+  .status-widget.editing .status-remove {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .status-resize {
+    width: 24px;
+  }
+}
+
+/* An icon, the value, its label, a chart: what fits */
+.status-readout {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 7px;
+  color: var(--text);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.status-readout-icon {
+  display: inline-grid;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.status-readout-value {
+  flex: none;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-readout-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+}
+
+.status-readout-extra {
+  display: flex;
+  flex: 1;
+  min-width: 24px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.status-readout.off {
+  color: var(--text-muted);
+}
+
+.status-readout.warn .status-readout-icon,
+.status-readout.warn .status-readout-value,
+.status-readout.warn .status-readout-extra {
+  color: var(--warning);
+}
+
+.status-readout.critical .status-readout-icon,
+.status-readout.critical .status-readout-value,
+.status-readout.critical .status-readout-extra {
+  color: var(--danger);
+}
+
+.status-chart {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.status-chart path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+/* One cell: the icon or the value. Two: both. Three: the label too. Four:
+   all */
+@container status (max-width: 130px) {
+  .status-readout-extra {
+    display: none;
+  }
+}
+
+@container status (max-width: 96px) {
+  .status-readout-label {
+    display: none;
+  }
+}
+
+@container status (max-width: 50px) {
+  .status-readout {
+    justify-content: center;
+    padding: 0 2px;
+    font-size: 11.5px;
+  }
+
+  .status-readout.keep-icon:has(.status-readout-icon) .status-readout-value,
+  .status-readout.keep-value:has(.status-readout-value) .status-readout-icon {
+    display: none;
+  }
+}
+
 /* ── Properties ────────────────────────────────────────────────────────────── */
 
 .properties {

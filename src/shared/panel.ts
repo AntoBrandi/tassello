@@ -1,5 +1,6 @@
-// A panel is a named board of widgets, stored by the server as one JSON file
-// per panel (<panels_dir>/<id>.json). Positions and sizes are in grid cells.
+// A panel is a named board of widgets, with a status bar above it, stored by
+// the server as one JSON file per panel (<panels_dir>/<id>.json). Positions
+// and sizes are in grid cells.
 //
 // The widgets' own x, y, w and h are their desktop layout. Tablets and phones
 // lay them out on a fixed number of columns (see src/client/board/layouts.ts):
@@ -38,11 +39,30 @@ export interface DeviceLayout {
   hidden: string[];
 }
 
+// A panel's status bar, above its board: one row of STATUS_COLUMNS columns,
+// which stretch to the width of the window, the same on every device. Its
+// widgets' places and widths are in columns, so that what is at the right end
+// stays there on any screen.
+export const STATUS_COLUMNS = 24;
+
+export interface StatusWidgetInstance {
+  id: string;
+  // Key of the status widget in the client's registry
+  // (src/client/widgets/registry.ts)
+  type: string;
+  x: number;
+  w: number;
+  // The status widget's own properties, as its definition declares them
+  config: Record<string, unknown>;
+}
+
 export interface Panel {
   id: string;
   name: string;
   widgets: WidgetInstance[];
   layouts?: Partial<Record<SmallDevice, DeviceLayout>>;
+  // Its status widgets; none if missing
+  statusBar?: StatusWidgetInstance[];
 }
 
 export interface PanelSummary {

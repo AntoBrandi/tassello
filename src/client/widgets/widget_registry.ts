@@ -1,14 +1,24 @@
 // The widgets of the palette: Tassello's own, then those of the plugins
 // (see ../plugins.ts), which may also change the defaults of any widget's
-// properties, e.g. a robot's topic names and speed limits.
+// properties, e.g. a robot's topic names and speed limits. The status
+// widgets have a registry of their own, of the same kind.
 
-import type { Property, RegisteredWidget, TasselloClientPlugin } from './types.ts';
+import type { Property, RegisteredStatusWidget, RegisteredWidget, TasselloClientPlugin } from './types.ts';
 
-export interface WidgetEntry {
-  definition: RegisteredWidget;
+// What a registry holds: a widget's definition, or a status widget's
+interface Definition {
+  type: string;
+  properties: Property[];
+}
+
+export interface Entry<D> {
+  definition: D;
   // The plugin that adds it, null for Tassello's own
   plugin: string | null;
 }
+
+export type WidgetEntry = Entry<RegisteredWidget>;
+export type StatusWidgetEntry = Entry<RegisteredStatusWidget>;
 
 export function fitsProperty(property: Property, value: unknown): boolean {
   return (
@@ -19,27 +29,41 @@ export function fitsProperty(property: Property, value: unknown): boolean {
   );
 }
 
-export class WidgetRegistry {
+export class DefinitionRegistry<D extends Definition> {
   // As registered, before the defaults' changes
-  private registered: WidgetEntry[];
-  // New defaults, by widget type then property key
+  private registered: Entry<D>[];
+  // New defaults, by type then property key
   private readonly defaults = new Map<string, Map<string, unknown>>();
-  private current: WidgetEntry[];
+  private current: Entry<D>[];
+  // The plugin's definitions for this registry
+  private readonly of: (plugin: TasselloClientPlugin) => D[] | undefined;
+  // What they are, for the problems
+  private readonly kind: string;
+  // Whose a type of another registry is: types are unique across them, as
+  // the defaults are by type
+  private readonly taken: (type: string) => string | null;
 
-  constructor(core: RegisteredWidget[]) {
+  constructor(
+    core: D[],
+    of: (plugin: TasselloClientPlugin) => D[] | undefined,
+    kind: string,
+    taken: (type: string) => string | null = () => null,
+  ) {
     this.registered = core.map((definition) => ({ definition, plugin: null }));
     this.current = this.registered;
+    this.of = of;
+    this.kind = kind;
+    this.taken = taken;
   }
 
-  // Adds a plugin's widgets and defaults; returns what was wrong with them
+  // Adds a plugin's definitions and defaults; returns what was wrong with them
   registerPlugin(name: string, plugin: TasselloClientPlugin): string[] {
     const problems: string[] = [];
-    for (const definition of plugin.widgets ?? []) {
+    for (const definition of this.of(plugin) ?? []) {
       const existing = this.registered.find((entry) => entry.definition.type === definition.type);
-      if (existing) {
-        problems.push(
-          `its widget type "${definition.type}" is already ${existing.plugin ? `${existing.plugin}'s` : "Tassello's"}`,
-        );
+      const owner = existing ? (existing.plugin ? `${existing.plugin}'s` : "Tassello's") : this.taken(definition.type);
+      if (owner) {
+        problems.push(`its ${this.kind} type "${definition.type}" is already ${owner}`);
         continue;
       }
       this.registered = [...this.registered, { definition, plugin: name }];
@@ -50,7 +74,8 @@ export class WidgetRegistry {
         own.set(key, value);
         const definition = this.registered.find((entry) => entry.definition.type === type)?.definition;
         const property = definition?.properties.find((p) => p.key === key);
-        // Of a widget not registered (yet): kept, in case a later plugin adds it
+        // Of one not registered (yet), or the other registry's: kept, in case
+        // a later plugin adds it
         if (definition && (!property || !fitsProperty(property, value))) {
           problems.push(`its default of ${type}.${key} is not one of the property's values`);
         }
@@ -61,15 +86,21 @@ export class WidgetRegistry {
     return problems;
   }
 
-  entries(): WidgetEntry[] {
+  entries(): Entry<D>[] {
     return this.current;
   }
 
-  definition(type: string): RegisteredWidget | undefined {
+  definition(type: string): D | undefined {
     return this.current.find((entry) => entry.definition.type === type)?.definition;
   }
 
-  private withDefaults(definition: RegisteredWidget): RegisteredWidget {
+  // Whose it is, if registered: for the other registries' taken
+  owner(type: string): string | null {
+    const entry = this.registered.find((e) => e.definition.type === type);
+    return entry ? `${entry.plugin ? `${entry.plugin}'s` : "Tassello's"}, as a ${this.kind}` : null;
+  }
+
+  private withDefaults(definition: D): D {
     const changed = this.defaults.get(definition.type);
     if (!changed) {
       return definition;
@@ -85,9 +116,21 @@ export class WidgetRegistry {
   }
 }
 
+export class WidgetRegistry extends DefinitionRegistry<RegisteredWidget> {
+  constructor(core: RegisteredWidget[], taken?: (type: string) => string | null) {
+    super(core, (plugin) => plugin.widgets, 'widget', taken);
+  }
+}
+
+export class StatusWidgetRegistry extends DefinitionRegistry<RegisteredStatusWidget> {
+  constructor(core: RegisteredStatusWidget[], taken?: (type: string) => string | null) {
+    super(core, (plugin) => plugin.statusWidgets, 'status widget', taken);
+  }
+}
+
 // The widget's config with every property: stored values of the right type,
 // defaults for the others
-export function resolveConfig(definition: RegisteredWidget, stored: Record<string, unknown>) {
+export function resolveConfig(definition: { properties: Property[] }, stored: Record<string, unknown>) {
   const config: Record<string, unknown> = {};
   for (const property of definition.properties) {
     const value = stored[property.key];

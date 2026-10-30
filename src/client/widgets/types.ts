@@ -1,8 +1,9 @@
-// What a widget is made of: see registry.ts to add one
+// What a widget is made of, and a status widget, which a panel's status bar
+// shows above its board: see registry.ts to add one
 
 import type { ComponentType, SVGProps } from 'react';
 
-import type { WidgetInstance } from '../../shared/panel.ts';
+import type { StatusWidgetInstance, WidgetInstance } from '../../shared/panel.ts';
 
 type Config = Record<string, unknown>;
 
@@ -99,16 +100,57 @@ export function defineWidget<C>(definition: WidgetDefinition<C>): RegisteredWidg
   return definition as unknown as RegisteredWidget;
 }
 
+export interface StatusWidgetProps<C> {
+  config: C;
+  // Its place (x) and width (w), in the bar's columns
+  instance: StatusWidgetInstance;
+  panelId: string;
+  // Edit mode: the status widget is shown, not used
+  editing: boolean;
+  // Changes some of its properties, saved with the panel
+  updateConfig: (changes: Partial<C>) => void;
+}
+
+// A status widget: one reading at a glance (the Wi-Fi signal, the CPU's
+// load), in a panel's status bar, above its board. As tall as the bar, as wide as
+// people make it, in columns that stretch to the bar's width (STATUS_COLUMNS
+// across it): StatusReadout (StatusReadout.tsx) lays out an icon, a value and
+// a label that fit it.
+export interface StatusWidgetDefinition<C> {
+  // Stored in the panels' status bars: never change it. No widget's type
+  // either.
+  type: string;
+  name: string;
+  description: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  // In the bar's columns
+  defaultWidth: number;
+  minWidth: number;
+  properties: PropertySchema<C>[];
+  component: ComponentType<StatusWidgetProps<C>>;
+}
+
+export interface RegisteredStatusWidget extends Omit<StatusWidgetDefinition<Config>, 'properties'> {
+  properties: Property[];
+}
+
+export function defineStatusWidget<C>(definition: StatusWidgetDefinition<C>): RegisteredStatusWidget {
+  return definition as unknown as RegisteredStatusWidget;
+}
+
 // The page's side of a plugin: the default export of its client module (see
 // src/server/plugins.ts)
 export interface TasselloClientPlugin {
   // The widgets it adds to the palette. Their types are stored in the panels:
   // prefix them with something of the plugin's own, e.g. "myrobot.gripper"
   widgets?: RegisteredWidget[];
+  // The status widgets it adds to the status bars' palette, their types
+  // prefixed the same way, e.g. "myrobot.battery-status"
+  statusWidgets?: RegisteredStatusWidget[];
   // New defaults of widgets' properties, Tassello's or other plugins', by
   // widget type then property key: e.g. a robot's own topic names and speed
   // limits, { teleop: { topic: '/myrobot/cmd_vel', maxLinear: 0.3 } }. They
-  // stand in for the values a panel does not set.
+  // stand in for the values a panel does not set. Status widgets' too.
   defaults?: Record<string, Record<string, unknown>>;
 }
 

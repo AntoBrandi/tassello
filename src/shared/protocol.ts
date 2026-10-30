@@ -577,6 +577,9 @@ export interface TerminalRestart {
 export interface NetworkSubscribe {
   type: 'network.subscribe';
   id: number;
+  // Looks for the networks in range if the last look is old (the default):
+  // not for the status bar, which shows the network joined
+  scan?: boolean;
 }
 
 // Changes the robot's networks (nmcli): answered by a result with the same

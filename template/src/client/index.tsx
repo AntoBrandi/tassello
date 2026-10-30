@@ -1,15 +1,20 @@
-// The page's side of the plugin: its widgets. A widget is a React component
-// and its definition: name, icon, size, and the properties edited in the
-// side panel, whose values it gets as its config.
+// The page's side of the plugin: its widgets, and its status widgets (of the
+// panels' status bars, above their boards). A widget is a React component and
+// its definition: name, icon, size, and the properties edited in the side
+// panel, whose values it gets as its config.
 
 import { useEffect, useState } from 'react';
 import {
   connection,
   definePlugin,
+  defineStatusWidget,
   defineWidget,
   notify,
+  StatusReadout,
   TerminalIcon,
   useTopic,
+  type PropertySchema,
+  type StatusWidgetProps,
   type WidgetProps,
 } from 'tassello/sdk';
 
@@ -65,6 +70,17 @@ function HelloWidget({ config, editing }: WidgetProps<HelloConfig>) {
   );
 }
 
+// Edited in the side panel; the config has their values
+const HELLO_PROPERTIES: PropertySchema<HelloConfig>[] = [
+  {
+    key: 'topic',
+    label: 'Topic',
+    kind: 'topic',
+    default: '/chatter',
+    topicTypes: ['std_msgs/msg/String'],
+  },
+];
+
 const helloWidget = defineWidget<HelloConfig>({
   // Stored in the panels: prefixed with the plugin's name, never changed
   type: `${PLUGIN}.hello`,
@@ -75,19 +91,40 @@ const helloWidget = defineWidget<HelloConfig>({
   defaultSize: { w: 4, h: 3 },
   minSize: { w: 3, h: 2 },
   component: HelloWidget,
-  properties: [
-    {
-      key: 'topic',
-      label: 'Topic',
-      kind: 'topic',
-      default: '/chatter',
-      topicTypes: ['std_msgs/msg/String'],
-    },
-  ],
+  properties: HELLO_PROPERTIES,
+});
+
+// A status widget: the latest message of the topic, at a glance.
+// StatusReadout shows what fits its width: the icon, the value, the label.
+function HelloStatus({ config }: StatusWidgetProps<HelloConfig>) {
+  const { message } = useTopic<{ data: string }>(config.topic);
+  return (
+    <StatusReadout
+      icon={<TerminalIcon />}
+      value={message ? message.data : '…'}
+      tone={message ? 'ok' : 'off'}
+      title={message ? `${config.topic}: ${message.data}` : `Waiting for ${config.topic}…`}
+    />
+  );
+}
+
+const helloStatusWidget = defineStatusWidget<HelloConfig>({
+  // Stored in the panels' status bars: prefixed with the plugin's name, never
+  // changed, and not a widget's type
+  type: `${PLUGIN}.hello-status`,
+  name: 'Hello',
+  description: 'The latest message of a String topic.',
+  icon: TerminalIcon,
+  // In the status bar's columns (24 across it)
+  defaultWidth: 3,
+  minWidth: 2,
+  component: HelloStatus,
+  properties: HELLO_PROPERTIES,
 });
 
 export default definePlugin({
   widgets: [helloWidget],
+  statusWidgets: [helloStatusWidget],
   // New defaults for any widget's properties, e.g. this robot's velocity topic:
   // defaults: { teleop: { topic: '/my_robot/cmd_vel', maxLinear: 0.3 } },
 });

@@ -26,6 +26,13 @@ test('a panel file has the name, the widgets and the layouts of every device', (
   assert.ok(panelFileText(panel).endsWith('}\n'));
 });
 
+test('a panel file has its status bar, if it has one', () => {
+  const statusBar = [{ id: 'wifi', type: 'wifi-status', x: 20, w: 4, config: { warnBelow: 40 } }];
+  assert.deepEqual(panelFile({ ...panel, statusBar }), { name: 'Drive', widgets: panel.widgets, layouts: panel.layouts, statusBar });
+  assert.deepEqual(readPanelFile(panelFileText({ ...panel, statusBar })).statusBar, statusBar);
+  assert.equal('statusBar' in panelFile({ ...panel, statusBar: [] }), false);
+});
+
 test('a panel file is named after the panel, renamed or not', () => {
   assert.equal(panelFileName({ ...panel, name: 'Drive & Dock' }), 'drive-dock.json');
 });

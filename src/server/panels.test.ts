@@ -125,3 +125,42 @@ test('a panel created from a file keeps the layouts of every device, as the file
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('sanitizePanel keeps the status bar, its widgets in their places, and refuses malformed ones', () => {
+  const statusBar = [
+    { id: 's1', type: 'cpu-status', x: 20, w: 4, config: {} },
+    { id: 's2', type: 'wifi-status', x: 0, w: 3, config: { warnBelow: 40 } },
+  ];
+  assert.deepEqual(sanitizePanel({ name: 'Drive', widgets: [widget], statusBar: [{ ...statusBar[0], extra: 1 }, statusBar[1]] }, 'drive').statusBar, statusBar);
+  // None: not in the file
+  assert.equal('statusBar' in sanitizePanel({ name: 'Drive', widgets: [widget], statusBar: [] }, 'drive'), false);
+  // Without a place: after the one before, within the bar
+  assert.deepEqual(
+    sanitizePanel(
+      { name: 'Drive', statusBar: [{ id: 'a', type: 't', w: 4 }, { id: 'b', type: 't', x: 10, w: 3 }, { id: 'c', type: 't', w: 2 }, { id: 'd', type: 't', w: 20 }] },
+      'drive',
+    ).statusBar!.map((status) => [status.x, status.w]),
+    [
+      [0, 4],
+      [10, 3],
+      [13, 2],
+      [4, 20],
+    ],
+  );
+  const status = { id: 's1', type: 'wifi-status', x: 0, w: 2 };
+  const bad = [
+    {},
+    [{ ...status, id: '../x' }],
+    [status, status],
+    [{ ...status, type: '' }],
+    [{ ...status, w: 0 }],
+    [{ ...status, w: 25 }],
+    [{ ...status, w: 1.5 }],
+    [{ ...status, x: -1 }],
+    [{ ...status, x: 24 }],
+    [{ ...status, config: [] }],
+  ];
+  for (const value of bad) {
+    assert.throws(() => sanitizePanel({ name: 'x', widgets: [], statusBar: value }, 'x'), HttpError, JSON.stringify(value));
+  }
+});

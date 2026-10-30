@@ -1,14 +1,15 @@
-// Edits the selected widget: its title and the properties its definition
-// declares. Text and numbers are applied when the field is left (or on Enter),
-// not on every keystroke: a camera would resubscribe for every letter typed.
+// Edits the selected widget, of the board or of the status bar: its title
+// (the board's only) and the properties its definition declares. Text and
+// numbers are applied when the field is left (or on Enter), not on every
+// keystroke: a camera would resubscribe for every letter typed.
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ComponentType, type ReactNode, type SVGProps } from 'react';
 
-import type { TopicInfo, WidgetInstance } from '../../shared/panel.ts';
+import type { TopicInfo } from '../../shared/panel.ts';
 import { api } from '../api.ts';
 import { CloseIcon, CopyIcon, QuestionIcon, TrashIcon } from '../icons.tsx';
 import { FileInput } from './FileInput.tsx';
-import { resolveConfig, widgetDefinition } from '../widgets/registry.ts';
+import { resolveConfig } from '../widgets/registry.ts';
 import type { Property } from '../widgets/types.ts';
 
 interface SelectOption {
@@ -17,35 +18,55 @@ interface SelectOption {
 }
 
 export interface PropertiesPanelProps {
-  widget: WidgetInstance;
-  onChange: (widget: WidgetInstance) => void;
+  type: string;
+  // Its widget's or status widget's, if the type is known
+  definition: { name: string; icon: ComponentType<SVGProps<SVGSVGElement>>; properties: Property[] } | undefined;
+  // As stored
+  config: Record<string, unknown>;
+  // A widget of the board's; status widgets have none
+  title?: string;
+  // Where it is
+  meta: string;
+  label: string;
+  onConfig: (config: Record<string, unknown>) => void;
+  onTitle?: (title: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
   onClose: () => void;
 }
 
-export function PropertiesPanel({ widget, onChange, onDuplicate, onRemove, onClose }: PropertiesPanelProps) {
-  const definition = widgetDefinition(widget.type);
-  const config = definition ? resolveConfig(definition, widget.config) : widget.config;
+export function PropertiesPanel({
+  type,
+  definition,
+  config: stored,
+  title,
+  meta,
+  label,
+  onConfig,
+  onTitle,
+  onDuplicate,
+  onRemove,
+  onClose,
+}: PropertiesPanelProps) {
+  const config = definition ? resolveConfig(definition, stored) : stored;
   const Icon = definition?.icon ?? QuestionIcon;
-  const setProperty = (key: string, value: unknown) =>
-    onChange({ ...widget, config: { ...widget.config, [key]: value } });
+  const setProperty = (key: string, value: unknown) => onConfig({ ...stored, [key]: value });
 
   return (
-    <aside className="properties" aria-label="Widget properties">
+    <aside className="properties" aria-label={label}>
       <header className="properties-header">
         <Icon />
-        <h2>{definition?.name ?? widget.type}</h2>
+        <h2>{definition?.name ?? type}</h2>
         <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
           <CloseIcon />
         </button>
       </header>
       <div className="properties-body">
-        <Field label="Title" help="Shown above the widget, if set">
-          {(id) => (
-            <CommittedInput id={id} value={widget.title} onCommit={(title) => onChange({ ...widget, title })} />
-          )}
-        </Field>
+        {title !== undefined && onTitle && (
+          <Field label="Title" help="Shown above the widget, if set">
+            {(id) => <CommittedInput id={id} value={title} onCommit={onTitle} />}
+          </Field>
+        )}
         {definition?.properties
           .filter((property) => !property.visible || property.visible(config))
           .map((property) => (
@@ -56,9 +77,7 @@ export function PropertiesPanel({ widget, onChange, onDuplicate, onRemove, onClo
               onChange={(value) => setProperty(property.key, value)}
             />
           ))}
-        <p className="properties-meta">
-          {widget.w}×{widget.h} cells at column {widget.x + 1}, row {widget.y + 1}
-        </p>
+        <p className="properties-meta">{meta}</p>
       </div>
       <footer className="properties-footer">
         <button type="button" className="button" onClick={onDuplicate}>

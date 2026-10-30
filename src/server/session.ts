@@ -493,14 +493,16 @@ export class Session implements FrameSink, PluginSession {
         this.unsubscribe(id);
         this.subscriptions.set(
           id,
-          services.networking.watch((state) =>
-            this.send({
-              type: 'network',
-              id,
-              ...state,
-              via: deviceOfAddress(state.devices, this.localAddress),
-              canChange: this.ownPage,
-            }),
+          services.networking.watch(
+            (state) =>
+              this.send({
+                type: 'network',
+                id,
+                ...state,
+                via: deviceOfAddress(state.devices, this.localAddress),
+                canChange: this.ownPage,
+              }),
+            message.scan !== false,
           ),
         );
         return;

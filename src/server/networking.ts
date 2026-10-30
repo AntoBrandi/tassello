@@ -167,8 +167,8 @@ export class Networking {
 
   // The networks, whenever they change, until the returned function is
   // called. A page opening the widget looks for networks if the last look
-  // is old.
-  watch(listener: NetworkListener): () => void {
+  // is old, unless not to scan (the status bar's).
+  watch(listener: NetworkListener, scan = true): () => void {
     this.listeners.add(listener);
     if (this.latest) {
       listener(this.latest);
@@ -177,7 +177,7 @@ export class Networking {
       this.startMonitor();
       void this.refresh();
     }
-    if (Date.now() - this.scannedAt > SCAN_AGE_MS) {
+    if (scan && Date.now() - this.scannedAt > SCAN_AGE_MS) {
       void this.rescan(null);
     }
     return () => {

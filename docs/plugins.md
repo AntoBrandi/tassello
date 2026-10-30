@@ -3,6 +3,7 @@
 A plugin extends any Tassello with:
 
 - **widgets**: React components with properties the editor shows, added to the palette;
+- **status widgets**: readings at a glance in the panels' status bars, e.g. a battery's charge;
 - a **server side**, if they need one: code running in Tassello's server on the robot, with its
   ROS node, answering the widgets' requests and streaming them data;
 - **defaults** for any widget's properties, e.g. a robot's topic names and speed limits;
@@ -51,7 +52,10 @@ my-robot/
 All four fields are optional. `client` is an ES module, and its whole folder is served (for its
 chunks and assets); `styles` must be in that folder. `server` is an ES module Node.js imports:
 JavaScript when the plugin is installed in `node_modules`, where Node.js does not run TypeScript;
-TypeScript elsewhere is fine with Node.js ≥ 22.18. `panels` is a folder of example panels.
+TypeScript elsewhere is fine with Node.js ≥ 22.18. `panels` is a folder of example panels: panel
+files as **Export panel** saves them, their status bar included (`statusBar`: each status
+widget's `id`, `type`, `x` and `w` in columns, and `config`; without an `x`, a status widget goes
+after the one before it).
 
 The package's `name` is the plugin's name: its widgets address its server side by it.
 
@@ -123,6 +127,71 @@ The component receives:
 A widget fills its cell (`height: 100%` works). A widget that throws shows its error instead of
 breaking the board.
 
+### Status widgets
+
+Each panel has a status bar above its board: status widgets in a row, each one reading at a
+glance. A status widget is defined as a widget is, with `defineStatusWidget`, and
+listed in the plugin's `statusWidgets`:
+
+```tsx
+import { BoltIcon, definePlugin, defineStatusWidget, StatusReadout, useTopic, type StatusWidgetProps } from 'tassello/sdk';
+
+interface BatteryStatusConfig {
+  topic: string;
+  warnBelow: number;
+}
+
+function BatteryStatus({ config }: StatusWidgetProps<BatteryStatusConfig>) {
+  const { message } = useTopic<{ percentage: number; power_supply_status: number }>(config.topic, 1);
+  if (!message) {
+    return <StatusReadout icon={<BoltIcon />} value="…" tone="off" title={`Waiting for ${config.topic}`} />;
+  }
+  const percent = Math.round(message.percentage * 100);
+  return (
+    <StatusReadout
+      icon={<BoltIcon />}
+      value={`${percent}%`}
+      label={message.power_supply_status === 1 ? 'Charging' : null}
+      tone={percent < config.warnBelow ? 'critical' : 'ok'}
+      title={`Battery ${percent}%`}
+    />
+  );
+}
+
+export default definePlugin({
+  statusWidgets: [
+    defineStatusWidget<BatteryStatusConfig>({
+      type: 'my-robot.battery-status',
+      name: 'Battery',
+      description: 'The charge left',
+      icon: BoltIcon,
+      defaultWidth: 3,
+      minWidth: 1,
+      component: BatteryStatus,
+      properties: [
+        { key: 'topic', label: 'Topic', kind: 'topic', default: '/battery_state', topicTypes: ['sensor_msgs/msg/BatteryState'] },
+        { key: 'warnBelow', label: 'Warn below (%)', kind: 'number', default: 20, min: 0, max: 100 },
+      ],
+    }),
+  ],
+});
+```
+
+| Field | |
+|---|---|
+| `type` | Stored in the panels' status bars: **never change it**. Prefixed with the plugin's name, and no widget's type: types are unique across both, as the defaults are by type |
+| `name`, `description`, `icon` | Shown in the status bar's palette (**＋ Status**) |
+| `defaultWidth`, `minWidth` | In the bar's columns: `STATUS_COLUMNS` (24) across its width, whatever the screen's. People place and resize status widgets as widgets on the board |
+| `properties` | Edited in the side panel, as a widget's |
+| `component` | The React component, given `StatusWidgetProps<Config>`: `config`, `instance` (`id`, `type`, `x` and `w`: its place and width in columns), `editing`, `updateConfig(changes)` |
+
+The bar is 30 px tall. `StatusReadout` lays out what a status widget shows, as Tassello's own:
+an `icon`, a `value`, a `label` after it and `children` filling the rest (a chart), coloured by
+its `tone` (`'ok'`, `'warn'`, `'critical'`, `'off'` when there is nothing to show), with the
+details in its `title`, shown by the pointer. It shows what fits the width, which changes with
+the screen's: under 50 px the icon (or the value, with `narrow: 'value'`), under 96 px the icon
+and the value, then the label too, and from 130 px the rest.
+
 ### Properties
 
 Each property has a `key` in the config, a `label`, a `default` (which stands in for missing or
@@ -180,7 +249,7 @@ function useArms() {
 | `terminalInput(id, data)` / `resizeTerminal(id, cols, rows)` | What is typed in the terminal; its size |
 | `ackTerminal(id, started, offset)` | The page wrote the output up to `offset`: the server sends at most 256 KB ahead of it |
 | `restartTerminal(id)` | Hangs up the terminal's program, and starts it again |
-| `subscribeNetwork(callback)` | The robot's networks, as NetworkManager has them: its interfaces, the connections saved, the Wi-Fi networks in range, what the server's user may change and what the pages are having done, again whenever that changes, and `via`, the interface the page reaches the robot through (see `NetworkUpdate` in `src/shared/protocol.ts`, `NetworkState` in `src/shared/networking.ts`). Returns the unsubscribe function |
+| `subscribeNetwork(callback, { scan? })` | The robot's networks, as NetworkManager has them: its interfaces, the connections saved, the Wi-Fi networks in range, what the server's user may change and what the pages are having done, again whenever that changes, and `via`, the interface the page reaches the robot through (see `NetworkUpdate` in `src/shared/protocol.ts`, `NetworkState` in `src/shared/networking.ts`). The networks in range are looked for if the last look is old, unless `scan` is `false` (a scan may slow the network down: for the network joined only, as the Wi-Fi status widget follows it). Returns the unsubscribe function |
 | `networkAction(request)` | Changes them (`NetworkRequest`): `connect`, `disconnect`, `create` (a Wi-Fi network, an access point, a cable's: `NetworkSettings`), `modify`, `delete`, `wifi` (on or off), `rescan`; resolves once NetworkManager is done with `{ uuid, message }`, rejects with why not. `secrets` resolves with a Wi-Fi network's name and password (`NetworkSecrets`). The dashboard's own pages only |
 | `subscribeGraph(callback)` | The ROS graph: its topics with their publishers and subscribers, its services and actions with the nodes serving and using them, its nodes (`GraphSnapshot` in `src/shared/monitor.ts`), again whenever it changes. Returns the unsubscribe function |
 | `subscribeTopicInfo(topic, callback)` | A topic's publishers and subscriptions with their QoS, and those that cannot talk (`ros2 topic info -v`, `TopicDetails`) |
@@ -246,7 +315,8 @@ Prefix the plugin's own classes: they apply to the whole page.
 
 ### Defaults
 
-A plugin can change the defaults of any widget's properties, Tassello's or another plugin's.
+A plugin can change the defaults of any widget's properties, Tassello's or another plugin's, and
+of any status widget's (`'wifi-status'`, `'cpu-status'`).
 They stand in for the values a panel does not set, so a robot's plugin makes Tassello's widgets
 work for the robot out of the box:
 

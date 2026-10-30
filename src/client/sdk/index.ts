@@ -5,17 +5,23 @@
 //
 //   import { connection, defineWidget, definePlugin, useTopic } from 'tassello/sdk';
 
-// Widgets and plugins
+// Widgets, status widgets and plugins
 export {
   defineWidget,
+  defineStatusWidget,
   definePlugin,
   type WidgetDefinition,
   type WidgetProps,
+  type StatusWidgetDefinition,
+  type StatusWidgetProps,
   type PropertySchema,
   type Property,
   type RegisteredWidget,
+  type RegisteredStatusWidget,
   type TasselloClientPlugin,
 } from '../widgets/types.ts';
+export { StatusReadout, type StatusReadoutProps, type StatusTone } from '../widgets/status/StatusReadout.tsx';
+export { STATUS_COLUMNS } from '../../shared/panel.ts';
 
 // The robot: ROS topics, services and TF, the plugins' server sides, commands
 export {
@@ -175,4 +181,4 @@ export type {
   FsSpace,
   FsText,
 } from '../../shared/file_manager.ts';
-export type { Panel, WidgetInstance } from '../../shared/panel.ts';
+export type { Panel, StatusWidgetInstance, WidgetInstance } from '../../shared/panel.ts';

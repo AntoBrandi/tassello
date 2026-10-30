@@ -48,6 +48,7 @@ import {
   type ImageSubscribe,
   type LogsSubscribe,
   type LogsUpdate,
+  type NetworkSubscribe,
   type NetworkUpdate,
   type OverlaySubscribe,
   type OverlayUpdate,
@@ -209,7 +210,7 @@ type Request =
   | Omit<RosoutSubscribe, 'id'>
   | Omit<DiagnosticsSubscribe, 'id'>
   | Omit<TerminalOpen, 'id'>
-  | { type: 'network.subscribe' }
+  | Omit<NetworkSubscribe, 'id'>
   | Omit<GraphSubscribe, 'id'>
   | Omit<TopicInfoSubscribe, 'id'>
   | Omit<TopicMonitorSubscribe, 'id'>
@@ -486,9 +487,11 @@ export class Connection {
   }
 
   // The robot's networks, as NetworkManager has them (see NetworkUpdate):
-  // again whenever they change. Returns the unsubscribe function.
-  subscribeNetwork(callback: (update: NetworkUpdate) => void): () => void {
-    return this.subscribe({ type: 'network.subscribe' }, { network: callback });
+  // again whenever they change. Unless scan is false, the networks in range
+  // are looked for if the last look is old. Returns the unsubscribe
+  // function.
+  subscribeNetwork(callback: (update: NetworkUpdate) => void, { scan = true }: { scan?: boolean } = {}): () => void {
+    return this.subscribe({ type: 'network.subscribe', scan }, { network: callback });
   }
 
   // Changes the robot's networks: resolves once NetworkManager is done

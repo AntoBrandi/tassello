@@ -9,14 +9,19 @@
 //
 // A panel is exported as its file, the layouts of every device included, and
 // files are imported as new panels (see panel_files.ts).
+//
+// Above the board, the panel's status bar (see board/StatusBar.tsx): shown if
+// it has status widgets, edited, saved and undone with the rest of the panel.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { Device, Panel, PanelSummary, Rect, WidgetInstance } from '../shared/panel.ts';
+import type { Device, Panel, PanelSummary, Rect, StatusWidgetInstance, WidgetInstance } from '../shared/panel.ts';
 import { api } from './api.ts';
 import { Board } from './board/Board.tsx';
 import { freeSpot } from './board/geometry.ts';
-import { DEVICES, deviceFor, fits, layoutFor, withHidden, withoutLayout, withRects } from './board/layouts.ts';
+import { DEVICES, deviceFor, fits, layoutFor, movedBy, withHidden, withoutLayout, withRects } from './board/layouts.ts';
+import { StatusBar } from './board/StatusBar.tsx';
+import { freePlace, STATUS_COLUMNS, statusLayout } from './board/status_bar.ts';
 import { connection, useConnectionStatus } from './connection.ts';
 import { useDialogs } from './dialogs.tsx';
 import { PropertiesPanel } from './editor/PropertiesPanel.tsx';
@@ -34,8 +39,8 @@ import {
 } from './icons.tsx';
 import { notify, Notifications } from './notifications.tsx';
 import { freeName, panelFile, panelFileName, panelFileText, readPanelFile } from './panel_files.ts';
-import { widgetDefinition } from './widgets/registry.ts';
-import type { RegisteredWidget } from './widgets/types.ts';
+import { statusWidgetDefinition, statusWidgetEntries, widgetDefinition, widgetEntries } from './widgets/registry.ts';
+import type { RegisteredStatusWidget, RegisteredWidget } from './widgets/types.ts';
 
 type Mode = 'view' | 'edit';
 type SaveState = 'saved' | 'saving' | 'failed';
@@ -176,7 +181,9 @@ export function App() {
   const [mode, setMode] = useState<Mode>('view');
   // The ids of the widgets selected, in the order they were
   const [selection, setSelection] = useState<string[]>([]);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  // The status widget selected: never with widgets of the board
+  const [statusSelection, setStatusSelection] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState<'widgets' | 'status' | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const undoStack = useRef<Panel[]>([]);
@@ -197,6 +204,20 @@ export function App() {
   const setPanel = useCallback((next: Panel | null) => {
     panelRef.current = next;
     setPanelState(next);
+  }, []);
+
+  const selectWidgets = useCallback((ids: string[]) => {
+    setSelection(ids);
+    if (ids.length > 0) {
+      setStatusSelection(null);
+    }
+  }, []);
+
+  const selectStatusWidget = useCallback((id: string | null) => {
+    setStatusSelection(id);
+    if (id) {
+      setSelection([]);
+    }
   }, []);
 
   const refreshPanels = useCallback(async () => {
@@ -230,6 +251,7 @@ export function App() {
       setPanel(previous);
       saver.schedule(previous);
       setSelection((ids) => ids.filter((id) => previous.widgets.some((w) => w.id === id)));
+      setStatusSelection((id) => (previous.statusBar?.some((w) => w.id === id) ? id : null));
     }
   }, [saver, setPanel]);
 
@@ -283,6 +305,7 @@ export function App() {
         undoStack.current = [];
         setCanUndo(false);
         setSelection([]);
+        setStatusSelection(null);
         void loadPanel(panelId);
       }
     });
@@ -313,6 +336,7 @@ export function App() {
     if (next === 'view') {
       // Buttons run the saved command: save before they can be pressed
       setSelection([]);
+      setStatusSelection(null);
       setEditDevice(null);
       await saver.flush();
     }
@@ -322,7 +346,7 @@ export function App() {
 
   // ── Widgets ──
   const addWidget = (definition: RegisteredWidget) => {
-    setPaletteOpen(false);
+    setPaletteOpen(null);
     const current = panelRef.current;
     if (!current) {
       return;
@@ -331,7 +355,7 @@ export function App() {
     const rect = freeSpot(current.widgets, definition.defaultSize, columns);
     const widget: WidgetInstance = { id: newWidgetId(definition.type), type: definition.type, title: '', ...rect, config: {} };
     updatePanel((p) => ({ ...p, widgets: [...p.widgets, widget] }));
-    setSelection([widget.id]);
+    selectWidgets([widget.id]);
   };
 
   // In the layout of the device shown
@@ -395,8 +419,76 @@ export function App() {
     const rect = freeSpot(current.widgets, { w: widget.w, h: widget.h }, columns);
     const copy = { ...widget, ...rect, id: newWidgetId(widget.type), config: structuredClone(widget.config) };
     updatePanel((p) => ({ ...p, widgets: [...p.widgets, copy] }));
-    setSelection([copy.id]);
+    selectWidgets([copy.id]);
   };
+
+  // ── Status widgets ──
+  const updateStatusBar = useCallback(
+    (change: (widgets: StatusWidgetInstance[]) => StatusWidgetInstance[]) =>
+      updatePanel((p) => ({ ...p, statusBar: change(p.statusBar ?? []) })),
+    [updatePanel],
+  );
+
+  // In the first free place after the one selected, else from the left; if
+  // the bar has no room for its width, in the widest it has
+  const insertStatusWidget = (widget: Omit<StatusWidgetInstance, 'x' | 'w'>, w: number, after: string | null) => {
+    const current = panelRef.current;
+    if (!current) {
+      return;
+    }
+    const { rects } = statusLayout(current.statusBar ?? []);
+    const selected = after ? rects.get(after) : undefined;
+    const minWidth = statusWidgetDefinition(widget.type)?.minWidth ?? 1;
+    const place = freePlace(rects.values(), w, minWidth, selected ? selected.x + selected.w : 0);
+    if (!place) {
+      notify('The status bar is full: make room by moving, narrowing or removing a status widget', 'error');
+      return;
+    }
+    const added = { ...widget, ...place };
+    updateStatusBar((widgets) => [...widgets, added]);
+    selectStatusWidget(added.id);
+  };
+
+  const addStatusWidget = (definition: RegisteredStatusWidget) => {
+    setPaletteOpen(null);
+    insertStatusWidget({ id: newWidgetId(definition.type), type: definition.type, config: {} }, definition.defaultWidth, statusSelection);
+  };
+
+  const duplicateStatusWidget = (id: string) => {
+    const widget = panelRef.current?.statusBar?.find((w) => w.id === id);
+    if (widget) {
+      insertStatusWidget({ id: newWidgetId(widget.type), type: widget.type, config: structuredClone(widget.config) }, widget.w, id);
+    }
+  };
+
+  // Moved or resized, in columns
+  const placeStatusWidget = useCallback(
+    (id: string, place: { x: number; w: number }) =>
+      updateStatusBar((widgets) => widgets.map((w) => (w.id === id ? { ...w, ...place } : w))),
+    [updateStatusBar],
+  );
+
+  const configureStatusWidget = useCallback(
+    (id: string, changes: Record<string, unknown>) =>
+      updateStatusBar((widgets) => widgets.map((w) => (w.id === id ? { ...w, config: { ...w.config, ...changes } } : w))),
+    [updateStatusBar],
+  );
+
+  const removeStatusWidget = useCallback(
+    (id: string) => {
+      const widget = panelRef.current?.statusBar?.find((w) => w.id === id);
+      if (!widget) {
+        return;
+      }
+      updateStatusBar((widgets) => widgets.filter((w) => w.id !== id));
+      setStatusSelection((selected) => (selected === id ? null : selected));
+      notify(`Removed “${statusWidgetDefinition(widget.type)?.name ?? widget.type}” from the status bar`, 'info', {
+        label: 'Undo',
+        run: undo,
+      });
+    },
+    [updateStatusBar, undo],
+  );
 
   // ── Panels ──
   const createPanel = async () => {
@@ -520,6 +612,25 @@ export function App() {
         return;
       }
       const current = panelRef.current;
+      // A status widget: moved along the bar, a column at a time
+      const status = current?.statusBar?.find((w) => w.id === statusSelection);
+      if (status) {
+        if (event.key === 'Escape') {
+          setStatusSelection(null);
+        } else if (event.key === 'Delete' || event.key === 'Backspace') {
+          event.preventDefault();
+          removeStatusWidget(status.id);
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          const shown = statusLayout(current!.statusBar!);
+          const rects = movedBy(new Map([[status.id, shown.rects.get(status.id)!]]), event.key === 'ArrowLeft' ? -1 : 1, 0, STATUS_COLUMNS);
+          const rect = rects.get(status.id)!;
+          if (fits(rects, shown, STATUS_COLUMNS)) {
+            placeStatusWidget(status.id, { x: rect.x, w: rect.w });
+          }
+        }
+        return;
+      }
       const ids = selection.filter((id) => current?.widgets.some((w) => w.id === id));
       if (!current || ids.length === 0) {
         return;
@@ -555,10 +666,11 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editing, selection, undo, removeWidgets, placeWidgets]);
+  }, [editing, selection, statusSelection, undo, removeWidgets, placeWidgets, removeStatusWidget, placeStatusWidget]);
 
   const selected =
     editing && selection.length === 1 ? panel?.widgets.find((w) => w.id === selection[0]) : undefined;
+  const selectedStatus = editing ? panel?.statusBar?.find((w) => w.id === statusSelection) : undefined;
   const statusText = { connecting: 'Connecting…', open: `Connected to ${connection.hostname}`, closed: 'Disconnected, reconnecting…' }[status];
 
   return (
@@ -595,7 +707,7 @@ export function App() {
             <button type="button" className="icon-button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!canUndo} onClick={undo}>
               <UndoIcon />
             </button>
-            <button type="button" className="button primary" aria-label="Add widget" onClick={() => setPaletteOpen(true)}>
+            <button type="button" className="button primary" aria-label="Add widget" onClick={() => setPaletteOpen('widgets')}>
               <PlusIcon /> <span className="hide-narrow">Add widget</span>
             </button>
           </>
@@ -674,6 +786,20 @@ export function App() {
         </div>
       </header>
 
+      {panel && !loadError && (editing || (panel.statusBar?.length ?? 0) > 0) && (
+        <StatusBar
+          widgets={panel.statusBar ?? []}
+          panelId={panel.id}
+          editing={editing}
+          selected={selectedStatus?.id ?? null}
+          onSelect={selectStatusWidget}
+          onPlace={placeStatusWidget}
+          onRemove={removeStatusWidget}
+          onConfigure={configureStatusWidget}
+          onAdd={() => setPaletteOpen('status')}
+        />
+      )}
+
       <main className="workspace">
         {panels === null ? (
           <div className="empty-state">Loading…</div>
@@ -745,7 +871,7 @@ export function App() {
                   previewWidth={device !== windowDevice ? DEVICES[device].previewWidth : null}
                   editing={editing}
                   selection={selection}
-                  onSelect={setSelection}
+                  onSelect={selectWidgets}
                   onPlace={placeWidgets}
                   onRemove={removeWidget}
                   onConfigure={configureWidget}
@@ -766,20 +892,54 @@ export function App() {
             {selected && (
               <PropertiesPanel
                 key={selected.id}
-                widget={selected}
-                onChange={(widget) =>
-                  updatePanel((p) => ({ ...p, widgets: p.widgets.map((w) => (w.id === widget.id ? widget : w)) }))
+                type={selected.type}
+                definition={widgetDefinition(selected.type)}
+                config={selected.config}
+                title={selected.title}
+                meta={`${selected.w}×${selected.h} cells at column ${selected.x + 1}, row ${selected.y + 1}`}
+                label="Widget properties"
+                onConfig={(config) =>
+                  updatePanel((p) => ({ ...p, widgets: p.widgets.map((w) => (w.id === selected.id ? { ...w, config } : w)) }))
+                }
+                onTitle={(title) =>
+                  updatePanel((p) => ({ ...p, widgets: p.widgets.map((w) => (w.id === selected.id ? { ...w, title } : w)) }))
                 }
                 onDuplicate={() => duplicateWidget(selected.id)}
                 onRemove={() => removeWidget(selected.id)}
                 onClose={() => setSelection([])}
               />
             )}
+            {selectedStatus && (
+              <PropertiesPanel
+                key={selectedStatus.id}
+                type={selectedStatus.type}
+                definition={statusWidgetDefinition(selectedStatus.type)}
+                config={selectedStatus.config}
+                meta={`${selectedStatus.w} of the status bar’s ${STATUS_COLUMNS} columns, from column ${selectedStatus.x + 1}`}
+                label="Status widget properties"
+                onConfig={(config) =>
+                  updateStatusBar((widgets) => widgets.map((w) => (w.id === selectedStatus.id ? { ...w, config } : w)))
+                }
+                onDuplicate={() => duplicateStatusWidget(selectedStatus.id)}
+                onRemove={() => removeStatusWidget(selectedStatus.id)}
+                onClose={() => setStatusSelection(null)}
+              />
+            )}
           </>
         ) : null}
       </main>
 
-      {paletteOpen && <WidgetPalette onAdd={addWidget} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen === 'widgets' && (
+        <WidgetPalette title="Add a widget" entries={widgetEntries()} onAdd={addWidget} onClose={() => setPaletteOpen(null)} />
+      )}
+      {paletteOpen === 'status' && (
+        <WidgetPalette
+          title="Add a status widget"
+          entries={statusWidgetEntries()}
+          onAdd={addStatusWidget}
+          onClose={() => setPaletteOpen(null)}
+        />
+      )}
       <input
         ref={importRef}
         type="file"

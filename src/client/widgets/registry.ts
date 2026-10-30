@@ -6,6 +6,8 @@
 // (defineWidget, see types.ts) in a file of this folder, and list it in CORE.
 // Its config is whatever its properties declare; it reaches ROS through
 // connection.ts, whose protocol (src/shared/protocol.ts) the server implements.
+// A status widget, of the status bar above the panels, the same way:
+// defineStatusWidget, listed in CORE_STATUS (see status/).
 
 import { applicationsWidget } from './ApplicationsWidget.tsx';
 import { armTeleopWidget } from './ArmTeleopWidget.tsx';
@@ -28,11 +30,13 @@ import { speedometerWidget } from './speedometer/SpeedometerWidget.tsx';
 import { systemMonitorWidget } from './system/SystemMonitorWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
-import type { RegisteredWidget, TasselloClientPlugin } from './types.ts';
+import { cpuStatusWidget } from './status/CpuStatus.tsx';
+import { wifiStatusWidget } from './status/WifiStatus.tsx';
+import type { RegisteredStatusWidget, RegisteredWidget, TasselloClientPlugin } from './types.ts';
 import { webPageWidget } from './web_page/WebPageWidget.tsx';
-import { WidgetRegistry } from './widget_registry.ts';
+import { StatusWidgetRegistry, WidgetRegistry } from './widget_registry.ts';
 
-export { resolveConfig, type WidgetEntry } from './widget_registry.ts';
+export { resolveConfig, type StatusWidgetEntry, type WidgetEntry } from './widget_registry.ts';
 
 const CORE: RegisteredWidget[] = [
   teleopWidget,
@@ -59,11 +63,15 @@ const CORE: RegisteredWidget[] = [
   systemMonitorWidget,
 ];
 
-const registry = new WidgetRegistry(CORE);
+const CORE_STATUS: RegisteredStatusWidget[] = [wifiStatusWidget, cpuStatusWidget];
 
-// Adds a plugin's widgets and defaults; returns what was wrong with them
+const registry = new WidgetRegistry(CORE, (type) => statusRegistry.owner(type));
+const statusRegistry = new StatusWidgetRegistry(CORE_STATUS, (type) => registry.owner(type));
+
+// Adds a plugin's widgets, status widgets and defaults; returns what was
+// wrong with them
 export function registerPlugin(name: string, plugin: TasselloClientPlugin): string[] {
-  return registry.registerPlugin(name, plugin);
+  return [...registry.registerPlugin(name, plugin), ...statusRegistry.registerPlugin(name, plugin)];
 }
 
 export function widgetEntries() {
@@ -72,4 +80,12 @@ export function widgetEntries() {
 
 export function widgetDefinition(type: string): RegisteredWidget | undefined {
   return registry.definition(type);
+}
+
+export function statusWidgetEntries() {
+  return statusRegistry.entries();
+}
+
+export function statusWidgetDefinition(type: string): RegisteredStatusWidget | undefined {
+  return statusRegistry.definition(type);
 }
