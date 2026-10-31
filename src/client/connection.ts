@@ -58,6 +58,8 @@ import {
   type PathSubscribe,
   type PathUpdate,
   type PluginSubscribe,
+  type OctomapInfo,
+  type OctomapSubscribe,
   type PointsInfo,
   type PointsSubscribe,
   type RosoutSubscribe,
@@ -88,6 +90,7 @@ export type GridOptions = Omit<GridSubscribe, 'type' | 'id'>;
 export type TfOptions = Omit<TfSubscribe, 'type' | 'id'>;
 export type TfFramesOptions = Omit<TfFramesSubscribe, 'type' | 'id'>;
 export type PointsOptions = Omit<PointsSubscribe, 'type' | 'id'>;
+export type OctomapOptions = Omit<OctomapSubscribe, 'type' | 'id'>;
 export type PathOptions = Omit<PathSubscribe, 'type' | 'id'>;
 export type OverlayOptions = Omit<OverlaySubscribe, 'type' | 'id'>;
 export type TopicOptions = Omit<TopicSubscribe, 'type' | 'id'>;
@@ -163,6 +166,18 @@ export interface PointsHandlers {
   points: (frame: PointsFrame) => Promise<void> | void;
 }
 
+// An octomap's occupied voxels: their centres (positions), their colours if
+// the map has them, the voxels of each size (info.levels) in turn
+export interface OctomapFrame extends Points {
+  info: OctomapInfo;
+}
+
+export interface OctomapHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // The next frame is requested once the returned promise settles
+  voxels: (frame: OctomapFrame) => Promise<void> | void;
+}
+
 export interface TopicMonitorHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The figures of the latest messages, twice a second while they come
@@ -216,6 +231,7 @@ type Request =
   | Omit<TfSubscribe, 'id'>
   | Omit<TfFramesSubscribe, 'id'>
   | Omit<PointsSubscribe, 'id'>
+  | Omit<OctomapSubscribe, 'id'>
   | Omit<PathSubscribe, 'id'>
   | Omit<OverlaySubscribe, 'id'>
   | Omit<ParamsSubscribe, 'id'>
@@ -407,6 +423,26 @@ export class Connection {
     );
   }
 
+  // An octomap's occupied voxels, decoded on the server, in the map's frame
+  // (see OctomapSubscribe). Returns the unsubscribe function.
+  subscribeOctomap(options: OctomapOptions, handlers: OctomapHandlers): () => void {
+    return this.subscribe(
+      { type: 'octomap.subscribe', ...options },
+      {
+        stream: {
+          status: handlers.status,
+          frame: async (file, { meta }) => {
+            const info = meta as OctomapInfo;
+            const voxels = unpackPoints(await file.arrayBuffer(), info);
+            await handlers.voxels({ ...voxels, info });
+          },
+        },
+      },
+    );
+  }
+
+  // A path's points in 2D, or its poses in 3D (options.poses), whenever it
+  // changes. Returns the unsubscribe function.
   subscribePath(options: PathOptions, callback: (update: PathUpdate) => void): () => void {
     return this.subscribe({ type: 'path.subscribe', ...options }, { path: callback });
   }

@@ -21,18 +21,36 @@ export {
   type Pose,
   type ViewMode,
 } from '../widgets/robot_viewer/display.ts';
-export { PointsLayer, type PointsColoring, type PointsStyle } from '../widgets/robot_viewer/displays/points.ts';
-export { rainbow, parseColor, frameFilter } from '../widgets/robot_viewer/model.ts';
+export { PointsLayer, toLinear, type PointsColoring, type PointsStyle } from '../widgets/robot_viewer/displays/points.ts';
+export { LinesLayer, type LinesStyle } from '../widgets/robot_viewer/displays/lines.ts';
+export {
+  rainbow,
+  parseColor,
+  frameFilter,
+  cameraInfoTopic,
+  intrinsicsOf,
+  intrinsicsFromFov,
+  imageCorners,
+  type Intrinsics,
+} from '../widgets/robot_viewer/model.ts';
 
 // Tassello's displays, to extend
 export { RobotModelDisplay, type JointMotion } from '../widgets/robot_viewer/displays/RobotModelDisplay.ts';
 export { TfDisplay } from '../widgets/robot_viewer/displays/TfDisplay.ts';
 export { OccupancyGridDisplay } from '../widgets/robot_viewer/displays/OccupancyGridDisplay.ts';
 export { PointsDisplay, LaserScanDisplay, PointCloudDisplay } from '../widgets/robot_viewer/displays/PointsDisplays.ts';
+export { CameraDisplay } from '../widgets/robot_viewer/displays/CameraDisplay.ts';
+export { PolygonDisplay } from '../widgets/robot_viewer/displays/PolygonDisplay.ts';
+export { PathDisplay } from '../widgets/robot_viewer/displays/PathDisplay.ts';
+export { OctomapDisplay } from '../widgets/robot_viewer/displays/OctomapDisplay.ts';
 export type {
+  CameraDisplayConfig,
   GridDisplayConfig,
   LaserScanDisplayConfig,
+  OctomapDisplayConfig,
+  PathDisplayConfig,
   PointCloudDisplayConfig,
+  PolygonDisplayConfig,
   RobotModelDisplayConfig,
   TfDisplayConfig,
 } from '../widgets/robot_viewer/displays/index.ts';

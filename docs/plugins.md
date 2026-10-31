@@ -321,9 +321,14 @@ A display that throws shows its error in the viewer; the others carry on.
 
 `tassello/viewer` also has what Tassello's displays are made of: `PointsLayer` (points, coloured by
 intensity, height or their own colours, as the Laser Scan and Point Cloud displays draw them),
-`rainbow` (RViz's colour scale), `loadRobot` (a URDF and its meshes), and the displays themselves
-(`RobotModelDisplay`, `TfDisplay`, `OccupancyGridDisplay`, `LaserScanDisplay`,
-`PointCloudDisplay`, and `PointsDisplay` for points of another kind), to extend: a display
+`LinesLayer` (lines of a width in pixels, of one colour or of a colour per segment's end, as the
+Path, Polygon and Camera displays draw them: `setPolyline(points, closed)`, `setSegments(segments,
+colors)`), `rainbow` (RViz's colour scale), `toLinear` (sRGB to the linear colours three.js
+renders), `loadRobot` (a URDF and its meshes), a camera's projection (`cameraInfoTopic`,
+`intrinsicsOf` a CameraInfo, `intrinsicsFromFov`, `imageCorners` at a distance in its optical
+frame), and the displays themselves (`RobotModelDisplay`, `TfDisplay`, `OccupancyGridDisplay`,
+`LaserScanDisplay`, `PointCloudDisplay`, `PointsDisplay` for points of another kind,
+`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`), to extend: a display
 registered with `load: () => import('./MyCloud.ts').then((m) => m.MyCloud)`, where `MyCloud`
 extends `PointCloudDisplay`, is a point cloud with something of its own.
 
@@ -381,6 +386,8 @@ function useArms() {
 | `subscribeTf({ targetFrame, sourceFrame, rate }, callback)` | A frame's 2D pose in another |
 | `subscribeTfFrames({ fixedFrame, rate }, callback)` | Every TF frame (`TfFrame`: `name`, `parent`, `ageMs`) and its 3D pose in `fixedFrame` (`[x, y, z, qx, qy, qz, qw]`, `null` if not connected to it; none if `fixedFrame` is empty), `rate` times a second, and why there are none (`error`). Returns the unsubscribe function |
 | `subscribePoints({ kind, topic, fixedFrame, maxPoints, channel, maxFps }, { points, status })` | A laser scan's (`kind: 'scan'`) or a point cloud's (`'cloud'`) points, thinned on the robot to at most `maxPoints`, in their frame, with each point's intensity or colour (`channel`: `'auto'`, `'intensity'`, `'rgb'`, `'none'`): `points(frame)` gets `positions` (x, y, z), `values` (intensities, 0-1 over `range`) or `colors` (r, g, b), and `info`: the frame, its pose in `fixedFrame` as the message arrived (`null`, and `error`, if TF could not place it), `count`. The next comes once the promise it returns settles, at most `maxFps` a second. Returns the unsubscribe function |
+| `subscribeOctomap({ topic, maxDepth, maxVoxels, maxFps }, { voxels, status })` | An octomap's (`octomap_msgs/msg/Octomap`, binary or full) occupied voxels, decoded on the robot, at most `maxVoxels` evenly, the nodes below `maxDepth` (1-16, 16 the map's resolution) as their parent at that depth: `voxels(frame)` gets `positions` (their centres, in the map's frame), `colors` (a full ColorOcTree's r, g, b) and `info`: `frameId`, `levels` (each size, in meters, and its count, in the order of the voxels, largest first), `tree`, `resolution`, `source` (its voxels before thinning), `error`. The next comes once the promise it returns settles, at most `maxFps` a second. Returns the unsubscribe function |
+| `subscribePath({ topic, poses? }, callback)` | A path (`nav_msgs/msg/Path`) whenever it changes, thinned to 5000 poses: `frameId` and `points` (x, y of each pose), or with `poses: true` `poses` (x, y, z, qx, qy, qz, qw of each). Returns the unsubscribe function |
 | `subscribeOverlay({ kind, topic, frame }, { overlay, status })` | A laser scan's points (`kind: 'scan'`, `sensor_msgs/msg/LaserScan`) or a footprint's polygon (`'footprint'`, `geometry_msgs/msg/PolygonStamped`), put in `frame` by TF as each arrives: `{ points, error }`, `points` as x0, y0, x1, y1, ... at most 5 times a second. Returns the unsubscribe function |
 | `subscribeBehaviorTree({ topic, tree }, { tree, update, status, recording? })` | A behavior tree's log (`nav2_msgs/msg/BehaviorTreeLog`), on the tree of its XML file: its nodes, then their states and transitions as they change (see `src/shared/protocol.ts`) |
 | `recordBehaviorTree(topic, path, options?)` | Records the log into a rosbag in the new folder `path`, with `ros2 bag record`'s options (`RecordOptions`, rosbag2's defaults if not given), or stops (`null`): resolves with the bag's folder |
@@ -464,7 +471,8 @@ Prefix the plugin's own classes: they apply to the whole page.
 A plugin can change the defaults of any widget's properties, Tassello's or another plugin's, of
 any status widget's (`'wifi-status'`, `'cpu-status'`), and of any display's
 (`'robot-model-display'`, `'tf-display'`, `'grid-display'`, `'laser-scan-display'`,
-`'point-cloud-display'`).
+`'point-cloud-display'`, `'octomap-display'`, `'camera-display'`, `'path-display'`,
+`'polygon-display'`).
 They stand in for the values a panel does not set, so a robot's plugin makes Tassello's widgets
 work for the robot out of the box:
 

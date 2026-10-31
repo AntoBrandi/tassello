@@ -1,11 +1,12 @@
-// Image topics for the camera widgets: raw images compressed to JPEG,
-// compressed ones passed through. One stream per distinct request (topic,
+// Image topics for the camera widgets and the Robot Viewer's camera display:
+// raw images compressed to JPEG, compressed ones passed through, with the
+// frame of their header (ImageInfo). One stream per distinct request (topic,
 // transport, quality, size).
 
 import rclnodejs from 'rclnodejs';
 import sharp from 'sharp';
 
-import type { ImageSubscribe } from '../shared/protocol.ts';
+import type { ImageInfo, ImageSubscribe } from '../shared/protocol.ts';
 import { FrameStream, type EncodedFrame } from './frame_stream.ts';
 import { compressedToImage, rawToPixels, type RawImage } from './image_encoding.ts';
 import { absoluteTopic, type Logger } from './util.ts';
@@ -71,14 +72,15 @@ export class ImageStream extends FrameStream {
   }
 
   private onImage(type: ImageType, msg: unknown): void {
+    const meta: ImageInfo = { frameId: frameOf(msg) };
     if (type === IMAGE) {
       const image = msg as RawImage;
       this.description = `${image.encoding} ${image.width}×${image.height}`;
-      this.offer(() => this.compress(image));
+      this.offer(async () => ({ ...(await this.compress(image)), meta }));
     } else {
       const image = msg as { format: string; data: Uint8Array | number[] };
       this.description = image.format || 'compressed';
-      this.offer(async () => compressedToImage(image.format, toBytes(image.data)));
+      this.offer(async () => ({ ...compressedToImage(image.format, toBytes(image.data)), meta }));
     }
   }
 
@@ -94,6 +96,11 @@ export class ImageStream extends FrameStream {
     const data = await pipeline.jpeg({ quality }).toBuffer();
     return { data, format: 0, width: image.width, height: image.height };
   }
+}
+
+function frameOf(msg: unknown): string {
+  const frame = (msg as { header?: { frame_id?: unknown } }).header?.frame_id;
+  return typeof frame === 'string' ? frame.replace(/^\/+/, '') : '';
 }
 
 // rclnodejs delivers uint8[] fields as Uint8Array, but types them loosely

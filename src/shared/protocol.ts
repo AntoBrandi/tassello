@@ -115,6 +115,22 @@ export interface PathSubscribe {
   type: 'path.subscribe';
   id: number;
   topic: string;
+  // The poses in 3D, their orientations with them (PathUpdate.poses), as the
+  // Robot Viewer draws them, instead of the points of the navigation widgets
+  poses?: boolean;
+}
+
+// An octomap (octomap_msgs/Octomap, binary or full), its occupied voxels as
+// binary frames of format POINTS_FORMAT (OctomapInfo): decoded on the server,
+// at most maxVoxels of them, in the map's frame. Its nodes below maxDepth
+// (1-16, 16 the map's resolution) are drawn as their parent at that depth.
+export interface OctomapSubscribe {
+  type: 'octomap.subscribe';
+  id: number;
+  topic: string;
+  maxDepth: number;
+  maxVoxels: number;
+  maxFps: number;
 }
 
 // What the navigation widgets draw over the map: a laser scan's points
@@ -629,6 +645,7 @@ export type ClientMessage =
   | TfSubscribe
   | TfFramesSubscribe
   | PointsSubscribe
+  | OctomapSubscribe
   | PathSubscribe
   | OverlaySubscribe
   | TopicSubscribe
@@ -781,8 +798,11 @@ export interface PathUpdate {
   type: 'path';
   id: number;
   frameId: string;
-  // x0, y0, x1, y1, ... in frameId
+  // x0, y0, x1, y1, ... in frameId; empty if poses were asked for
   points: number[];
+  // If asked for (PathSubscribe.poses): x, y, z, qx, qy, qz, qw of each pose
+  // kept, in frameId
+  poses?: number[];
 }
 
 // Of an overlay subscription
@@ -1290,7 +1310,7 @@ export type ServerMessage =
 //   u32 subscription id | u8 format | u16 source width | u16 source height | u16 metadata size
 // The source size is that of the ROS image or grid, before any scaling; 0 if
 // unknown. Grid frames carry their GridInfo as metadata, points their
-// PointsInfo, image frames none.
+// PointsInfo, octomaps' voxels their OctomapInfo, images their ImageInfo.
 
 export const FRAME_HEADER_BYTES = 11;
 // By format: the type of the frame's file
@@ -1312,6 +1332,12 @@ export interface GridInfo {
   known: { x: number; y: number; width: number; height: number } | null;
 }
 
+// Of an image frame
+export interface ImageInfo {
+  // Of the image's header: where the camera is
+  frameId: string;
+}
+
 // Of a points frame, what lies where: the points (PointsLayout) in frameId,
 // whose pose in the fixed frame asked for was `pose` as the message arrived
 export interface PointsInfo extends PointsLayout {
@@ -1321,6 +1347,22 @@ export interface PointsInfo extends PointsLayout {
   error: string | null;
   // Points in the message, before thinning
   source: number;
+}
+
+// Of an octomap's frame: the centres of its occupied voxels (PointsLayout,
+// with their colours if it has them: a ColorOcTree's full map) in frameId
+export interface OctomapInfo extends PointsLayout {
+  frameId: string;
+  // The voxels' sizes, in meters, and how many of each, in the order of the
+  // points: the largest first
+  levels: { size: number; count: number }[];
+  // Of the octomap: its type (OcTree, ColorOcTree...), its finest voxels'
+  // size, and its occupied voxels at the depth asked for, before thinning
+  tree: string;
+  resolution: number;
+  source: number;
+  // Why it could not be read: no voxels then
+  error: string | null;
 }
 
 export const TELEOP_WATCHDOG_MS = 500;

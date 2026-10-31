@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  cameraInfoTopic,
   DEFAULT_DISPLAYS,
   effectiveFixedFrame,
   frameFilter,
+  imageCorners,
+  intrinsicsFromFov,
+  intrinsicsOf,
   migrateRobotModelConfig,
   moveItem,
   newDisplayId,
@@ -88,4 +92,36 @@ test('TF frames filtered by words of their names', () => {
   assert.equal(show('base_laser'), true);
   assert.equal(show('base_link'), false);
   assert.equal(frameFilter(' , ')('anything'), true);
+});
+
+test('the camera info beside an image topic, raw or compressed', () => {
+  assert.equal(cameraInfoTopic('/camera/image_raw'), '/camera/camera_info');
+  assert.equal(cameraInfoTopic('/camera/color/image_raw/compressed'), '/camera/color/camera_info');
+  assert.equal(cameraInfoTopic(' /front/image_rect/ '), '/front/camera_info');
+  assert.equal(cameraInfoTopic('image'), 'camera_info');
+});
+
+test("a camera's projection from its camera info, else from a field of view", () => {
+  const k = [500, 0, 320, 0, 400, 240, 0, 0, 1];
+  assert.deepEqual(intrinsicsOf({ width: 640, height: 480, k }), { width: 640, height: 480, fx: 500, fy: 400, cx: 320, cy: 240 });
+  // Uncalibrated: its p if set, else none
+  const p = [450, 0, 300, 0, 0, 460, 250, 0, 0, 0, 1, 0];
+  assert.deepEqual(intrinsicsOf({ width: 640, height: 480, k: Array(9).fill(0), p }), { width: 640, height: 480, fx: 450, fy: 460, cx: 300, cy: 250 });
+  assert.equal(intrinsicsOf({ width: 640, height: 480, k: Array(9).fill(0), p: Array(12).fill(0) }), null);
+  assert.equal(intrinsicsOf({ width: 0, height: 0, k }), null);
+  const fov = intrinsicsFromFov(640, 480, 90);
+  assert.ok(Math.abs(fov.fx - 320) < 1e-9 && fov.fy === fov.fx && fov.cx === 320 && fov.cy === 240);
+});
+
+test("the image's corners in front of the camera, in its optical frame", () => {
+  const corners = imageCorners({ width: 640, height: 480, fx: 320, fy: 320, cx: 320, cy: 240 }, 2);
+  assert.deepEqual(corners, [
+    [-2, -1.5, 2],
+    [2, -1.5, 2],
+    [2, 1.5, 2],
+    [-2, 1.5, 2],
+  ]);
+  // An off-centre principal point shifts the image
+  const [topLeft] = imageCorners({ width: 100, height: 100, fx: 100, fy: 100, cx: 25, cy: 50 }, 1);
+  assert.deepEqual(topLeft, [-0.25, -0.5, 1]);
 });

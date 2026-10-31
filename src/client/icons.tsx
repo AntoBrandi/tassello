@@ -161,7 +161,7 @@ export const ArmIcon = icon(
 export const AngleIcon = icon(<path d="M4 20 18 6M4 20h16M11 20a7 7 0 0 0-2.1-5" />);
 export const CubeIcon = icon(<path d="M12 2 3 7v10l9 5 9-5V7l-9-5ZM3 7l9 5 9-5M12 12v10" />);
 // The Robot Viewer's displays: a frame's axes, a laser scan's fan of returns,
-// a point cloud
+// a point cloud, a polygon, a path, an octomap's voxels
 export const AxesIcon = icon(<path d="M5 19V4M5 19h15M5 19l-3 3M5 4 3 6.5M5 4l2 2.5M20 19l-2.5-2M20 19l-2.5 2" />);
 export const ScanIcon = icon(
   <>
@@ -189,6 +189,15 @@ export const PointCloudIcon = icon(
     ))}
   </>,
 );
+export const PolygonIcon = icon(<path d="M12 3.5 20.5 9.5 17.5 20h-11L3.5 9.5 12 3.5Z" />);
+export const PathIcon = icon(
+  <>
+    <path d="M5.5 18.5c5 0 3-7 7-7s2-6 6-6" />
+    <circle cx="4" cy="19" r="1.8" />
+    <circle cx="20" cy="5" r="1.8" />
+  </>,
+);
+export const VoxelsIcon = icon(<path d="M3 13h8v8H3v-8ZM13 13h8v8h-8v-8ZM8 4h8v8H8V4Z" />);
 export const QuestionIcon = icon(
   <>
     <circle cx="12" cy="12" r="10" />

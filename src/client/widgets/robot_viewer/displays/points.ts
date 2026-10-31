@@ -19,8 +19,8 @@ export interface PointsStyle {
   size: number;
 }
 
-// sRGB to the linear values three.js renders from
-function toLinear(c: number): number {
+// sRGB to the linear values three.js renders from, e.g. of vertex colours
+export function toLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 

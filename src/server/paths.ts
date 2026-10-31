@@ -1,11 +1,12 @@
-// Path topics (nav_msgs/Path) for the navigation widgets, e.g. Nav2's plan:
-// one subscription per topic, shared by the pages watching it, with the QoS
-// of its publishers. A page gets the latest path when it starts watching,
-// then every new one, at most every SEND_PERIOD_MS.
+// Path topics (nav_msgs/Path) for the navigation widgets and the Robot
+// Viewer, e.g. Nav2's plan: one subscription per topic, shared by the pages
+// watching it, with the QoS of its publishers. A page gets the latest path
+// when it starts watching, then every new one, at most every SEND_PERIOD_MS:
+// its points in 2D, or its poses in 3D, each made once per path.
 
 import type rclnodejs from 'rclnodejs';
 
-import { toPathData, type PathData, type PathMessage } from './path_encoding.ts';
+import { toPathData, toPathPoses, type PathData, type PathMessage } from './path_encoding.ts';
 import { publishersQos } from './qos.ts';
 import { absoluteTopic, errorMessage, type Logger } from './util.ts';
 
@@ -14,14 +15,23 @@ const SEND_PERIOD_MS = 200;
 // How often the graph is checked for the topic's publishers, until it has one
 const RETRY_PERIOD_MS = 1000;
 
+type Watcher = (path: PathData) => void;
+
+interface Latest {
+  message: PathMessage;
+  points?: PathData;
+  poses?: PathData;
+}
+
 class PathTopic {
-  readonly watchers = new Set<(path: PathData) => void>();
+  // Each wants the poses (true) or the points
+  readonly watchers = new Map<Watcher, boolean>();
   private readonly node: rclnodejs.Node;
   private readonly logger: Logger;
   private subscription: rclnodejs.Subscription | null = null;
   private retryTimer: NodeJS.Timeout | null = null;
   private sendTimer: NodeJS.Timeout | null = null;
-  private latest: PathData | null = null;
+  private latest: Latest | null = null;
   // A path arrived while sending was held back
   private pending = false;
 
@@ -31,10 +41,10 @@ class PathTopic {
     this.subscribe(topic);
   }
 
-  add(watcher: (path: PathData) => void): void {
-    this.watchers.add(watcher);
+  add(watcher: Watcher, poses: boolean): void {
+    this.watchers.set(watcher, poses);
     if (this.latest) {
-      watcher(this.latest);
+      watcher(this.encoded(poses));
     }
   }
 
@@ -65,8 +75,13 @@ class PathTopic {
     }
   }
 
+  private encoded(poses: boolean): PathData {
+    const latest = this.latest!;
+    return poses ? (latest.poses ??= toPathPoses(latest.message)) : (latest.points ??= toPathData(latest.message));
+  }
+
   private onPath(msg: PathMessage): void {
-    this.latest = toPathData(msg);
+    this.latest = { message: msg };
     if (this.sendTimer) {
       this.pending = true;
     } else {
@@ -75,8 +90,7 @@ class PathTopic {
   }
 
   private send(): void {
-    const path = this.latest!;
-    this.watchers.forEach((watcher) => watcher(path));
+    this.watchers.forEach((poses, watcher) => watcher(this.encoded(poses)));
     this.pending = false;
     this.sendTimer = setTimeout(() => {
       this.sendTimer = null;
@@ -97,8 +111,9 @@ export class Paths {
     this.logger = logger;
   }
 
-  // Calls back with the topic's paths until the returned function is called
-  watch(topic: string, callback: (path: PathData) => void): () => void {
+  // Calls back with the topic's paths, their poses or their points, until the
+  // returned function is called
+  watch(topic: string, callback: Watcher, poses = false): () => void {
     const name = absoluteTopic(topic);
     let path = this.topics.get(name);
     if (!path) {
@@ -106,7 +121,7 @@ export class Paths {
       this.topics.set(name, path);
     }
     const shared = path;
-    shared.add(callback);
+    shared.add(callback, poses);
     return () => {
       shared.watchers.delete(callback);
       if (shared.watchers.size === 0) {

@@ -86,6 +86,8 @@ const GRID_STYLES: GridStyle[] = ['map', 'costmap'];
 const POINTS_CHANNELS: PointsChannel[] = ['auto', 'rgb', 'intensity', 'none'];
 // Of a points stream: a page draws them, it does not measure them
 const MAX_POINTS = 500_000;
+// Of an octomap stream: each is drawn as a cube
+const MAX_VOXELS = 1_000_000;
 // Jog speeds, rad/s or m/s: the arm's own limits are lower
 const MAX_JOINT_SPEED = 5;
 const MAX_CARTESIAN_SPEED = 0.5;
@@ -319,12 +321,30 @@ export class Session implements FrameSink, PluginSession {
         return;
       }
 
+      case 'octomap.subscribe': {
+        const id = subscriptionId(message.id);
+        this.addConsumer(
+          id,
+          services.streams.octomap(this, id, {
+            topic: string(message.topic, 'topic'),
+            maxDepth: Math.round(number(message.maxDepth, 1, 16, 16)),
+            maxVoxels: Math.round(number(message.maxVoxels, 1, MAX_VOXELS, 200_000)),
+            maxFps: number(message.maxFps, 0.1, 10, 1),
+          }),
+        );
+        return;
+      }
+
       case 'path.subscribe': {
         const id = subscriptionId(message.id);
         this.unsubscribe(id);
         this.subscriptions.set(
           id,
-          services.paths.watch(string(message.topic, 'topic'), (path) => this.send({ type: 'path', id, ...path })),
+          services.paths.watch(
+            string(message.topic, 'topic'),
+            (path) => this.send({ type: 'path', id, ...path }),
+            message.poses === true,
+          ),
         );
         return;
       }

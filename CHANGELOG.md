@@ -44,6 +44,25 @@ noted here.
   `fixedFrame`, `view` and `displays`: defaults of its former `descriptionTopic`,
   `jointStatesTopic` and `highlightMotion` go to `'robot-model-display'`, of `showFrames` to the
   `tf` display's `enabled` in `displays`.
+- Robot Viewer displays: **Camera** (a camera's images, raw or compressed, on a plane in front of
+  it, at a distance chosen, sized as the camera sees by its camera info, beside the images' topic
+  or chosen, with the edges of its frustum; a field of view is assumed without camera info; the
+  images' frame optical, as drivers' are, or a body's), **Polygon** (a `PolygonStamped`'s outline,
+  e.g. Nav2's footprint), **Path** (a `nav_msgs/Path`'s line, with arrows or axes at its poses if
+  asked for), **Octomap** (an `octomap_msgs/Octomap`'s occupied voxels as cubes, of binary or full
+  maps, coloured by height, by a ColorOcTree's colours or in one colour, to a depth of the tree
+  chosen).
+- Octomaps for the viewer are decoded on the robot: a new `octomap.subscribe` stream of binary
+  frames (format 2, `POINTS_FORMAT`, with `OctomapInfo` metadata: the voxels' centres, largest
+  first, how many of each size, their colours), at most `maxVoxels`, evenly, the nodes below
+  `maxDepth` drawn as their parent. `path.subscribe` takes `poses: true` for the poses in 3D, with
+  their orientations (`PathUpdate.poses`). Image frames carry their header's frame
+  (`ImageInfo` metadata).
+- Plugins: `connection.subscribeOctomap`; in `tassello/viewer`, `CameraDisplay`,
+  `PolygonDisplay`, `PathDisplay` and `OctomapDisplay` to extend, `LinesLayer` (lines of a width
+  in pixels, of one colour or of their own), `toLinear`, and the cameras' `cameraInfoTopic`,
+  `intrinsicsOf`, `intrinsicsFromFov` and `imageCorners`. Their types, for `defaults`:
+  `'camera-display'`, `'polygon-display'`, `'path-display'`, `'octomap-display'`.
 
 - Status bars: each panel has its own, above its board, of readings at a glance. Its first
   status widgets: **Wi-Fi**, the network the robot is on and its signal, as NetworkManager has

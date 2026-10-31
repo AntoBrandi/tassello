@@ -1,6 +1,6 @@
 // What the Robot Viewer works out without three.js: its displays as saved by
 // the Robot Model widget it replaces, the frame Auto stands for, new
-// displays' ids, and the colour scale of points.
+// displays' ids, the colour scale of points, and where a camera's image is.
 
 import type { DisplayInstance } from '../../../shared/panel.ts';
 
@@ -10,6 +10,10 @@ export const TF_DISPLAY = 'tf-display';
 export const GRID_DISPLAY = 'grid-display';
 export const LASER_SCAN_DISPLAY = 'laser-scan-display';
 export const POINT_CLOUD_DISPLAY = 'point-cloud-display';
+export const CAMERA_DISPLAY = 'camera-display';
+export const POLYGON_DISPLAY = 'polygon-display';
+export const PATH_DISPLAY = 'path-display';
+export const OCTOMAP_DISPLAY = 'octomap-display';
 
 // A new viewer's: the robot, its frames ready to be shown
 export const DEFAULT_DISPLAYS: DisplayInstance[] = [
@@ -147,4 +151,70 @@ export function frameFilter(filter: string): (name: string) => boolean {
     .map((word) => word.trim().toLowerCase())
     .filter(Boolean);
   return words.length === 0 ? () => true : (name) => words.some((word) => name.toLowerCase().includes(word));
+}
+
+// A camera's projection: its images' size, in pixels, and its focal lengths
+// and principal point, in pixels (sensor_msgs/CameraInfo's k)
+export interface Intrinsics {
+  width: number;
+  height: number;
+  fx: number;
+  fy: number;
+  cx: number;
+  cy: number;
+}
+
+// The camera_info topic of an image topic, as camera drivers and
+// image_transport name it: beside the image, e.g. /camera/camera_info for
+// /camera/image_raw and its /camera/image_raw/compressed
+export function cameraInfoTopic(imageTopic: string): string {
+  const topic = imageTopic
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/(compressed|compressedDepth|theora|ffmpeg|zstd)$/, '');
+  return `${topic.slice(0, topic.lastIndexOf('/') + 1)}camera_info`;
+}
+
+// Of a CameraInfo message, as JSON: its k, else its p (rectified images'),
+// null if neither is set (zeros: an uncalibrated camera)
+export function intrinsicsOf(info: {
+  width: number;
+  height: number;
+  k?: ArrayLike<number>;
+  p?: ArrayLike<number>;
+}): Intrinsics | null {
+  const { width, height, k, p } = info;
+  if (!(width > 0 && height > 0)) {
+    return null;
+  }
+  if (k && k[0] > 0 && k[4] > 0) {
+    return { width, height, fx: k[0], fy: k[4], cx: k[2], cy: k[5] };
+  }
+  if (p && p[0] > 0 && p[5] > 0) {
+    return { width, height, fx: p[0], fy: p[5], cx: p[2], cy: p[6] };
+  }
+  return null;
+}
+
+// A camera seeing fov degrees across, its principal point at the images'
+// centre: when it has no camera info
+export function intrinsicsFromFov(width: number, height: number, fov: number): Intrinsics {
+  const angle = (Math.min(170, Math.max(1, fov)) * Math.PI) / 180;
+  const f = width / 2 / Math.tan(angle / 2);
+  return { width, height, fx: f, fy: f, cx: width / 2, cy: height / 2 };
+}
+
+// The corners of the image at distance (m) in front of the camera, in its
+// optical frame (z forward, x right, y down): top left, top right, bottom
+// right, bottom left, as the image's first row is its top
+export function imageCorners(intrinsics: Intrinsics, distance: number): [number, number, number][] {
+  const { width, height, fx, fy, cx, cy } = intrinsics;
+  const x = (u: number) => ((u - cx) / fx) * distance;
+  const y = (v: number) => ((v - cy) / fy) * distance;
+  return [
+    [x(0), y(0), distance],
+    [x(width), y(0), distance],
+    [x(width), y(height), distance],
+    [x(0), y(height), distance],
+  ];
 }
