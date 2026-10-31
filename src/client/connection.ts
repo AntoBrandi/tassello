@@ -17,6 +17,7 @@ import type {
 } from '../shared/monitor.ts';
 import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
 import type { ParamResult, ParamValue } from '../shared/parameters.ts';
+import { unpackPoints, type Points } from '../shared/points.ts';
 import type { BagsRequest, Playback, Recording, RecordOptions } from '../shared/rosbag.ts';
 import {
   FRAME_HEADER_BYTES,
@@ -57,6 +58,8 @@ import {
   type PathSubscribe,
   type PathUpdate,
   type PluginSubscribe,
+  type PointsInfo,
+  type PointsSubscribe,
   type RosoutSubscribe,
   type RosoutUpdate,
   type ServerMessage,
@@ -68,6 +71,8 @@ import {
   type TerminalExit,
   type TerminalOpen,
   type TerminalOutput,
+  type TfFramesSubscribe,
+  type TfFramesUpdate,
   type TfSubscribe,
   type TfUpdate,
   type TopicInfoSubscribe,
@@ -81,6 +86,8 @@ export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 export type ImageOptions = Omit<ImageSubscribe, 'type' | 'id'>;
 export type GridOptions = Omit<GridSubscribe, 'type' | 'id'>;
 export type TfOptions = Omit<TfSubscribe, 'type' | 'id'>;
+export type TfFramesOptions = Omit<TfFramesSubscribe, 'type' | 'id'>;
+export type PointsOptions = Omit<PointsSubscribe, 'type' | 'id'>;
 export type PathOptions = Omit<PathSubscribe, 'type' | 'id'>;
 export type OverlayOptions = Omit<OverlaySubscribe, 'type' | 'id'>;
 export type TopicOptions = Omit<TopicSubscribe, 'type' | 'id'>;
@@ -145,6 +152,17 @@ export interface OverlayHandlers {
   overlay: (update: OverlayUpdate) => void;
 }
 
+// A frame of points: where they are (info) and what they are
+export interface PointsFrame extends Points {
+  info: PointsInfo;
+}
+
+export interface PointsHandlers {
+  status: (state: StreamStatus['state'], message: string) => void;
+  // The next frame is requested once the returned promise settles
+  points: (frame: PointsFrame) => Promise<void> | void;
+}
+
 export interface TopicMonitorHandlers {
   status: (state: StreamStatus['state'], message: string) => void;
   // The figures of the latest messages, twice a second while they come
@@ -196,6 +214,8 @@ type Request =
   | Omit<ImageSubscribe, 'id'>
   | Omit<GridSubscribe, 'id'>
   | Omit<TfSubscribe, 'id'>
+  | Omit<TfFramesSubscribe, 'id'>
+  | Omit<PointsSubscribe, 'id'>
   | Omit<PathSubscribe, 'id'>
   | Omit<OverlaySubscribe, 'id'>
   | Omit<ParamsSubscribe, 'id'>
@@ -224,6 +244,7 @@ interface Subscription {
   request: Request | (() => Request);
   stream?: StreamHandlers;
   tf?: (update: TfUpdate) => void;
+  tfFrames?: (update: TfFramesUpdate) => void;
   path?: (update: PathUpdate) => void;
   overlay?: OverlayHandlers;
   params?: ParamsHandlers;
@@ -359,6 +380,31 @@ export class Connection {
 
   subscribeTf(options: TfOptions, callback: (update: TfUpdate) => void): () => void {
     return this.subscribe({ type: 'tf.subscribe', ...options }, { tf: callback });
+  }
+
+  // Every TF frame, its parent, and its 3D pose in options.fixedFrame (none
+  // if empty), `rate` times a second. Returns the unsubscribe function.
+  subscribeTfFrames(options: TfFramesOptions, callback: (update: TfFramesUpdate) => void): () => void {
+    return this.subscribe({ type: 'tf.frames', ...options }, { tfFrames: callback });
+  }
+
+  // A laser scan's or a point cloud's points, thinned on the server, in their
+  // frame, with its pose in options.fixedFrame as each message arrived (see
+  // PointsSubscribe). Returns the unsubscribe function.
+  subscribePoints(options: PointsOptions, handlers: PointsHandlers): () => void {
+    return this.subscribe(
+      { type: 'points.subscribe', ...options },
+      {
+        stream: {
+          status: handlers.status,
+          frame: async (file, { meta }) => {
+            const info = meta as PointsInfo;
+            const points = unpackPoints(await file.arrayBuffer(), info);
+            await handlers.points({ ...points, info });
+          },
+        },
+      },
+    );
   }
 
   subscribePath(options: PathOptions, callback: (update: PathUpdate) => void): () => void {
@@ -797,6 +843,9 @@ export class Connection {
       case 'tf':
         this.subscriptions.get(message.id)?.tf?.(message);
         break;
+      case 'tf.frames':
+        this.subscriptions.get(message.id)?.tfFrames?.(message);
+        break;
       case 'path':
         this.subscriptions.get(message.id)?.path?.(message);
         break;
@@ -943,6 +992,17 @@ export function useTf(target: string, source: string, rate = 10): TfUpdate | nul
     }
     return connection.subscribeTf({ targetFrame: target.trim(), sourceFrame: source.trim(), rate }, setUpdate);
   }, [target, source, rate]);
+  return update;
+}
+
+// Every TF frame, with its pose in fixedFrame (none if empty), at most `rate`
+// times a second: null until the first update
+export function useTfFrames(fixedFrame = '', rate = 1): TfFramesUpdate | null {
+  const [update, setUpdate] = useState<TfFramesUpdate | null>(null);
+  useEffect(() => {
+    setUpdate(null);
+    return connection.subscribeTfFrames({ fixedFrame: fixedFrame.trim(), rate }, setUpdate);
+  }, [fixedFrame, rate]);
   return update;
 }
 

@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { defineStatusWidget, defineWidget, type RegisteredStatusWidget, type RegisteredWidget } from './types.ts';
-import { resolveConfig, StatusWidgetRegistry, WidgetRegistry } from './widget_registry.ts';
+import {
+  defineDisplay,
+  defineStatusWidget,
+  defineWidget,
+  type RegisteredDisplay,
+  type RegisteredStatusWidget,
+  type RegisteredWidget,
+} from './types.ts';
+import { DisplayRegistry, resolveConfig, StatusWidgetRegistry, WidgetRegistry } from './widget_registry.ts';
 
 function widget(type: string): RegisteredWidget {
   return defineWidget<{ topic: string; speed: number; mode: 'a' | 'b' }>({
@@ -128,4 +135,70 @@ test('status widgets: a registry of their own, their types unique across both', 
   assert.deepEqual(register('defaults', { defaults: { 'cpu-status': { warnAbove: 90 }, teleop: { speed: 1 } } }), []);
   assert.deepEqual(resolveConfig(statuses.definition('cpu-status')!, {}), { warnAbove: 90 });
   assert.equal(register('wrong', { defaults: { 'cpu-status': { warnAbove: 'high' } } }).length, 1);
+});
+
+function display(type: string): RegisteredDisplay {
+  return defineDisplay<{ topic: string; size: number }>({
+    type,
+    name: type,
+    description: '',
+    icon: () => null,
+    load: () => Promise.reject(new Error('not in a test')),
+    properties: [
+      { key: 'topic', label: 'Topic', kind: 'topic', default: '/scan', topicTypes: ['sensor_msgs/msg/LaserScan'] },
+      { key: 'size', label: 'Size', kind: 'number', default: 3 },
+    ],
+  });
+}
+
+test('displays: a registry of their own, their types unique across the three, with defaults', () => {
+  const widgets: WidgetRegistry = new WidgetRegistry([widget('teleop')], (type) => displays.owner(type));
+  const displays: DisplayRegistry = new DisplayRegistry([display('laser-scan-display')], (type) => widgets.owner(type));
+  const register = (name: string, plugin: Parameters<WidgetRegistry['registerPlugin']>[1]) => [
+    ...widgets.registerPlugin(name, plugin),
+    ...displays.registerPlugin(name, plugin),
+  ];
+  assert.deepEqual(register('robot', { displays: [display('robot.pose-display')] }), []);
+  assert.deepEqual(
+    displays.entries().map((e) => [e.definition.type, e.plugin]),
+    [
+      ['laser-scan-display', null],
+      ['robot.pose-display', 'robot'],
+    ],
+  );
+  assert.deepEqual(register('other', { displays: [display('teleop'), display('robot.pose-display')] }), [
+    'its display type "teleop" is already Tassello\'s, as a widget',
+    'its display type "robot.pose-display" is already robot\'s',
+  ]);
+  assert.deepEqual(register('defaults', { defaults: { 'laser-scan-display': { topic: '/front/scan' } } }), []);
+  assert.deepEqual(resolveConfig(displays.definition('laser-scan-display')!, {}), { topic: '/front/scan', size: 3 });
+});
+
+test("a widget's displays: those that are not left out, their fields filled in; configs upgraded first", () => {
+  const viewer = defineWidget<{ displays: { id: string; type: string; name: string; enabled: boolean; config: Record<string, unknown> }[] }>({
+    type: 'viewer',
+    name: 'viewer',
+    description: '',
+    icon: () => null,
+    defaultSize: { w: 2, h: 2 },
+    minSize: { w: 1, h: 1 },
+    component: () => null,
+    migrate: (stored) => ('showScan' in stored && !('displays' in stored) ? { displays: [{ id: 'scan', type: 'scan' }] } : stored),
+    properties: [{ key: 'displays', label: 'Displays', kind: 'displays', default: [] }],
+  });
+  assert.deepEqual(
+    resolveConfig(viewer, {
+      displays: [{ id: 'a', type: 'tf', enabled: false }, { id: 'a', type: 'twice' }, { type: 'no-id' }, 'text', { id: 'b', type: 'scan', name: 'Front', config: { size: 2 } }],
+    }),
+    {
+      displays: [
+        { id: 'a', type: 'tf', name: '', enabled: false, config: {} },
+        { id: 'b', type: 'scan', name: 'Front', enabled: true, config: { size: 2 } },
+      ],
+    },
+  );
+  assert.deepEqual(resolveConfig(viewer, { displays: 'none' }), { displays: [] });
+  assert.deepEqual(resolveConfig(viewer, { showScan: true }), {
+    displays: [{ id: 'scan', type: 'scan', name: '', enabled: true, config: {} }],
+  });
 });

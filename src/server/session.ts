@@ -12,6 +12,7 @@ import {
   type ClientMessage,
   type GridStyle,
   type ImageTransport,
+  type PointsChannel,
   type ServerMessage,
 } from '../shared/protocol.ts';
 import type { Actions } from './actions.ts';
@@ -82,6 +83,9 @@ export interface SessionServices {
 const ERROR_REPEAT_MS = 5000;
 const TRANSPORTS: ImageTransport[] = ['auto', 'raw', 'compressed'];
 const GRID_STYLES: GridStyle[] = ['map', 'costmap'];
+const POINTS_CHANNELS: PointsChannel[] = ['auto', 'rgb', 'intensity', 'none'];
+// Of a points stream: a page draws them, it does not measure them
+const MAX_POINTS = 500_000;
 // Jog speeds, rad/s or m/s: the arm's own limits are lower
 const MAX_JOINT_SPEED = 5;
 const MAX_CARTESIAN_SPEED = 0.5;
@@ -279,6 +283,38 @@ export class Session implements FrameSink, PluginSession {
             number(message.rate, 0.1, 50, 10),
             (result) => this.send({ type: 'tf', id, ...result }),
           ),
+        );
+        return;
+      }
+
+      case 'tf.frames': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        const fixedFrame = optionalString(message.fixedFrame);
+        this.subscriptions.set(
+          id,
+          services.tf.watchFrames(fixedFrame, number(message.rate, 0.1, 30, 10), (result) =>
+            this.send({ type: 'tf.frames', id, fixedFrame, ...result }),
+          ),
+        );
+        return;
+      }
+
+      case 'points.subscribe': {
+        const id = subscriptionId(message.id);
+        if (message.kind !== 'scan' && message.kind !== 'cloud') {
+          throw new Error('kind must be scan or cloud');
+        }
+        this.addConsumer(
+          id,
+          services.streams.points(this, id, {
+            kind: message.kind,
+            topic: string(message.topic, 'topic'),
+            fixedFrame: optionalString(message.fixedFrame),
+            maxPoints: Math.round(number(message.maxPoints, 1, MAX_POINTS, 20_000)),
+            channel: oneOf(message.channel, POINTS_CHANNELS),
+            maxFps: number(message.maxFps, 0.1, 30, 5),
+          }),
         );
         return;
       }

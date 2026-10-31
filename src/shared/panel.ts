@@ -21,6 +21,20 @@ export interface WidgetInstance {
   config: Record<string, unknown>;
 }
 
+// A display of a Robot Viewer widget (its `displays` property), as RViz's: a
+// kind of thing drawn in its 3D view, e.g. the robot model, a laser scan
+export interface DisplayInstance {
+  // Unique within the widget
+  id: string;
+  // Key of the display in the client's registry (src/client/widgets/registry.ts)
+  type: string;
+  // Shown in the list instead of the display's name, if not empty
+  name: string;
+  enabled: boolean;
+  // The display's own properties, as its definition declares them
+  config: Record<string, unknown>;
+}
+
 export interface Rect {
   x: number;
   y: number;

@@ -20,6 +20,7 @@ import type {
 } from './monitor.ts';
 import type { NetworkRequest, NetworkState } from './networking.ts';
 import type { ParamInfo, ParamValue } from './parameters.ts';
+import type { PointsLayout } from './points.ts';
 import type { BagCapabilities, BagInfo, BagsRequest, Playback, Recording, RecordOptions } from './rosbag.ts';
 import type { SystemInfo, SystemSample, TrendPoint } from './system.ts';
 
@@ -76,6 +77,36 @@ export interface TfSubscribe {
   targetFrame: string;
   sourceFrame: string;
   rate: number;
+}
+
+// Every TF frame, with its parent and its 3D pose in fixedFrame, sent `rate`
+// times a second: the Robot Viewer's frames. fixedFrame may be empty: the
+// frames come without their poses, e.g. to list them.
+export interface TfFramesSubscribe {
+  type: 'tf.frames';
+  id: number;
+  fixedFrame: string;
+  rate: number;
+}
+
+// The points of a laser scan (sensor_msgs/LaserScan) or a point cloud
+// (sensor_msgs/PointCloud2), as binary frames of format POINTS_FORMAT: at
+// most maxPoints of them, thinned on the server, in the message's frame, with
+// that frame's pose in fixedFrame as the message arrived (PointsInfo).
+export type PointsKind = 'scan' | 'cloud';
+// What each point carries besides its position: 'auto' the colours of a
+// cloud that has them, else the intensities if any
+export type PointsChannel = 'auto' | 'rgb' | 'intensity' | 'none';
+
+export interface PointsSubscribe {
+  type: 'points.subscribe';
+  id: number;
+  kind: PointsKind;
+  topic: string;
+  fixedFrame: string;
+  maxPoints: number;
+  channel: PointsChannel;
+  maxFps: number;
 }
 
 // A nav_msgs/Path topic, e.g. Nav2's plan, sent whenever it changes (at most
@@ -596,6 +627,8 @@ export type ClientMessage =
   | ImageSubscribe
   | GridSubscribe
   | TfSubscribe
+  | TfFramesSubscribe
+  | PointsSubscribe
   | PathSubscribe
   | OverlaySubscribe
   | TopicSubscribe
@@ -706,6 +739,29 @@ export interface TfUpdate {
   error: string | null;
   // Since the oldest of the dynamic transforms it is made of arrived, in ms
   ageMs: number;
+}
+
+// A pose in 3D: x, y, z, then the rotation's quaternion qx, qy, qz, qw
+export type Pose3D = [number, number, number, number, number, number, number];
+
+export interface TfFrame {
+  name: string;
+  // null for the root of a tree
+  parent: string | null;
+  // In the fixed frame; null if not connected to it, or no fixed frame
+  pose: Pose3D | null;
+  // Since its transform from its parent arrived, in ms; null if static
+  ageMs: number | null;
+}
+
+// Of a tf.frames subscription
+export interface TfFramesUpdate {
+  type: 'tf.frames';
+  id: number;
+  fixedFrame: string;
+  frames: TfFrame[];
+  // Why there are no poses, e.g. the fixed frame does not exist
+  error: string | null;
 }
 
 export interface PanelsChanged {
@@ -1194,6 +1250,7 @@ export type ServerMessage =
   | CommandUpdate
   | StreamStatus
   | TfUpdate
+  | TfFramesUpdate
   | PathUpdate
   | OverlayUpdate
   | TopicMessage
@@ -1229,13 +1286,16 @@ export type ServerMessage =
 
 // ── Binary frames ────────────────────────────────────────────────────────────
 // Header, big endian, then metadata (JSON, metadata size bytes), then the image
-// file (JPEG or PNG):
+// file (JPEG or PNG), or points (see src/shared/points.ts):
 //   u32 subscription id | u8 format | u16 source width | u16 source height | u16 metadata size
 // The source size is that of the ROS image or grid, before any scaling; 0 if
-// unknown. Grid frames carry their GridInfo as metadata, image frames none.
+// unknown. Grid frames carry their GridInfo as metadata, points their
+// PointsInfo, image frames none.
 
 export const FRAME_HEADER_BYTES = 11;
-export const IMAGE_FORMATS = ['image/jpeg', 'image/png'] as const;
+// By format: the type of the frame's file
+export const IMAGE_FORMATS = ['image/jpeg', 'image/png', 'application/octet-stream'] as const;
+export const POINTS_FORMAT = 2;
 
 // Where a grid lies: its cells, in frameId, from its origin (the corner of cell
 // 0, the first of the image's rows, which go along +y)
@@ -1250,6 +1310,17 @@ export interface GridInfo {
   originYaw: number;
   // The cells that are not unknown, which the view fits; null if none
   known: { x: number; y: number; width: number; height: number } | null;
+}
+
+// Of a points frame, what lies where: the points (PointsLayout) in frameId,
+// whose pose in the fixed frame asked for was `pose` as the message arrived
+export interface PointsInfo extends PointsLayout {
+  frameId: string;
+  // null if it could not be found: see error
+  pose: Pose3D | null;
+  error: string | null;
+  // Points in the message, before thinning
+  source: number;
 }
 
 export const TELEOP_WATCHDOG_MS = 500;

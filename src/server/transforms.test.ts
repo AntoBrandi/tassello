@@ -50,3 +50,16 @@ test('lookup reports what is missing', () => {
   assert.throws(() => tree.lookup('map', 'laser', 0), /Frame "laser" does not exist/);
   assertPlanar(tree.lookup('odom', 'odom', 0).transform, 0, 0, 0);
 });
+
+test('frames lists every frame with its parent, the roots too', () => {
+  const tree = new TfTree();
+  tree.set('/odom', 'base_footprint', planar(0, 0, 0), 500);
+  tree.set('base_footprint', 'laser', planar(0.2, 0, 0), null);
+  tree.set('map', 'odom', planar(0, 0, 0), 100);
+  assert.deepEqual(tree.frames(), [
+    { name: 'base_footprint', parent: 'odom', receivedAt: 500 },
+    { name: 'laser', parent: 'base_footprint', receivedAt: null },
+    { name: 'map', parent: null, receivedAt: null },
+    { name: 'odom', parent: 'map', receivedAt: 100 },
+  ]);
+});

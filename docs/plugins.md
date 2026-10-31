@@ -4,9 +4,12 @@ A plugin extends any Tassello with:
 
 - **widgets**: React components with properties the editor shows, added to the palette;
 - **status widgets**: readings at a glance in the panels' status bars, e.g. a battery's charge;
+- **displays** of the Robot Viewer, as RViz's display plugins: a kind of thing drawn in 3D, e.g.
+  a robot's own messages, with properties people edit in the viewer's list of displays;
 - a **server side**, if they need one: code running in Tassello's server on the robot, with its
   ROS node, answering the widgets' requests and streaming them data;
-- **defaults** for any widget's properties, e.g. a robot's topic names and speed limits;
+- **defaults** for any widget's or display's properties, e.g. a robot's topic names and speed
+  limits;
 - **example panels**, copied into a new panels directory.
 
 Many widgets need no server side at all: from the page, a widget can subscribe to any topic,
@@ -113,6 +116,7 @@ development dependency of the plugin.
 | `defaultSize`, `minSize` | In grid cells (64 px on a desktop) |
 | `properties` | Edited in the side panel, see below |
 | `component` | The React component, given `WidgetProps<Config>` |
+| `migrate` | Optional: upgrades a config saved by an earlier version of the widget, before its properties are read from it, e.g. properties renamed: `(stored) => stored` |
 
 The component receives:
 
@@ -192,6 +196,144 @@ details in its `title`, shown by the pointer. It shows what fits the width, whic
 the screen's: under 50 px the icon (or the value, with `narrow: 'value'`), under 96 px the icon
 and the value, then the label too, and from 130 px the rest.
 
+### Displays of the Robot Viewer
+
+The Robot Viewer draws, in 3D or from above in 2D, a list of *displays*, as RViz does: each a kind
+of thing (the robot model, TF, a map, a laser scan, a point cloud), with its own properties,
+placed in the viewer's fixed frame by TF. People add displays to a viewer from those registered,
+Tassello's and the plugins', in its side panel, where they edit their properties as a widget's.
+
+A display is a class extending `Display`, of `tassello/viewer`, drawing with three.js. It is
+registered by a definition, `defineDisplay`, listed in the plugin's `displays`: the definition
+is in the plugin's module, the class in a module of its own, which the definition loads.
+three.js is large: the page fetches it, and the class, only when a viewer shows the display.
+
+```ts
+// src/client/index.tsx
+import { definePlugin, defineDisplay, FlagIcon } from 'tassello/sdk';
+
+export interface GoalConfig {
+  topic: string;
+  color: string;
+  length: number;
+}
+
+export default definePlugin({
+  displays: [
+    defineDisplay<GoalConfig>({
+      type: 'my-robot.goal-display',
+      name: 'Goal',
+      description: 'The goal the robot drives to, as an arrow',
+      icon: FlagIcon,
+      properties: [
+        { key: 'topic', label: 'Topic', kind: 'topic', default: '/goal_pose', topicTypes: ['geometry_msgs/msg/PoseStamped'] },
+        { key: 'color', label: 'Colour', kind: 'color', default: '#a855f7' },
+        { key: 'length', label: 'Length (m)', kind: 'number', default: 0.6, min: 0.05, step: 0.05 },
+      ],
+      load: () => import('./GoalDisplay.ts').then((m) => m.GoalDisplay),
+    }),
+  ],
+});
+```
+
+```ts
+// src/client/GoalDisplay.ts
+import { ArrowHelper, Color, Group, Quaternion, Vector3 } from 'three';
+import { Display, type DisplayContext } from 'tassello/viewer';
+
+import type { GoalConfig } from './index.tsx';
+
+interface PoseStamped {
+  header: { frame_id: string };
+  pose: { position: { x: number; y: number; z: number }; orientation: { x: number; y: number; z: number; w: number } };
+}
+
+export class GoalDisplay extends Display<GoalConfig> {
+  // Placed by TF where the goal's frame is; the arrow, in it, where the goal is
+  private readonly frame = new Group();
+  private readonly arrow = new ArrowHelper(new Vector3(1, 0, 0), new Vector3(), 0.6);
+  private unsubscribe: (() => void) | null = null;
+
+  constructor(context: DisplayContext) {
+    super(context);
+    this.arrow.visible = false;
+    this.frame.add(this.arrow);
+    this.root.add(this.frame);
+  }
+
+  configure(config: GoalConfig, previous: GoalConfig | null): void {
+    this.arrow.setColor(new Color(config.color));
+    this.arrow.setLength(config.length, config.length * 0.3, config.length * 0.15);
+    if (config.topic !== previous?.topic) {
+      this.unsubscribe?.();
+      this.setStatus('waiting', `Waiting for ${config.topic}`);
+      this.unsubscribe = this.subscribeTopic<PoseStamped>(config.topic, { types: ['geometry_msgs/msg/PoseStamped'] }, (goal) => {
+        const { position: p, orientation: q } = goal.pose;
+        this.arrow.position.set(p.x, p.y, p.z);
+        this.arrow.quaternion.copy(new Quaternion(q.x, q.y, q.z, q.w));
+        this.arrow.visible = true;
+        this.attach(this.frame, goal.header.frame_id);
+      });
+    }
+    this.render();
+  }
+}
+```
+
+| Field of `defineDisplay` | |
+|---|---|
+| `type` | Stored in the panels' viewers: **never change it**. Prefixed with the plugin's name; types are unique across widgets, status widgets and displays, as the defaults are by type |
+| `name`, `description`, `icon` | Shown in the viewer's list of displays and in **Add a display** |
+| `properties` | Edited in the list, when the display is opened, as a widget's (see Properties) |
+| `load` | Resolves with the class: `() => import('./MyDisplay.ts').then((m) => m.MyDisplay)` |
+
+A display puts its three.js objects in its `root`, which is in the fixed frame, with ROS's axes
+(x forward, y left, z up, meters). The viewer calls:
+
+| Method | When |
+|---|---|
+| `constructor(context)` | Created, when a viewer shows it (and calls `super(context)`) |
+| `configure(config, previous)` | With its properties' values: first (`previous` is `null`), then whenever they change. Subscribe, or subscribe again, and draw |
+| `onTransforms()` | The frames' poses were updated, about 15 times a second (objects attached are already placed) |
+| `onFixedFrameChange()` | The fixed frame changed: ask again for what was placed in the former (`connection.subscribePoints`) |
+| `onViewChange()` | The view changed between 3D and 2D (`context.view`) |
+| `focus()` | What **Reset** fits, if anything: the robot model returns the robot |
+| `dispose()` | It goes (hidden, removed, its viewer closed): free what is neither in `root` nor tracked, e.g. timers. The viewer frees `root` and what is in it (geometries, materials, textures, labels' elements) and the subscriptions tracked |
+
+What it is given, as protected members:
+
+| | |
+|---|---|
+| `this.root` | Its `Group`, in the fixed frame |
+| `this.connection` | The page's connection (see The robot) |
+| `this.fixedFrame` | The frame the view is in |
+| `this.pose(frame)` | The frame's pose in the fixed frame (`{ position, quaternion }`), `null` if TF does not connect them |
+| `this.place(object, frame)` | Puts the object at the frame's pose now; `false` if unknown |
+| `this.attach(object, frame)` | Keeps the object at the frame's pose as TF updates it, hidden while unknown: offsets go in its children. Returns what detaches it |
+| `this.subscribeTopic(topic, { maxRate, types, status }, onMessage)` | A topic's messages, as JSON, until the returned function is called or the display goes; its status (waiting, wrong type, ok) is the display's unless `status: false` |
+| `this.setStatus(level, message)` | `'ok'`, `'waiting'`, `'warn'` or `'error'`: why it shows nothing, or something wrong. While no display shows anything, the viewer says the first one's in its middle; else in a note |
+| `this.setNotes([{ text, tone }])` | Lines in the viewer's corner: `'info'` at the top right (what is loading), `'accent'` in the highlight colour, `'warn'` |
+| `this.missingFrame(frame)` | Why a frame has no pose, for a status |
+| `this.render()` | Draws the view again, after changing objects: it is drawn on demand |
+| `this.context` | The rest: `frames` (every TF frame: `name`, `parent`, `pose`, `ageMs`), `view`, `scale` (the robot's radius, which helpers are sized after), `pixelRatio`, `track(cleanup)` (called when the display goes), `fit()`, `suggestFixedFrame(frame)` (what Auto stands for: the robot model's root link) |
+
+A display that throws shows its error in the viewer; the others carry on.
+
+`tassello/viewer` also has what Tassello's displays are made of: `PointsLayer` (points, coloured by
+intensity, height or their own colours, as the Laser Scan and Point Cloud displays draw them),
+`rainbow` (RViz's colour scale), `loadRobot` (a URDF and its meshes), and the displays themselves
+(`RobotModelDisplay`, `TfDisplay`, `OccupancyGridDisplay`, `LaserScanDisplay`,
+`PointCloudDisplay`, and `PointsDisplay` for points of another kind), to extend: a display
+registered with `load: () => import('./MyCloud.ts').then((m) => m.MyCloud)`, where `MyCloud`
+extends `PointCloudDisplay`, is a point cloud with something of its own.
+
+`three` and `tassello/viewer` are not bundled into the plugin: the page provides them, as it does
+`tassello/sdk`, so that the viewer's renderer draws the plugin's objects. Add `three` and
+`@types/three` as development dependencies, of the version Tassello has (`npm ls three` in
+Tassello: 0.186), for the types; three.js's addons (`three/examples/jsm/...`) are bundled into
+the plugin, and use the page's three. `tassello/vite` builds the plugin that way, the classes'
+modules as chunks of their own next to its module.
+
 ### Properties
 
 Each property has a `key` in the config, a `label`, a `default` (which stands in for missing or
@@ -209,6 +351,7 @@ mistyped values, so properties can be added without touching the saved panels), 
 | `select` | one of the options' values | `options: [{ value, label }]` |
 | `image` | `string`, an image of the robot or uploaded (see `imageUrl`) | `placeholder` |
 | `behavior-tree` | `string`, a behavior tree's XML (BT.CPP's) of the robot, or uploaded | `placeholder` |
+| `displays` | `DisplayInstance[]`, a list of Robot Viewer displays (`id`, `type`, `name`, `enabled`, `config`), edited as the Robot Viewer's | |
 
 A `select`'s options can also be known only at run time, e.g. the robot's: `useOptions`, a hook
 the properties panel calls, gives those, shown after `options`. Its values are then not checked
@@ -236,6 +379,8 @@ function useArms() {
 | `subscribePlugin(plugin, stream, params, { data, status? })` | Follows a stream of the plugin's server side (`ctx.stream`). Returns the unsubscribe function |
 | `subscribeTopic({ topic, maxRate }, { message, status })` | Any topic's messages, as JSON. Returns the unsubscribe function |
 | `subscribeTf({ targetFrame, sourceFrame, rate }, callback)` | A frame's 2D pose in another |
+| `subscribeTfFrames({ fixedFrame, rate }, callback)` | Every TF frame (`TfFrame`: `name`, `parent`, `ageMs`) and its 3D pose in `fixedFrame` (`[x, y, z, qx, qy, qz, qw]`, `null` if not connected to it; none if `fixedFrame` is empty), `rate` times a second, and why there are none (`error`). Returns the unsubscribe function |
+| `subscribePoints({ kind, topic, fixedFrame, maxPoints, channel, maxFps }, { points, status })` | A laser scan's (`kind: 'scan'`) or a point cloud's (`'cloud'`) points, thinned on the robot to at most `maxPoints`, in their frame, with each point's intensity or colour (`channel`: `'auto'`, `'intensity'`, `'rgb'`, `'none'`): `points(frame)` gets `positions` (x, y, z), `values` (intensities, 0-1 over `range`) or `colors` (r, g, b), and `info`: the frame, its pose in `fixedFrame` as the message arrived (`null`, and `error`, if TF could not place it), `count`. The next comes once the promise it returns settles, at most `maxFps` a second. Returns the unsubscribe function |
 | `subscribeOverlay({ kind, topic, frame }, { overlay, status })` | A laser scan's points (`kind: 'scan'`, `sensor_msgs/msg/LaserScan`) or a footprint's polygon (`'footprint'`, `geometry_msgs/msg/PolygonStamped`), put in `frame` by TF as each arrives: `{ points, error }`, `points` as x0, y0, x1, y1, ... at most 5 times a second. Returns the unsubscribe function |
 | `subscribeBehaviorTree({ topic, tree }, { tree, update, status, recording? })` | A behavior tree's log (`nav2_msgs/msg/BehaviorTreeLog`), on the tree of its XML file: its nodes, then their states and transitions as they change (see `src/shared/protocol.ts`) |
 | `recordBehaviorTree(topic, path, options?)` | Records the log into a rosbag in the new folder `path`, with `ros2 bag record`'s options (`RecordOptions`, rosbag2's defaults if not given), or stops (`null`): resolves with the bag's folder |
@@ -291,6 +436,7 @@ Hooks:
 |---|---|
 | `useTopic<T>(topic, maxRate?)` | `{ message, messageType, status, error }`: the latest message |
 | `useTf(targetFrame, sourceFrame, rate?)` | The latest transform, or `null` |
+| `useTfFrames(fixedFrame?, rate?)` | Every TF frame, as `subscribeTfFrames` gives them, or `null` |
 | `useConnectionStatus()` | `'connecting'`, `'open'` or `'closed'` |
 | `useCommandState(panelId, widgetId)` | The state of a command widget's command, see below |
 
@@ -315,8 +461,10 @@ Prefix the plugin's own classes: they apply to the whole page.
 
 ### Defaults
 
-A plugin can change the defaults of any widget's properties, Tassello's or another plugin's, and
-of any status widget's (`'wifi-status'`, `'cpu-status'`).
+A plugin can change the defaults of any widget's properties, Tassello's or another plugin's, of
+any status widget's (`'wifi-status'`, `'cpu-status'`), and of any display's
+(`'robot-model-display'`, `'tf-display'`, `'grid-display'`, `'laser-scan-display'`,
+`'point-cloud-display'`).
 They stand in for the values a panel does not set, so a robot's plugin makes Tassello's widgets
 work for the robot out of the box:
 
@@ -327,9 +475,15 @@ export default definePlugin({
     teleop: { topic: '/my_robot/cmd_vel', maxLinear: 0.3, maxAngular: 1 },
     'arm-teleop': { controllers: 'arm_controller gripper_controller', link: 'gripper_link' },
     applications: { services: 'my-robot' },
+    'robot-model-display': { descriptionTopic: '/my_robot/robot_description' },
+    'laser-scan-display': { topic: '/my_robot/scan' },
   },
 });
 ```
+
+The Robot Viewer's own (its type is `'robot-model'`, the Robot Model widget's, which it replaced)
+are `fixedFrame`, `view` (`'3d'` or `'2d'`) and `displays`: a robot's plugin can give new viewers
+its own list, e.g. with its cameras' point clouds.
 
 A default of the wrong type, or for a property the widget does not have, is reported in the page.
 
@@ -414,4 +568,4 @@ A plugin is built against a version of `tassello/sdk` and `tassello/server`, and
 Tassellos that version is compatible with, by semantic versioning: before 1.0, a new minor
 version (0.1 to 0.2) may change the plugin API, as the changelog says. Panels keep the plugin's
 widgets while it is missing, showing that their type is unknown, and show them again once it is
-back.
+back; the Robot Viewers keep its displays the same way.

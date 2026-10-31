@@ -5,9 +5,10 @@
 
 import { useEffect, useId, useState, type ComponentType, type ReactNode, type SVGProps } from 'react';
 
-import type { TopicInfo } from '../../shared/panel.ts';
+import type { DisplayInstance, TopicInfo } from '../../shared/panel.ts';
 import { api } from '../api.ts';
 import { CloseIcon, CopyIcon, QuestionIcon, TrashIcon } from '../icons.tsx';
+import { DisplaysEditor } from './DisplaysEditor.tsx';
 import { FileInput } from './FileInput.tsx';
 import { resolveConfig } from '../widgets/registry.ts';
 import type { Property } from '../widgets/types.ts';
@@ -20,7 +21,14 @@ interface SelectOption {
 export interface PropertiesPanelProps {
   type: string;
   // Its widget's or status widget's, if the type is known
-  definition: { name: string; icon: ComponentType<SVGProps<SVGSVGElement>>; properties: Property[] } | undefined;
+  definition:
+    | {
+        name: string;
+        icon: ComponentType<SVGProps<SVGSVGElement>>;
+        properties: Property[];
+        migrate?: (stored: Record<string, unknown>) => Record<string, unknown>;
+      }
+    | undefined;
   // As stored
   config: Record<string, unknown>;
   // A widget of the board's; status widgets have none
@@ -50,7 +58,9 @@ export function PropertiesPanel({
 }: PropertiesPanelProps) {
   const config = definition ? resolveConfig(definition, stored) : stored;
   const Icon = definition?.icon ?? QuestionIcon;
-  const setProperty = (key: string, value: unknown) => onConfig({ ...stored, [key]: value });
+  // Onto the config as upgraded, if saved by an earlier version
+  const setProperty = (key: string, value: unknown) =>
+    onConfig({ ...(definition?.migrate ? definition.migrate(stored) : stored), [key]: value });
 
   return (
     <aside className="properties" aria-label={label}>
@@ -113,6 +123,19 @@ function PropertyField({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  if (property.kind === 'displays') {
+    return (
+      <div className="field">
+        <span className="field-label">{property.label}</span>
+        {property.help && <p className="field-help">{property.help}</p>}
+        <DisplaysEditor
+          value={value as DisplayInstance[]}
+          onChange={onChange}
+          renderProperty={(p, v, change) => <PropertyField property={p} value={v} onChange={change} />}
+        />
+      </div>
+    );
+  }
   if (property.kind === 'boolean') {
     return (
       <div className="field">

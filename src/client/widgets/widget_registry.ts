@@ -1,9 +1,17 @@
 // The widgets of the palette: Tassello's own, then those of the plugins
 // (see ../plugins.ts), which may also change the defaults of any widget's
 // properties, e.g. a robot's topic names and speed limits. The status
-// widgets have a registry of their own, of the same kind.
+// widgets and the Robot Viewer's displays have registries of their own, of
+// the same kind.
 
-import type { Property, RegisteredStatusWidget, RegisteredWidget, TasselloClientPlugin } from './types.ts';
+import type { DisplayInstance } from '../../shared/panel.ts';
+import type {
+  Property,
+  RegisteredDisplay,
+  RegisteredStatusWidget,
+  RegisteredWidget,
+  TasselloClientPlugin,
+} from './types.ts';
 
 // What a registry holds: a widget's definition, or a status widget's
 interface Definition {
@@ -19,10 +27,12 @@ export interface Entry<D> {
 
 export type WidgetEntry = Entry<RegisteredWidget>;
 export type StatusWidgetEntry = Entry<RegisteredStatusWidget>;
+export type DisplayEntry = Entry<RegisteredDisplay>;
 
 export function fitsProperty(property: Property, value: unknown): boolean {
   return (
     typeof value === typeof property.default &&
+    (property.kind !== 'displays' || Array.isArray(value)) &&
     // Those with options known at run time take any value: see useOptions
     (property.kind !== 'select' || !!property.useOptions || property.options.some((o) => o.value === value)) &&
     (typeof value !== 'number' || Number.isFinite(value))
@@ -128,13 +138,52 @@ export class StatusWidgetRegistry extends DefinitionRegistry<RegisteredStatusWid
   }
 }
 
+export class DisplayRegistry extends DefinitionRegistry<RegisteredDisplay> {
+  constructor(core: RegisteredDisplay[], taken?: (type: string) => string | null) {
+    super(core, (plugin) => plugin.displays, 'display', taken);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// A list of displays as stored, those that are not displays left out (an id
+// taken again, no type): their missing fields filled in
+export function displayList(value: unknown[]): DisplayInstance[] {
+  const ids = new Set<string>();
+  const displays: DisplayInstance[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.id !== 'string' || !item.id || typeof item.type !== 'string' || ids.has(item.id)) {
+      continue;
+    }
+    ids.add(item.id);
+    displays.push({
+      id: item.id,
+      type: item.type,
+      name: typeof item.name === 'string' ? item.name : '',
+      enabled: item.enabled !== false,
+      config: isRecord(item.config) ? item.config : {},
+    });
+  }
+  return displays;
+}
+
 // The widget's config with every property: stored values of the right type,
-// defaults for the others
-export function resolveConfig(definition: { properties: Property[] }, stored: Record<string, unknown>) {
+// defaults for the others; first upgraded, if saved by an earlier version
+export function resolveConfig(
+  definition: { properties: Property[]; migrate?: (stored: Record<string, unknown>) => Record<string, unknown> },
+  stored: Record<string, unknown>,
+) {
+  const current = definition.migrate ? definition.migrate(stored) : stored;
   const config: Record<string, unknown> = {};
   for (const property of definition.properties) {
-    const value = stored[property.key];
-    config[property.key] = fitsProperty(property, value) ? value : property.default;
+    const value = current[property.key];
+    if (!fitsProperty(property, value)) {
+      config[property.key] = property.default;
+    } else {
+      config[property.key] = property.kind === 'displays' ? displayList(value as unknown[]) : value;
+    }
   }
   return config;
 }

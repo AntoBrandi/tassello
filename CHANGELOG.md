@@ -1,9 +1,49 @@
 # Changelog
 
 Tassello follows [semantic versioning](https://semver.org): before 1.0, a new minor version may
-change the plugin API (`tassello/sdk`, `tassello/server`, `tassello/vite`), as noted here.
+change the plugin API (`tassello/sdk`, `tassello/viewer`, `tassello/server`, `tassello/vite`), as
+noted here.
 
 ## Unreleased
+
+- Robot Viewer widget, in place of the Robot Model: the robot in 3D, or from above in 2D (the
+  toolbar's **3D** and **2D**), as RViz shows it, made of *displays* drawn in a fixed frame,
+  chosen in the toolbar from the TF frames (**Auto**: the robot model's root link, as the Robot
+  Model showed the robot, else the root of the TF tree). Its first displays: **Robot Model** (the
+  Robot Model widget's robot, its moving joints highlighted with their arrows, placed by TF),
+  **TF** (the frames' axes and names, as its frames were shown, all of TF's, filtered by name,
+  optionally with lines to their parents), **Occupancy Grid** (a map or a costmap on the ground of
+  its frame, kept up to date by its `_updates`), **Laser Scan** and **Point Cloud** (their points,
+  one colour or by intensity, height or their own `rgb`, at a size in pixels). The displays are
+  listed in the side panel in the order they are drawn: each shown or hidden, renamed, moved,
+  removed, opened to edit its properties; others added from Tassello's and the plugins'. What a
+  display waits for or cannot show (no TF to the fixed frame, a topic of another type) is said in
+  the middle while nothing is shown, else in a note; a display that fails says so, the others carry
+  on. It keeps the Robot Model's type: saved panels open their robot models as viewers of the robot
+  model and, if its frames were shown, of TF. In 2D, drag to pan and scroll to zoom.
+- Laser scans and point clouds for the viewer are thinned on the robot (evenly, to at most the
+  points asked for), quantized to 16 bits about their centre (6 bytes a point, 7 with an
+  intensity, 9 with a colour) and placed by TF as each message arrives, then sent one at a time
+  as the cameras' images are: a new `points.subscribe` stream of binary frames (format 2,
+  `POINTS_FORMAT`, `PointsInfo` metadata, see `src/shared/points.ts`). A new `tf.frames`
+  subscription sends every TF frame, its parent and its 3D pose in a fixed frame, 15 times a
+  second for a viewer.
+- Plugins: displays of their own for the Robot Viewer, as RViz's display plugins:
+  `displays: [defineDisplay({ type, name, description, icon, properties, load })]`, `load`
+  importing a class that extends `Display` of the new `tassello/viewer` (with three.js, fetched
+  only when a viewer shows the display): `configure(config, previous)`, `onTransforms()`,
+  `onFixedFrameChange()`, `focus()`, `dispose()`, and `pose`, `place`, `attach`,
+  `subscribeTopic`, `setStatus`, `setNotes`. `three` and `tassello/viewer` are the page's, through
+  its import map, as React and `tassello/sdk` are, and kept external by `tassello/vite`;
+  Tassello's displays and `PointsLayer` are in `tassello/viewer`, to extend. Display types are
+  unique across widgets and status widgets, and `defaults` apply to them
+  (`'robot-model-display'`, `'tf-display'`, `'grid-display'`, `'laser-scan-display'`,
+  `'point-cloud-display'`). `connection.subscribeTfFrames`, `connection.subscribePoints` and
+  `useTfFrames`; a `displays` property kind; widgets' `migrate(stored)`, upgrading a config
+  saved by an earlier version. **Changed**: the `robot-model` widget's properties are now
+  `fixedFrame`, `view` and `displays`: defaults of its former `descriptionTopic`,
+  `jointStatesTopic` and `highlightMotion` go to `'robot-model-display'`, of `showFrames` to the
+  `tf` display's `enabled` in `displays`.
 
 - Status bars: each panel has its own, above its board, of readings at a glance. Its first
   status widgets: **Wi-Fi**, the network the robot is on and its signal, as NetworkManager has

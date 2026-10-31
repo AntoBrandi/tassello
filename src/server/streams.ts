@@ -1,21 +1,25 @@
-// The image and grid streams the pages subscribe to: one per distinct request,
-// shared by its consumers, destroyed with the last of them.
+// The image, grid and points streams the pages subscribe to: one per distinct
+// request, shared by its consumers, destroyed with the last of them.
 
 import type rclnodejs from 'rclnodejs';
 
 import type { Consumer, FrameSink, FrameStream } from './frame_stream.ts';
 import { GridStream, gridStreamKey, type GridOptions } from './grids.ts';
 import { ImageStream, imageStreamKey, type ImageOptions } from './images.ts';
+import { PointsStream, pointsStreamKey, type PointsOptions } from './points.ts';
+import type { Tf } from './tf.ts';
 import type { Logger } from './util.ts';
 
 export class FrameStreams {
   private readonly node: rclnodejs.Node;
   private readonly logger: Logger;
+  private readonly tf: Tf;
   private readonly streams = new Map<string, FrameStream>();
 
-  constructor(node: rclnodejs.Node, logger: Logger) {
+  constructor(node: rclnodejs.Node, logger: Logger, tf: Tf) {
     this.node = node;
     this.logger = logger;
+    this.tf = tf;
   }
 
   image(sink: FrameSink, id: number, options: ImageOptions): Consumer {
@@ -27,6 +31,12 @@ export class FrameStreams {
   grid(sink: FrameSink, id: number, options: GridOptions): Consumer {
     return this.subscribe(sink, id, options.maxFps, gridStreamKey(options), () =>
       new GridStream(this.node, this.logger, options),
+    );
+  }
+
+  points(sink: FrameSink, id: number, options: PointsOptions): Consumer {
+    return this.subscribe(sink, id, options.maxFps, pointsStreamKey(options), () =>
+      new PointsStream(this.node, this.logger, this.tf, options),
     );
   }
 

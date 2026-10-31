@@ -5,11 +5,26 @@
 
 import rclnodejs from 'rclnodejs';
 
-import type { Transform2D } from '../shared/protocol.ts';
-import { TfTree, yawOf, type Transform } from './transforms.ts';
+import type { Pose3D, TfFrame, Transform2D } from '../shared/protocol.ts';
+import { normalizeFrame, TfTree, yawOf, type Transform } from './transforms.ts';
 import { errorMessage, type Logger } from './util.ts';
 
 const TF_MESSAGE = 'tf2_msgs/msg/TFMessage';
+// TF's topics are subscribed to with the first watcher: frames it cannot find
+// meanwhile are not errors yet
+const TF_GRACE_MS = 2000;
+
+// To 1e-5 (a hundredth of a millimetre): the JSON stays short
+const round = (value: number) => Math.round(value * 1e5) / 1e5 || 0;
+
+export function poseOf({ translation: t, rotation: r }: Transform): Pose3D {
+  return [round(t.x), round(t.y), round(t.z), round(r.x), round(r.y), round(r.z), round(r.w)];
+}
+
+export interface TfFramesResult {
+  frames: TfFrame[];
+  error: string | null;
+}
 const { HistoryPolicy, ReliabilityPolicy, DurabilityPolicy } = rclnodejs.QoS;
 
 // As tf2_ros's listener: depth 100, static transforms latched
@@ -76,6 +91,47 @@ export class Tf {
       clearInterval(timer);
       this.release();
     };
+  }
+
+  // Calls back with every frame, and its pose in fixedFrame (none if empty),
+  // `rate` times a second, until the returned function is called
+  watchFrames(fixedFrame: string, rate: number, callback: (result: TfFramesResult) => void): () => void {
+    this.acquire();
+    const started = Date.now();
+    const timer = setInterval(() => callback(this.frames(fixedFrame, Date.now() - started < TF_GRACE_MS)), 1000 / rate);
+    return () => {
+      clearInterval(timer);
+      this.release();
+    };
+  }
+
+  // grace: TF's topics were just subscribed to, a frame missing may come
+  private frames(fixedFrame: string, grace: boolean): TfFramesResult {
+    const now = Date.now();
+    const fixed = normalizeFrame(fixedFrame);
+    const frames: TfFrame[] = this.tree.frames().map(({ name, parent, receivedAt }) => ({
+      name,
+      parent,
+      pose: null,
+      ageMs: receivedAt === null ? null : now - receivedAt,
+    }));
+    if (!fixed) {
+      return { frames, error: null };
+    }
+    if (!frames.some((frame) => frame.name === fixed)) {
+      return {
+        frames,
+        error: grace ? null : frames.length === 0 ? 'No TF frames yet' : `Frame "${fixed}" does not exist`,
+      };
+    }
+    for (const frame of frames) {
+      try {
+        frame.pose = poseOf(this.tree.lookup(fixed, frame.name, now).transform);
+      } catch {
+        // Of another tree: no pose
+      }
+    }
+    return { frames, error: null };
   }
 
   private lookup(target: string, source: string): TfResult {

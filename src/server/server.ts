@@ -121,8 +121,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
   logger.info(`Panels in ${panelsDir}`);
 
   const teleop = new Teleop(node, logger);
-  const streams = new FrameStreams(node, logger);
   const tf = new Tf(node, logger);
+  const streams = new FrameStreams(node, logger, tf);
   const paths = new Paths(node, logger);
   const overlays = new Overlays(node, logger, tf);
   const topics = new Topics(node, logger);

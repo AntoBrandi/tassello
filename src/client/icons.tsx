@@ -160,6 +160,35 @@ export const ArmIcon = icon(
 );
 export const AngleIcon = icon(<path d="M4 20 18 6M4 20h16M11 20a7 7 0 0 0-2.1-5" />);
 export const CubeIcon = icon(<path d="M12 2 3 7v10l9 5 9-5V7l-9-5ZM3 7l9 5 9-5M12 12v10" />);
+// The Robot Viewer's displays: a frame's axes, a laser scan's fan of returns,
+// a point cloud
+export const AxesIcon = icon(<path d="M5 19V4M5 19h15M5 19l-3 3M5 4 3 6.5M5 4l2 2.5M20 19l-2.5-2M20 19l-2.5 2" />);
+export const ScanIcon = icon(
+  <>
+    <circle cx="12" cy="19" r="2" />
+    <path d="M10.3 17.6 5 9M13.7 17.6 19 9" strokeDasharray="1 2.6" />
+    <path d="M4 7.5a12 12 0 0 1 16 0" />
+  </>,
+);
+export const PointCloudIcon = icon(
+  <>
+    {[
+      [5, 8],
+      [9, 5],
+      [14, 6],
+      [19, 9],
+      [7, 13],
+      [12, 11],
+      [17, 14],
+      [4, 18],
+      [10, 17],
+      [15, 19],
+      [20, 18],
+    ].map(([cx, cy]) => (
+      <circle key={`${cx} ${cy}`} cx={cx} cy={cy} r="1.3" fill="currentColor" stroke="none" />
+    ))}
+  </>,
+);
 export const QuestionIcon = icon(
   <>
     <circle cx="12" cy="12" r="10" />
@@ -269,6 +298,8 @@ export const FileTextIcon = icon(<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2
 export const FilePlusIcon = icon(<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5ZM14 3v5h5M12 11.5v6M9 14.5h6" />);
 export const UploadIcon = icon(<path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />);
 export const ArrowUpIcon = icon(<path d="M12 20V5M6 11l6-6 6 6" />);
+export const ArrowDownIcon = icon(<path d="M12 4v15M6 13l6 6 6-6" />);
+export const ChevronRightIcon = icon(<path d="m9 6 6 6-6 6" />);
 export const ArrowLeftIcon = icon(<path d="M20 12H5M11 6l-6 6 6 6" />);
 export const HomeIcon = icon(<path d="m3 11 9-8 9 8M5 9.5V20h5v-6h4v6h5V9.5" />);
 export const HardDriveIcon = icon(

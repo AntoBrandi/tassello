@@ -96,6 +96,21 @@ export class TfTree {
     this.links.clear();
   }
 
+  // Every frame, with its parent (null for the roots) and, if dynamic, when
+  // its transform arrived; by name
+  frames(): { name: string; parent: string | null; receivedAt: number | null }[] {
+    const frames = new Map<string, { name: string; parent: string | null; receivedAt: number | null }>();
+    for (const [name, link] of this.links) {
+      frames.set(name, { name, parent: link.parent, receivedAt: link.receivedAt });
+    }
+    for (const link of this.links.values()) {
+      if (!frames.has(link.parent)) {
+        frames.set(link.parent, { name: link.parent, parent: null, receivedAt: null });
+      }
+    }
+    return [...frames.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   // The pose of source in target, and the age of the oldest dynamic transform
   // it is made of. Throws if they are not connected.
   lookup(target: string, source: string, now: number): { transform: Transform; ageMs: number } {

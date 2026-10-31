@@ -22,8 +22,8 @@ export interface Pixels {
 // An image file, with the size of the ROS image it came from (0 if unknown)
 export interface EncodedImage {
   data: Buffer;
-  // Index into IMAGE_FORMATS (src/shared/protocol.ts): 0 JPEG, 1 PNG
-  format: 0 | 1;
+  // Index into IMAGE_FORMATS (src/shared/protocol.ts): 0 JPEG, 1 PNG, 2 points
+  format: 0 | 1 | 2;
   width: number;
   height: number;
 }

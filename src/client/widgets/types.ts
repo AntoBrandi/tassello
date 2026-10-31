@@ -1,9 +1,11 @@
-// What a widget is made of, and a status widget, which a panel's status bar
-// shows above its board: see registry.ts to add one
+// What a widget is made of, a status widget, which a panel's status bar shows
+// above its board, and a display, which the Robot Viewer draws: see
+// registry.ts to add one
 
 import type { ComponentType, SVGProps } from 'react';
 
-import type { StatusWidgetInstance, WidgetInstance } from '../../shared/panel.ts';
+import type { DisplayInstance, StatusWidgetInstance, WidgetInstance } from '../../shared/panel.ts';
+import type { DisplayClass } from './robot_viewer/display.ts';
 
 type Config = Record<string, unknown>;
 
@@ -41,7 +43,10 @@ type PropertyKind<V> = [V] extends [boolean]
           | { kind: 'image'; default: V; placeholder?: string }
           // The same, of a behavior tree's XML (BT.CPP's)
           | { kind: 'behavior-tree'; default: V; placeholder?: string }
-      : never;
+      : [V] extends [DisplayInstance[]]
+        ? // A Robot Viewer's displays: a list, each of its own properties
+          { kind: 'displays'; default: V }
+        : never;
 
 // A property of a widget, edited in the properties panel. Its value is stored
 // in the widget's config; the default stands in for a missing or mistyped one.
@@ -72,6 +77,9 @@ export interface WidgetDefinition<C> {
   minSize: { w: number; h: number };
   properties: PropertySchema<C>[];
   component: ComponentType<WidgetProps<C>>;
+  // Upgrades a config saved by an earlier version of the widget, before its
+  // properties are read from it: e.g. properties renamed
+  migrate?: (stored: Record<string, unknown>) => Record<string, unknown>;
 }
 
 // The same, with the config type erased: what the registry holds
@@ -88,6 +96,7 @@ export type Property = PropertyBase<Config, string> &
         useOptions?: () => { value: string; label: string }[];
       }
     | { kind: 'image' | 'behavior-tree'; default: string; placeholder?: string }
+    | { kind: 'displays'; default: DisplayInstance[] }
   );
 
 export interface RegisteredWidget extends Omit<WidgetDefinition<Config>, 'properties'> {
@@ -138,6 +147,32 @@ export function defineStatusWidget<C>(definition: StatusWidgetDefinition<C>): Re
   return definition as unknown as RegisteredStatusWidget;
 }
 
+// A display of the Robot Viewer, as RViz's: a kind of thing it draws in 3D (or
+// from above, in 2D), e.g. a laser scan. A viewer has a list of them, each
+// with its own properties, edited in the side panel: people add them from
+// those registered, Tassello's and the plugins'.
+export interface DisplayDefinition<C> {
+  // Stored in the panels' Robot Viewers: never change it. No widget's nor
+  // status widget's type either.
+  type: string;
+  name: string;
+  description: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  properties: PropertySchema<C>[];
+  // Its class, which extends Display (tassello/viewer), imported with three.js
+  // when a viewer first shows such a display: keep it in a module of its own,
+  // e.g. () => import('./PoseDisplay.ts').then((m) => m.PoseDisplay)
+  load: () => Promise<DisplayClass<C>>;
+}
+
+export interface RegisteredDisplay extends Omit<DisplayDefinition<Config>, 'properties'> {
+  properties: Property[];
+}
+
+export function defineDisplay<C>(definition: DisplayDefinition<C>): RegisteredDisplay {
+  return definition as unknown as RegisteredDisplay;
+}
+
 // The page's side of a plugin: the default export of its client module (see
 // src/server/plugins.ts)
 export interface TasselloClientPlugin {
@@ -147,10 +182,14 @@ export interface TasselloClientPlugin {
   // The status widgets it adds to the status bars' palette, their types
   // prefixed the same way, e.g. "myrobot.battery-status"
   statusWidgets?: RegisteredStatusWidget[];
+  // The displays it adds to the Robot Viewer, their types prefixed the same
+  // way, e.g. "myrobot.gripper-display"
+  displays?: RegisteredDisplay[];
   // New defaults of widgets' properties, Tassello's or other plugins', by
   // widget type then property key: e.g. a robot's own topic names and speed
   // limits, { teleop: { topic: '/myrobot/cmd_vel', maxLinear: 0.3 } }. They
-  // stand in for the values a panel does not set. Status widgets' too.
+  // stand in for the values a panel does not set. Status widgets' and
+  // displays' too.
   defaults?: Record<string, Record<string, unknown>>;
 }
 

@@ -149,7 +149,7 @@ after the others on the devices already arranged.
 | **Teleop** | Publishes velocity commands (`Twist` or `TwistStamped`) while its pads are held: one pad (x, z), or two in omnidirectional mode (x and y, z). Then one zero, and nothing, so that the lower priorities of a twist_mux, e.g. navigation, take over again |
 | **Speedometer** | The robot's speed on a dial, from its velocity commands (`Twist` or `TwistStamped`, e.g. `cmd_vel`): the linear speed (x, and y for omnidirectional robots), with a minus going backwards, on a scale up to a max speed (faster ones in red), and the angular velocity. A command not renewed within the timeout (0.5 s, as base controllers' `cmd_vel_timeout`) shows as a stop |
 | **Navigation** | The map, optionally the global and local costmaps and the planned path, the laser scan, and the robot where TF puts it, drawn with Nav2's footprint. Its tools set the pose estimate and send navigation goals, as RViz's do: press where the robot is or should go, drag towards where it faces. Pan, zoom, fit the map or follow the robot |
-| **Robot Model** | The robot in 3D, from its URDF and meshes, posed by the joint states. The links of moving joints turn orange, with an arrow at the joint in the direction of the motion |
+| **Robot Viewer** | The robot in 3D, or from above in 2D, as RViz shows it: *displays* drawn in a fixed frame (chosen in its toolbar, or Auto: the robot), each a kind of thing with its own properties. **Robot Model**: the robot from its URDF and meshes, posed by the joint states, the links of moving joints orange with an arrow at the joint in the direction of the motion. **TF**: the frames' axes and names, and the links to their parents. **Occupancy Grid**: a map or a costmap on the ground. **Laser Scan** and **Point Cloud**: their points, thinned on the robot, coloured by intensity, height or their own colours. Plugins add displays of their own. It replaces the Robot Model widget, whose panels open as viewers of the same robot |
 | **Arm Teleop** | Jogs an arm driven by ros2_control `JointTrajectoryController`s: a slider per joint, or pads moving the end effector in a straight line (damped least squares on the URDF's kinematics, collision checked by MoveIt's move_group when it runs) |
 | **Camera** | An image topic, raw (`sensor_msgs/Image`) or compressed (`sensor_msgs/CompressedImage`) |
 | **Image Viewer** | A static image: a file of the robot, typed (`/…`, `~/…`, `package://…`) or picked by browsing its folders, or an image uploaded from the page's device |
@@ -187,9 +187,16 @@ Notes on some of them:
   frame as it arrives and drawn where the robot is now, so that it moves with it; a circle
   without it, or zoomed out too far to see it. What cannot be shown, e.g. a scan whose frame TF
   does not connect to the map, is said above the robot's pose.
-- **Robot Model** loads the meshes of the description from the robot's ROS packages
+- **Robot Viewer** loads the meshes of the description from the robot's ROS packages
   (`package://` paths), which the server serves compressed. three.js is only fetched by the pages
-  showing one.
+  showing one. Its displays are listed in its side panel, in the order they are drawn: each shown
+  or hidden, renamed, moved, removed, opened to edit its properties, others added from
+  Tassello's and the plugins'. Everything is placed in the fixed frame by TF: `map` or `odom` to
+  see the robot move, Auto for the robot's root link, as the Robot Model showed it (the root of
+  the TF tree without a robot model). Laser scans and point clouds are placed as each message
+  arrives, on the server: a scan lands on the map's walls when the localization is right. Drag
+  to orbit (in 2D, to pan), right drag (two fingers) to pan, scroll (pinch) to zoom; Reset
+  fits the robot.
 - **Arm Teleop** streams its controllers one-point trajectories just ahead of the arm, 20 times
   a second: when the stream stops, the arm stops at the last point. A joint stays within the
   URDF's limits, or those of an optional *calibration state*: a `std_msgs/String` topic whose
@@ -562,8 +569,10 @@ Plugins are found:
 - as npm packages named `tassello-plugin-*` (or `@scope/tassello-plugin-*`), installed next to
   Tassello (e.g. both with `npm install -g`) or in the working directory's `node_modules`.
 
-A plugin can also add status widgets to the status bar (a battery's charge, a robot's mode), give
-Tassello's widgets new defaults (a robot's topic names and speed limits) and ship example panels.
+A plugin can also add status widgets to the status bar (a battery's charge, a robot's mode),
+displays to the Robot Viewer (a robot's own messages in 3D, as RViz's display plugins), give
+Tassello's widgets and displays new defaults (a robot's topic names and speed limits) and ship
+example panels.
 See **[docs/plugins.md](docs/plugins.md)**.
 
 ## Security
@@ -609,6 +618,12 @@ Safety and bandwidth are the server's concern:
   of their publishers, so latched maps arrive.
 - Topics are subscribed once, whatever the number of pages, with the type and QoS of their
   publishers; TF only while a page shows the robot.
+- A Robot Viewer gets every TF frame's pose in its fixed frame 15 times a second. Its laser scans
+  and point clouds are thinned on the robot (evenly, to at most the points asked for, 30,000 by
+  default), quantized to 16 bits (a millimetre or two over a lidar's range: 6 bytes a point, 7
+  with an intensity, 9 with a colour) and sent one at a time, the latest once the page drew the
+  previous one, as the cameras' images; one subscription and one encoding per topic, fixed frame
+  and size, whatever the number of pages.
 - Behavior tree logs, streams of transitions, are followed whole, none dropped: each page gets
   the nodes that changed, at most 10 times a second, however fast the tree ticks.
 - The ROS log is followed once for every page: each gets the new messages at most 10 times a
@@ -658,8 +673,9 @@ npm test
 `npm run dev` forwards the API and the WebSocket to `DASHBOARD_SERVER`, `http://localhost:8080`
 by default: point it at a robot to work on the page against the real thing.
 
-- `src/client/`: the page, React built by Vite. `widgets/` holds the widgets, `board/` the grid,
-  `sdk/` what plugins import as `tassello/sdk`.
+- `src/client/`: the page, React built by Vite. `widgets/` holds the widgets (the Robot Viewer's
+  displays in `widgets/robot_viewer/displays/`), `board/` the grid, `sdk/` what plugins import as
+  `tassello/sdk` and `tassello/viewer`.
 - `src/server/`: the server, TypeScript that Node.js runs as is in development and that the
   build compiles to JavaScript for the package. `api.ts` is what plugins import as
   `tassello/server`.

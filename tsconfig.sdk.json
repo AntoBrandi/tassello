@@ -1,6 +1,6 @@
 {
-  // The types of tassello/sdk (dist/types), for the plugins: the page itself
-  // provides the module (see vite.config.ts)
+  // The types of tassello/sdk and tassello/viewer (dist/types), for the
+  // plugins: the page itself provides the modules (see vite.config.ts)
   "compilerOptions": {
     "target": "es2022",
     "lib": ["es2023", "dom", "dom.iterable"],
@@ -17,5 +17,5 @@
     "rootDir": "src",
     "outDir": "dist/types"
   },
-  "files": ["src/client/sdk/index.ts"]
+  "files": ["src/client/sdk/index.ts", "src/client/sdk/viewer.ts"]
 }

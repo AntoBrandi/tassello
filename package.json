@@ -39,6 +39,9 @@
     "./sdk": {
       "types": "./dist/types/client/sdk/index.d.ts"
     },
+    "./viewer": {
+      "types": "./dist/types/client/sdk/viewer.d.ts"
+    },
     "./server": {
       "types": "./dist/server/api.d.ts",
       "default": "./dist/server/api.js"

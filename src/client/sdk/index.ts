@@ -4,20 +4,26 @@
 // tassello/vite plugin does), and get its types from the tassello package.
 //
 //   import { connection, defineWidget, definePlugin, useTopic } from 'tassello/sdk';
+//
+// The Robot Viewer's displays are defined here (defineDisplay), and made with
+// tassello/viewer (see viewer.ts), which brings three.js.
 
-// Widgets, status widgets and plugins
+// Widgets, status widgets, displays and plugins
 export {
   defineWidget,
   defineStatusWidget,
+  defineDisplay,
   definePlugin,
   type WidgetDefinition,
   type WidgetProps,
   type StatusWidgetDefinition,
   type StatusWidgetProps,
+  type DisplayDefinition,
   type PropertySchema,
   type Property,
   type RegisteredWidget,
   type RegisteredStatusWidget,
+  type RegisteredDisplay,
   type TasselloClientPlugin,
 } from '../widgets/types.ts';
 export { StatusReadout, type StatusReadoutProps, type StatusTone } from '../widgets/status/StatusReadout.tsx';
@@ -29,6 +35,7 @@ export {
   useConnectionStatus,
   useTopic,
   useTf,
+  useTfFrames,
   useCommandState,
   type BehaviorTreeFileHandlers,
   type BehaviorTreeFileOptions,
@@ -54,7 +61,11 @@ export {
   type OverlayHandlers,
   type OverlayOptions,
   type ParamsHandlers,
+  type PointsFrame,
+  type PointsHandlers,
+  type PointsOptions,
   type TfOptions,
+  type TfFramesOptions,
   type TopicMonitorHandlers,
   type TopicMonitorOptions,
   type TopicPublishOptions,
@@ -90,6 +101,10 @@ export type {
   NetworkUpdate,
   OverlayKind,
   OverlayUpdate,
+  PointsChannel,
+  PointsInfo,
+  PointsKind,
+  Pose3D,
   ParamsUpdate,
   BagsUpdate,
   RosoutUpdate,
@@ -98,9 +113,12 @@ export type {
   SystemUpdate,
   TerminalExit,
   TerminalOutput,
+  TfFrame,
+  TfFramesUpdate,
   TfUpdate,
   Transform2D,
 } from '../../shared/protocol.ts';
+export type { Points, PointsLayout } from '../../shared/points.ts';
 export type { BtNodeModel, BtPortModel } from '../../shared/bt_nodes.ts';
 export type { ParamDescriptor, ParamInfo, ParamResult, ParamScalar, ParamType, ParamValue } from '../../shared/parameters.ts';
 export type {
@@ -181,4 +199,4 @@ export type {
   FsSpace,
   FsText,
 } from '../../shared/file_manager.ts';
-export type { Panel, StatusWidgetInstance, WidgetInstance } from '../../shared/panel.ts';
+export type { DisplayInstance, Panel, StatusWidgetInstance, WidgetInstance } from '../../shared/panel.ts';

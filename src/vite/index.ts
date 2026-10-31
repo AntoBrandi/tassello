@@ -7,16 +7,26 @@
 //   export default defineConfig({ plugins: [tassello()] });
 //
 // builds src/client/index.tsx (or the entry given) into dist/client/index.js,
-// and its styles into dist/client/index.css: an ES module that imports React
-// and tassello/sdk as the page provides them (its import map), instead of
-// bundling copies. Name them in package.json:
+// and its styles into dist/client/index.css: an ES module that imports React,
+// tassello/sdk, and for the Robot Viewer's displays tassello/viewer and three,
+// as the page provides them (its import map), instead of bundling copies. The
+// modules it imports dynamically (displays' classes) are chunks of their own,
+// next to it. Name them in package.json:
 //
 //   "tassello": { "client": "dist/client/index.js", "styles": ["dist/client/index.css"] }
 
 import type { Plugin } from 'vite';
 
 // What the page shares with the plugins (see Tassello's vite.config.ts)
-export const SHARED_MODULES = ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'tassello/sdk'];
+export const SHARED_MODULES = [
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+  'react-dom/client',
+  'tassello/sdk',
+  'tassello/viewer',
+  'three',
+];
 
 export interface TasselloPluginOptions {
   // The client module's source, src/client/index.tsx by default
