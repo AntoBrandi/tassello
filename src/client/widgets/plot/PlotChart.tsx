@@ -4,6 +4,10 @@
 // pointer (live: a shorter or longer span to now), Shift+wheel or a
 // sideways swipe scrolls through time; two fingers pinch; a double click goes
 // back live. The pointer shows the series' values at its time.
+//
+// Its time is the server's (chartNow) unless given another `now`, e.g. a bag's
+// replayed time in ms: live, the right edge follows it; `timeText` writes the
+// times of a view that is not live (clockTime by default).
 
 import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react';
 
@@ -88,6 +92,8 @@ export function PlotChart({
   disabled,
   label,
   message,
+  now = chartNow,
+  timeText = clockTime,
 }: {
   // Those shown
   series: ChartSeries[];
@@ -101,14 +107,18 @@ export function PlotChart({
   label: string;
   // Instead of the lines: waiting for messages
   message: string | null;
+  // The time, in ms, of the right edge while live
+  now?: () => number;
+  // A time in ms of a view not live, written for a tick or the pointer
+  timeText?: (at: number, step: number) => string;
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const frame = useRef<Frame>({ left: 0, right: 1, top: 0, bottom: 1, from: 0, to: 1 });
   // What the frame shows, read by the drawing loop and the handlers
-  const props = useRef({ series, view, range, onView, defaultSpan, disabled });
-  props.current = { series, view, range, onView, defaultSpan, disabled };
+  const props = useRef({ series, view, range, onView, defaultSpan, disabled, now, timeText });
+  props.current = { series, view, range, onView, defaultSpan, disabled, now, timeText };
   // In the area's pixels
   const hover = useRef<number | null>(null);
   const selection = useRef<{ from: number; to: number } | null>(null);
@@ -155,7 +165,7 @@ export function PlotChart({
         return;
       }
       context.font = colors.font;
-      const { from, to } = viewSpan(view, chartNow());
+      const { from, to } = viewSpan(view, props.current.now());
       const [top, bottom] = [PAD.top, height - PAD.bottom];
       // The columns are about the plot's width, before the axis' labels are
       // measured
@@ -206,7 +216,7 @@ export function PlotChart({
         context.moveTo(at, top);
         context.lineTo(at, bottom);
         context.stroke();
-        const text = view.live ? relativeTime(to - tick, times.step) : clockTime(tick, times.step);
+        const text = view.live ? relativeTime(to - tick, times.step) : props.current.timeText(tick, times.step);
         const textWidth = context.measureText(text).width;
         context.textAlign = 'left';
         context.fillText(text, Math.min(width - textWidth - 2, Math.max(left, at - textWidth / 2)), bottom + 5);
@@ -306,7 +316,7 @@ export function PlotChart({
       const step = span < 2000 ? 1 : span < 20_000 ? 10 : span < 200_000 ? 100 : 1000;
       tooltip.querySelector('.plot-tooltip-time')!.textContent = view.live
         ? relativeTime(to - at, step).replace('now', 'Now')
-        : clockTime(at, step);
+        : props.current.timeText(at, step);
       tooltip.querySelectorAll('strong').forEach((cell, index) => {
         cell.textContent = valueText(values[index] ?? null);
       });
@@ -349,9 +359,9 @@ export function PlotChart({
       const [dx, dy] = [event.deltaX * scale, event.deltaY * scale];
       const { left, right } = frame.current;
       if (event.shiftKey || Math.abs(dx) > Math.abs(dy)) {
-        change(panView(view, chartNow(), (Math.abs(dx) > Math.abs(dy) ? dx : dy) / Math.max(1, right - left)));
+        change(panView(view, props.current.now(), (Math.abs(dx) > Math.abs(dy) ? dx : dy) / Math.max(1, right - left)));
       } else {
-        change(zoomView(view, chartNow(), Math.exp(dy * 0.0015), share(local(event.clientX))));
+        change(zoomView(view, props.current.now(), Math.exp(dy * 0.0015), share(local(event.clientX))));
       }
     };
     area.addEventListener('wheel', onWheel, { passive: false });
@@ -390,7 +400,7 @@ export function PlotChart({
       const xs = [...pointers.current.values()];
       if (xs.length === 2) {
         const distance = Math.max(10, Math.abs(xs[0] - xs[1]));
-        change(zoomView(props.current.view, chartNow(), current.pinch / distance, share((xs[0] + xs[1]) / 2)));
+        change(zoomView(props.current.view, props.current.now(), current.pinch / distance, share((xs[0] + xs[1]) / 2)));
         current.pinch = distance;
       }
       return;
@@ -439,7 +449,7 @@ export function PlotChart({
     }
     // Held, a key repeats before the next render
     const view = props.current.view;
-    const now = chartNow();
+    const now = props.current.now();
     const changes: Record<string, () => View | null> = {
       ' ': () => (view.live ? { live: false, ...viewSpan(view, now) } : { live: true, span: viewSpan(view, now).to - viewSpan(view, now).from }),
       ArrowLeft: () => panView(view, now, -0.1),

@@ -25,6 +25,7 @@ export {
   type ViewCamera,
   type ViewMode,
 } from '../widgets/robot_viewer/display.ts';
+export { ViewerView, type ViewerViewProps } from '../widgets/robot_viewer/ViewerView.tsx';
 export { PointsLayer, toLinear, type PointsColoring, type PointsStyle } from '../widgets/robot_viewer/displays/points.ts';
 export { LinesLayer, type LinesStyle } from '../widgets/robot_viewer/displays/lines.ts';
 export { arrowObject, axesObject, setOpacity, type ArrowSize } from '../widgets/robot_viewer/displays/shapes.ts';
