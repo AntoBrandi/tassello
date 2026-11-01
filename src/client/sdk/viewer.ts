@@ -19,8 +19,10 @@ export {
   type DisplayStatusLevel,
   type FrameState,
   type Pose,
+  type ViewerPointer,
   type ViewMode,
 } from '../widgets/robot_viewer/display.ts';
+export { ViewerView, type ViewerViewProps } from '../widgets/robot_viewer/ViewerView.tsx';
 export { PointsLayer, toLinear, type PointsColoring, type PointsStyle } from '../widgets/robot_viewer/displays/points.ts';
 export { LinesLayer, type LinesStyle } from '../widgets/robot_viewer/displays/lines.ts';
 export {

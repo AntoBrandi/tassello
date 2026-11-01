@@ -82,6 +82,15 @@ export { imageUrl, fsApi, ApiError, type Upload } from '../api.ts';
 export { useDialogs, Modal, type Dialogs, type ConfirmOptions, type PromptOptions } from '../dialogs.tsx';
 export { notify } from '../notifications.tsx';
 export { Joystick, type JoystickProps } from '../widgets/Joystick.tsx';
+// A bag player's controls (play/pause, a position slider, the speed), as the Rosbags widget's
+export { PlaybackControls } from '../widgets/rosbags/parts.tsx';
+// The robot's directories and files of a kind (bags, YAML, images, folders), to pick one
+export { FileBrowser } from '../editor/FileInput.tsx';
+export type { FileKind } from '../api.ts';
+// The Plot widget's chart: series over time, zoomed and panned, live or not, on the server's
+// clock or another (now)
+export { PlotChart, chartNow, type ChartSeries } from '../widgets/plot/PlotChart.tsx';
+export { SeriesBuffer, type View as PlotView } from '../widgets/plot/model.ts';
 export * from '../icons.tsx';
 
 export type {

@@ -29,6 +29,13 @@
 // The viewer frees, with the display, its root and what is in it (geometries,
 // materials, textures, labels), and what it tracks (its subscriptions):
 // dispose() is for the rest, e.g. timers.
+//
+// A display may take pointer input, e.g. handles dragged on a map: the viewer
+// asks the displays, the last drawn first, whether they take a press
+// (onPointerDown true); the one that does gets the drag (onPointerMove, then
+// onPointerUp) and the view does not pan or orbit. cursor() gives the
+// pointer's look over it, e.g. 'grab' over a handle. Each event says where on
+// the ground it is (ViewerPointer).
 
 import { Group, type Object3D, type Quaternion, type Vector3 } from 'three';
 
@@ -96,6 +103,23 @@ export interface DisplayContext {
   suggestFixedFrame(frame: string | null): void;
 }
 
+// A pointer event, as a display gets it
+export interface ViewerPointer {
+  // On the ground (z = 0 of the fixed frame), with ROS's axes; null if the
+  // pointer looks away from it (above the horizon in 3D)
+  point: Vector3 | null;
+  // A CSS pixel there, in meters: for a hit tolerance of a few pixels at any
+  // zoom. 0 if not known
+  pixel: number;
+  // As the DOM's PointerEvent has them
+  button: number;
+  pointerType: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}
+
 export type DisplayClass<C> = new (context: DisplayContext) => Display<C>;
 
 export function normalizeFrame(frame: string): string {
@@ -133,6 +157,23 @@ export abstract class Display<C = Record<string, unknown>> {
 
   // Frees what is neither in its root nor tracked, e.g. timers
   dispose(): void {}
+
+  // A press in the view: true takes the drag that follows (the view does not
+  // move), false leaves it to the displays below and the view
+  onPointerDown(_pointer: ViewerPointer): boolean {
+    return false;
+  }
+
+  // The drag taken goes on
+  onPointerMove(_pointer: ViewerPointer): void {}
+
+  // The drag taken ends (released, or cancelled by the browser)
+  onPointerUp(_pointer: ViewerPointer): void {}
+
+  // The pointer's look while it hovers there, e.g. 'grab'; null: the view's
+  cursor(_pointer: ViewerPointer): string | null {
+    return null;
+  }
 
   protected get fixedFrame(): string {
     return this.context.fixedFrame;

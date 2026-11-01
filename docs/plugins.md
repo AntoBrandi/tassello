@@ -299,6 +299,29 @@ A display puts its three.js objects in its `root`, which is in the fixed frame, 
 | `onViewChange()` | The view changed between 3D and 2D (`context.view`) |
 | `focus()` | What **Reset** fits, if anything: the robot model returns the robot |
 | `dispose()` | It goes (hidden, removed, its viewer closed): free what is neither in `root` nor tracked, e.g. timers. The viewer frees `root` and what is in it (geometries, materials, textures, labels' elements) and the subscriptions tracked |
+| `onPointerDown(pointer)` | A press in the view: return `true` to take the drag that follows (the view does not pan or orbit), `false` to leave it to the displays below and the view. Asked the last drawn first |
+| `onPointerMove(pointer)`, `onPointerUp(pointer)` | The drag taken goes on, and ends (released, or cancelled by the browser) |
+| `cursor(pointer)` | The pointer's look while it hovers there, e.g. `'grab'` over a handle; `null`: the view's |
+
+`pointer` (`ViewerPointer`) says where it is: `point`, on the ground (z = 0 of the fixed frame)
+with ROS's axes, `null` if it looks away from it (above the horizon in 3D); `pixel`, a CSS pixel
+there in meters, for a hit tolerance of a few pixels at any zoom; `button`, `pointerType` and the
+modifier keys, as the DOM's event has them. A display draggable on a map:
+
+```ts
+onPointerDown(pointer: ViewerPointer): boolean {
+  const near = pointer.point && pointer.point.distanceTo(this.handle.position) < 0.3 + 4 * pointer.pixel;
+  return (this.dragging = !!near);
+}
+onPointerMove(pointer: ViewerPointer): void {
+  if (this.dragging && pointer.point) {
+    this.handle.position.set(pointer.point.x, pointer.point.y, 0);
+  }
+}
+onPointerUp(): void {
+  this.dragging = false;
+}
+```
 
 What it is given, as protected members:
 
@@ -331,6 +354,44 @@ frame), and the displays themselves (`RobotModelDisplay`, `TfDisplay`, `Occupanc
 `OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`), to extend: a display
 registered with `load: () => import('./MyCloud.ts').then((m) => m.MyCloud)`, where `MyCloud`
 extends `PointCloudDisplay`, is a point cloud with something of its own.
+
+#### A viewer in a plugin's widget
+
+`ViewerView`, of `tassello/viewer`, is the Robot Viewer's view for any widget: the displays it is
+given (Tassello's, the plugin's), in a fixed frame, in 3D or 2D, with the viewer's Reset, its notes
+and what it waits for. A display whose frame is the fixed frame needs no TF: a plugin can show
+what it publishes in a frame of its own. Import it lazily, as the Robot Viewer does, so that
+three.js is fetched only when the widget is shown:
+
+```tsx
+import { lazy, Suspense } from 'react';
+
+const ViewerView = lazy(() => import('tassello/viewer').then((m) => ({ default: m.ViewerView })));
+
+const DISPLAYS = [
+  { id: 'map', type: 'grid-display', name: 'Map', enabled: true, config: { topic: '/my_robot/map' } },
+  { id: 'route', type: 'path-display', name: 'Route', enabled: true, config: { topic: '/my_robot/route' } },
+  { id: 'goal', type: 'my-robot.goal-display', name: 'Goal', enabled: true, config: {} },
+];
+
+function MapWidget() {
+  return (
+    <Suspense fallback={<div className="widget-message">Loading the map…</div>}>
+      <ViewerView fixedFrame="map" view="2d" displays={DISPLAYS} />
+    </Suspense>
+  );
+}
+```
+
+| Prop | |
+|---|---|
+| `fixedFrame` | The frame the view is in; `''` for Auto (the robot model's root link, else the root of the TF tree) |
+| `view` | `'3d'` or `'2d'` |
+| `displays` | `{ id, type, name, enabled, config }`, as a Robot Viewer's list, in the order they are drawn (later on top); the config's missing values are the display's defaults |
+| `onViewChange(view)`, `onFixedFrameChange(frame)` | Given: the toolbar has the 3D/2D switch, and the fixed frame's menu |
+| `disabled` | The switch and menu greyed out |
+| `emptyMessage` | Said in the middle while there are no displays |
+| `children` | Drawn over the view, e.g. the widget's own controls |
 
 `three` and `tassello/viewer` are not bundled into the plugin: the page provides them, as it does
 `tassello/sdk`, so that the viewer's renderer draws the plugin's objects. Add `three` and
@@ -455,6 +516,9 @@ Hooks:
 | `notify(message, kind?)` | A short message at the bottom of the page; `kind` `'info'` or `'error'` |
 | `Modal` | The page's modal dialog |
 | `Joystick` | The teleop's pad: `axes` (`'xy'`, `'x'`, `'y'`), `onMove(x, y)` in -1..1 |
+| `PlaybackControls` | A player's controls, as the Rosbags widget's: `playing`, `position` and `duration` (ms), `rate`, `onPlay(playing)`, `onSeek(position)`, `onRate(rate)`, `disabled`, `error` (shown instead of the position), `children` (more buttons) |
+| `FileBrowser` | The robot's directories and files of a kind (`'bag'`, `'yaml'`, `'image'`, `'behavior-tree'`, `'folder'`), in a dialog: `kind`, `start` (a directory, or a file in it), `onChoose(path)`, `onClose()` |
+| `PlotChart` | The Plot widget's chart: `series` (`{ key, name, color, buffer }`, a `SeriesBuffer` of `push(at, value)`), `view` (`PlotView`: live, the latest `span` ms, or `from`-`to`) and `onView`, `defaultSpan`, `range` (fixed, or `null`: fitted), `disabled`, `label`, `message`. Its time is the server's (`chartNow`) unless given `now`, e.g. a replayed bag's time in ms, with `timeText(at, step)` for a view that is not live. Keep the buffers' samples as long as wanted: `trim(before)` drops older ones |
 | `imageUrl(value)` | The URL of an `image` property's value |
 | `*Icon` | Tassello's icons, 24×24 line drawings in the current colour |
 

@@ -5,8 +5,8 @@
 // others carry on.
 //
 // Drag to orbit (3D) or pan (2D), right drag (two fingers) to pan, scroll
-// (pinch) to zoom. Rendered on demand, not in a loop: a still view costs
-// nothing.
+// (pinch) to zoom, unless a display takes the press (see display.ts). Rendered
+// on demand, not in a loop: a still view costs nothing.
 
 import {
   Box3,
@@ -18,10 +18,12 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   Quaternion,
+  Raycaster,
   Scene,
   Sphere,
   Texture,
   TOUCH,
+  Vector2,
   Vector3,
   WebGLRenderer,
   type Material,
@@ -44,9 +46,11 @@ import {
   type DisplayStatusLevel,
   type FrameState,
   type Pose,
+  type ViewerPointer,
   type ViewMode,
 } from './display.ts';
 import { effectiveFixedFrame } from './model.ts';
+import { groundPoint } from './pointer.ts';
 
 // TF updates a second: what moves in the fixed frame, e.g. the robot in odom
 const TF_RATE = 15;
@@ -182,6 +186,9 @@ export class Viewer {
   private stateKey = '';
   private disposed = false;
   private readonly observer: ResizeObserver;
+  // The display that took the press being dragged
+  private dragging: { slot: Slot; pointerId: number } | null = null;
+  private readonly raycaster = new Raycaster();
 
   constructor(container: HTMLElement, onState: (state: ViewerState) => void) {
     this.container = container;
@@ -228,6 +235,13 @@ export class Viewer {
       });
     }
     this.pan.enabled = false;
+
+    // Before the controls' (capture): a display taking the press stops them
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e), { capture: true });
+    canvas.addEventListener('pointermove', (e) => this.onPointerMove(e), { capture: true });
+    canvas.addEventListener('pointerup', (e) => this.onPointerUp(e), { capture: true });
+    canvas.addEventListener('pointercancel', (e) => this.onPointerUp(e), { capture: true });
 
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(container);
@@ -391,6 +405,9 @@ export class Viewer {
 
   private removeSlot(slot: Slot): void {
     slot.gone = true;
+    if (this.dragging?.slot === slot) {
+      this.dragging = null;
+    }
     this.slots.delete(slot.id);
     const { display } = slot;
     if (display) {
@@ -421,6 +438,16 @@ export class Viewer {
       hook();
     } catch (e) {
       this.fail(slot, e);
+    }
+  }
+
+  // A display's answer, which may throw: its error, and the fallback
+  private ask<T>(slot: Slot, question: () => T, fallback: T): T {
+    try {
+      return question();
+    } catch (e) {
+      this.fail(slot, e);
+      return fallback;
     }
   }
 
@@ -506,6 +533,98 @@ export class Viewer {
         }
       },
     };
+  }
+
+  // ── Pointer input ──
+
+  // The displays that may take input, the last drawn first
+  private inputSlots(): Slot[] {
+    return [...this.order]
+      .reverse()
+      .map((id) => this.slots.get(id))
+      .filter((slot): slot is Slot => !!slot?.display && slot.level !== 'error');
+  }
+
+  private pointerOf(event: PointerEvent): ViewerPointer {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const camera = this.camera();
+    camera.updateMatrixWorld();
+    const ground = (x: number, y: number) => {
+      const ndc = new Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+      this.raycaster.setFromCamera(ndc, camera);
+      return groundPoint(this.raycaster.ray.origin, this.raycaster.ray.direction);
+    };
+    const point = ground(event.clientX, event.clientY);
+    const next = point && ground(event.clientX + 1, event.clientY);
+    return {
+      point,
+      pixel: point && next ? point.distanceTo(next) : 0,
+      button: event.button,
+      pointerType: event.pointerType,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+    };
+  }
+
+  private onPointerDown(event: PointerEvent): void {
+    if (this.dragging) {
+      return;
+    }
+    const pointer = this.pointerOf(event);
+    for (const slot of this.inputSlots()) {
+      if (this.ask(slot, () => slot.display!.onPointerDown(pointer), false)) {
+        this.dragging = { slot, pointerId: event.pointerId };
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        this.renderer.domElement.setPointerCapture(event.pointerId);
+        this.render();
+        return;
+      }
+    }
+  }
+
+  private onPointerMove(event: PointerEvent): void {
+    const canvas = this.renderer.domElement;
+    if (this.dragging) {
+      if (event.pointerId === this.dragging.pointerId) {
+        const { slot } = this.dragging;
+        event.stopImmediatePropagation();
+        this.call(slot, () => slot.display!.onPointerMove(this.pointerOf(event)));
+        this.render();
+      }
+      return;
+    }
+    if (event.buttons !== 0) {
+      return;
+    }
+    const pointer = this.pointerOf(event);
+    let cursor: string | null = null;
+    for (const slot of this.inputSlots()) {
+      cursor = this.ask(slot, () => slot.display!.cursor(pointer), null);
+      if (cursor) {
+        break;
+      }
+    }
+    canvas.style.cursor = cursor ?? '';
+  }
+
+  private onPointerUp(event: PointerEvent): void {
+    if (!this.dragging || event.pointerId !== this.dragging.pointerId) {
+      return;
+    }
+    const { slot } = this.dragging;
+    this.dragging = null;
+    event.stopImmediatePropagation();
+    const canvas = this.renderer.domElement;
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    if (!slot.gone) {
+      this.call(slot, () => slot.display!.onPointerUp(this.pointerOf(event)));
+    }
+    this.render();
   }
 
   // ── TF ──
