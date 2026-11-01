@@ -26,6 +26,21 @@ function meshUrl(url: string): string {
   return shared ? `/api/packages/${shared[1]}/${shared[2]}` : url;
 }
 
+// A mesh resource's URL, as a marker gives it: package://, a file:// into a
+// package's share directory, or http(s)://
+export function resourceUrl(url: string): string {
+  const packaged = /^package:\/\/([^/]+)\/(.+)$/.exec(url.trim());
+  return packaged ? `/api/packages/${encodeURIComponent(packaged[1])}/${packaged[2]}` : meshUrl(url.trim());
+}
+
+// A mesh, from the robot's packages: STL and OBJ of the material given,
+// Collada with its own. Rejects if it cannot be loaded.
+export function loadMeshResource(url: string, material: Material): Promise<Object3D> {
+  return new Promise((resolve, reject) => {
+    loadMesh(resourceUrl(url), new LoadingManager(), material, (mesh, error) => (error ? reject(error) : resolve(mesh)));
+  });
+}
+
 type MeshDone = (mesh: Object3D, error?: Error) => void;
 
 function loadMesh(url: string, manager: LoadingManager, material: Material, done: MeshDone): void {

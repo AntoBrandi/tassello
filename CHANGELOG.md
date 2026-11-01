@@ -58,6 +58,26 @@ noted here.
   `maxDepth` drawn as their parent. `path.subscribe` takes `poses: true` for the poses in 3D, with
   their orientations (`PathUpdate.poses`). Image frames carry their header's frame
   (`ImageInfo` metadata).
+- Robot Viewer displays: **Pose** (a `PoseStamped`, or a `PoseWithCovarianceStamped`'s pose such
+  as AMCL's, as RViz's solid arrow, its shaft and head sized, or as axes) and **Interactive
+  Markers** (an interactive marker server's markers, chosen by its update topic, as RViz shows
+  them: asked for on `<ns>/get_interactive_markers`, kept up to date by `<ns>/update`, asked for
+  again when an update was missed or the server restarted; completed as interactive_markers'
+  client completes them, with arrows to move along an axis, rings to turn around it or move in
+  its plane, and the descriptions above them; every marker type but `ARROW_STRIP`, meshes from the
+  robot's packages. Their controls are dragged as RViz's are (along an axis, in a plane, around an
+  axis, pulled by a ring, freely in 3D across the view, turned as a trackball with Ctrl), clicked
+  (buttons, menus), and their menus opened by a right click or a long touch, submenus in place; the
+  server is told on `<ns>/feedback` (mouse down and up, poses at 20 Hz, clicks, menu entries), a
+  message at a time, as servers keep one. **Interactive** off shows them only. The viewer
+  highlights a control under the pointer, and a press on it no longer moves the view.
+- Plugins: displays' objects can be picked: `pickable(object, { hover, press, drag, release,
+  menu, cursor })` takes the pointer from the view while pressed, `showMenu(x, y, items)` shows a
+  menu in the viewer, `context.camera()` and the `onRender()` hook turn objects to the camera. In
+  `tassello/viewer`, `PoseDisplay` and `InteractiveMarkersDisplay` to extend, `markerObject` (a
+  `visualization_msgs/Marker`), `arrowObject`, `axesObject`, `loadMeshResource`, and the
+  interactive markers' `autoComplete`, `UpdateSequence`, `MarkerDrag`; `LinesLayer`'s
+  `worldUnits`. Their types, for `defaults`: `'pose-display'`, `'interactive-markers-display'`.
 - Plugins: `connection.subscribeOctomap`; in `tassello/viewer`, `CameraDisplay`,
   `PolygonDisplay`, `PathDisplay` and `OctomapDisplay` to extend, `LinesLayer` (lines of a width
   in pixels, of one colour or of their own), `toLinear`, and the cameras' `cameraInfoTopic`,

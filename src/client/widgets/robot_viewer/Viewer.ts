@@ -5,8 +5,9 @@
 // others carry on.
 //
 // Drag to orbit (3D) or pan (2D), right drag (two fingers) to pan, scroll
-// (pinch) to zoom. Rendered on demand, not in a loop: a still view costs
-// nothing.
+// (pinch) to zoom; but on what a display made pickable (its interactive
+// markers), whose handlers have the pointer then. Rendered on demand, not in
+// a loop: a still view costs nothing.
 
 import {
   Box3,
@@ -18,10 +19,13 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   Quaternion,
+  Ray,
+  Raycaster,
   Scene,
   Sphere,
   Texture,
   TOUCH,
+  Vector2,
   Vector3,
   WebGLRenderer,
   type Material,
@@ -43,7 +47,11 @@ import {
   type DisplayNote,
   type DisplayStatusLevel,
   type FrameState,
+  type MenuItem,
+  type PickEvent,
+  type PickHandlers,
   type Pose,
+  type ViewCamera,
   type ViewMode,
 } from './display.ts';
 import { effectiveFixedFrame } from './model.ts';
@@ -54,6 +62,10 @@ const TF_RATE = 15;
 const DEFAULT_SCALE = 0.5;
 // The 2D camera, this far above what it looks at
 const ORTHO_HEIGHT = 200;
+// A press that moves less, in CSS pixels, is a click
+const CLICK_SLOP = 4;
+// A touch held this long without moving asks for the menu, in ms
+const LONG_PRESS_MS = 550;
 
 // A display of the widget's list, as the view gives it
 export interface ViewerDisplay {
@@ -100,6 +112,28 @@ interface Slot {
   attached: Map<Object3D, string>;
   cleanups: Set<() => void>;
   suggestion: string | null;
+  pickables: Map<Object3D, PickHandlers>;
+}
+
+// An object made pickable, by its display
+interface Pick {
+  slot: Slot;
+  object: Object3D;
+  handlers: PickHandlers;
+}
+
+// The pointer, taken by a pick: pressed (button 0), or right pressed for its
+// menu (button 2)
+interface Drag {
+  pick: Pick;
+  pointerId: number;
+  button: number;
+  startX: number;
+  startY: number;
+  moved: boolean;
+  longPress: number;
+  // As pressed: where, on what
+  pressed: PickEvent;
 }
 
 // Each display's class, loaded once for every viewer: by its definition's
@@ -150,6 +184,16 @@ function free(root: Object3D): void {
   });
 }
 
+// Drawn: it, and what it is in
+function shown(object: Object3D): boolean {
+  for (let current: Object3D | null = object; current; current = current.parent) {
+    if (!current.visible) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export class Viewer {
   private readonly container: HTMLElement;
   private readonly onState: (state: ViewerState) => void;
@@ -181,7 +225,20 @@ export class Viewer {
   private renderQueued = 0;
   private stateKey = '';
   private disposed = false;
+  // While the displays' onRender run: their render() is this frame
+  private rendering = false;
   private readonly observer: ResizeObserver;
+  private readonly raycaster = new Raycaster();
+  private hovered: Pick | null = null;
+  private drag: Drag | null = null;
+  // The latest mouse move, checked for what it is over once a frame
+  private hoverEvent: PointerEvent | null = null;
+  // Where the mouse is over the view, no button pressed: what it is over
+  // changes as the view moves too
+  private mouse: PointerEvent | null = null;
+  private orbiting = false;
+  private hoverQueued = 0;
+  private menu: { element: HTMLElement; slot: Slot } | null = null;
 
   constructor(container: HTMLElement, onState: (state: ViewerState) => void) {
     this.container = container;
@@ -222,15 +279,33 @@ export class Viewer {
     this.pan.maxZoom = 500;
     for (const controls of [this.orbit, this.pan]) {
       controls.enableDamping = true;
-      controls.addEventListener('change', () => this.render());
+      controls.addEventListener('change', () => {
+        this.render();
+        if (this.mouse && !this.orbiting && !this.drag) {
+          this.queueHover(this.mouse);
+        }
+      });
       controls.addEventListener('start', () => {
         this.userMoved = true;
+        this.orbiting = true;
+      });
+      controls.addEventListener('end', () => {
+        this.orbiting = false;
       });
     }
     this.pan.enabled = false;
 
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(container);
+    // Before the controls' own, on the canvas: a press on a pickable object
+    // does not reach them
+    container.addEventListener('pointerdown', this.onPointerDown, { capture: true });
+    container.addEventListener('pointermove', this.onPointerMove);
+    container.addEventListener('pointerup', this.onPointerUp);
+    container.addEventListener('pointercancel', this.onPointerCancel);
+    container.addEventListener('pointerleave', this.onPointerLeave);
+    container.addEventListener('contextmenu', this.onContextMenu);
+    this.raycaster.params.Points.threshold = 0.02;
     this.subscribeFrames();
   }
 
@@ -321,8 +396,16 @@ export class Viewer {
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.renderQueued);
+    cancelAnimationFrame(this.hoverQueued);
     this.unsubscribeFrames?.();
     this.observer.disconnect();
+    this.closeMenu();
+    this.container.removeEventListener('pointerdown', this.onPointerDown, { capture: true });
+    this.container.removeEventListener('pointermove', this.onPointerMove);
+    this.container.removeEventListener('pointerup', this.onPointerUp);
+    this.container.removeEventListener('pointercancel', this.onPointerCancel);
+    this.container.removeEventListener('pointerleave', this.onPointerLeave);
+    this.container.removeEventListener('contextmenu', this.onContextMenu);
     for (const slot of [...this.slots.values()]) {
       this.removeSlot(slot);
     }
@@ -361,6 +444,7 @@ export class Viewer {
       attached: new Map(),
       cleanups: new Set(),
       suggestion: null,
+      pickables: new Map(),
     };
     this.slots.set(id, slot);
     loadClass(definition).then(
@@ -404,6 +488,9 @@ export class Viewer {
       cleanup();
     }
     slot.attached.clear();
+    if (this.menu?.slot === slot) {
+      this.closeMenu();
+    }
     if (display) {
       display.root.removeFromParent();
       free(display.root);
@@ -462,22 +549,7 @@ export class Viewer {
           }
         };
       },
-      track: (cleanup) => {
-        let done = false;
-        const run = () => {
-          if (!done) {
-            done = true;
-            slot.cleanups.delete(run);
-            cleanup();
-          }
-        };
-        if (slot.gone) {
-          run();
-        } else {
-          slot.cleanups.add(run);
-        }
-        return run;
-      },
+      track: (cleanup) => this.track(slot, cleanup),
       render: () => this.render(),
       fit: () => {
         this.updateScale();
@@ -505,7 +577,44 @@ export class Viewer {
           this.updateFixedFrame();
         }
       },
+      camera: () => this.viewCamera(),
+      pickable: (object, handlers) => {
+        if (slot.gone) {
+          return () => {};
+        }
+        slot.pickables.set(object, handlers);
+        return this.track(slot, () => {
+          if (slot.pickables.get(object) === handlers) {
+            slot.pickables.delete(object);
+            this.forgetPick(object);
+          }
+        });
+      },
+      showMenu: (x, y, items) => {
+        if (!slot.gone) {
+          this.showMenu(slot, x, y, items);
+        }
+      },
     };
+  }
+
+  // Calls cleanup when the slot goes, unless the returned function was called
+  // first (which calls it)
+  private track(slot: Slot, cleanup: () => void): () => void {
+    let done = false;
+    const run = () => {
+      if (!done) {
+        done = true;
+        slot.cleanups.delete(run);
+        cleanup();
+      }
+    };
+    if (slot.gone) {
+      run();
+    } else {
+      slot.cleanups.add(run);
+    }
+    return run;
   }
 
   // ── TF ──
@@ -675,13 +784,20 @@ export class Viewer {
 
   // On demand: while the camera glides to a stop (damping), frames keep coming
   private render(): void {
-    if (this.disposed) {
+    if (this.disposed || this.rendering) {
       return;
     }
     this.renderQueued ||= requestAnimationFrame(() => {
       this.renderQueued = 0;
       const gliding = this.controls().update();
       const camera = this.camera();
+      this.rendering = true;
+      for (const slot of this.slots.values()) {
+        if (slot.display) {
+          this.call(slot, () => slot.display!.onRender());
+        }
+      }
+      this.rendering = false;
       this.renderer.render(this.scene, camera);
       this.labels.render(this.scene, camera);
       if (gliding) {
@@ -689,6 +805,367 @@ export class Viewer {
       }
     });
   }
+
+  // ── Pointer ──
+
+  private toFixed(point: Vector3): Vector3 {
+    return this.world.worldToLocal(point.clone());
+  }
+
+  private toFixedDirection(direction: Vector3): Vector3 {
+    return direction.clone().applyQuaternion(this.world.quaternion.clone().invert()).normalize();
+  }
+
+  private viewCamera(): ViewCamera {
+    const camera = this.camera();
+    camera.updateMatrixWorld();
+    this.world.updateMatrixWorld();
+    const up = new Vector3(0, 1, 0).applyQuaternion(camera.getWorldQuaternion(new Quaternion()));
+    return {
+      position: this.toFixed(camera.getWorldPosition(new Vector3())),
+      direction: this.toFixedDirection(camera.getWorldDirection(new Vector3())),
+      up: this.toFixedDirection(up),
+      orthographic: this.view === '2d',
+    };
+  }
+
+  // The ray through the pointer, in the scene
+  private pointerRay(event: MouseEvent): Ray {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new Vector2(
+      ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+      -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
+    );
+    const camera = this.camera();
+    camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(ndc, camera);
+    return this.raycaster.ray;
+  }
+
+  private pickEvent(event: PointerEvent | MouseEvent, button: number, point: Vector3 | null, object: Object3D | null): PickEvent {
+    const sceneRay = this.pointerRay(event);
+    this.world.updateMatrixWorld();
+    const rect = this.container.getBoundingClientRect();
+    return {
+      ray: new Ray(this.toFixed(sceneRay.origin), this.toFixedDirection(sceneRay.direction)),
+      point,
+      object,
+      button,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      pointerType: (event as PointerEvent).pointerType ?? 'mouse',
+    };
+  }
+
+  // The nearest pickable object under the pointer, shown: what of it was hit,
+  // and where (in the fixed frame)
+  private pickAt(event: MouseEvent): { pick: Pick; object: Object3D; point: Vector3 } | null {
+    const objects: Object3D[] = [];
+    for (const slot of this.slots.values()) {
+      objects.push(...slot.pickables.keys());
+    }
+    if (objects.length === 0) {
+      return null;
+    }
+    this.scene.updateMatrixWorld();
+    this.pointerRay(event);
+    for (const hit of this.raycaster.intersectObjects(objects, true)) {
+      if (!shown(hit.object)) {
+        continue;
+      }
+      for (let object: Object3D | null = hit.object; object; object = object.parent) {
+        for (const slot of this.slots.values()) {
+          const handlers = slot.pickables.get(object);
+          if (handlers) {
+            return { pick: { slot, object, handlers }, object: hit.object, point: this.toFixed(hit.point) };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    if (this.menu?.element.contains(event.target as Node)) {
+      return;
+    }
+    this.closeMenu();
+    if (this.drag) {
+      // Another finger, while one drags: not the controls'
+      event.stopPropagation();
+      return;
+    }
+    if (event.button !== 0 && event.button !== 2) {
+      return;
+    }
+    const hit = this.pickAt(event);
+    if (!hit) {
+      return;
+    }
+    const { pick } = hit;
+    const pickEvent = this.pickEvent(event, event.button, hit.point, hit.object);
+    if (event.button === 2) {
+      if (!pick.handlers.menu) {
+        return;
+      }
+    } else {
+      let taken = false;
+      this.call(pick.slot, () => {
+        taken = pick.handlers.press?.(pickEvent) === true;
+      });
+      if (!taken) {
+        return;
+      }
+    }
+    event.stopPropagation();
+    event.preventDefault();
+    const drag: Drag = {
+      pick,
+      pointerId: event.pointerId,
+      button: event.button,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      longPress: 0,
+      pressed: pickEvent,
+    };
+    if (event.button === 0 && event.pointerType !== 'mouse' && pick.handlers.menu) {
+      drag.longPress = window.setTimeout(() => {
+        if (this.drag === drag && !drag.moved) {
+          this.endDrag();
+          this.call(pick.slot, () => pick.handlers.release?.(pickEvent, false));
+          this.call(pick.slot, () => pick.handlers.menu?.(pickEvent));
+        }
+      }, LONG_PRESS_MS);
+    }
+    this.drag = drag;
+    try {
+      this.renderer.domElement.setPointerCapture(event.pointerId);
+    } catch {
+      // The pointer is already gone
+    }
+    this.setHovered(pick, pickEvent);
+  };
+
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (drag) {
+      if (event.pointerId !== drag.pointerId) {
+        return;
+      }
+      if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > CLICK_SLOP) {
+        drag.moved = true;
+        clearTimeout(drag.longPress);
+      }
+      if (drag.moved && drag.button === 0) {
+        const pickEvent = this.pickEvent(event, 0, null, null);
+        this.call(drag.pick.slot, () => drag.pick.handlers.drag?.(pickEvent));
+      }
+      return;
+    }
+    // A mouse over the view, not dragging it: what it is over, once a frame
+    if (event.pointerType !== 'mouse' || event.buttons !== 0) {
+      return;
+    }
+    this.mouse = event;
+    this.queueHover(event);
+  };
+
+  private queueHover(event: PointerEvent): void {
+    this.hoverEvent = event;
+    this.hoverQueued ||= requestAnimationFrame(() => {
+      this.hoverQueued = 0;
+      const latest = this.hoverEvent;
+      this.hoverEvent = null;
+      if (latest && !this.drag && !this.disposed) {
+        const hit = this.pickAt(latest);
+        this.setHovered(hit?.pick ?? null, this.pickEvent(latest, 0, hit?.point ?? null, hit?.object ?? null));
+      }
+    });
+  }
+
+  private readonly onPointerUp = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    this.endDrag();
+    const pickEvent = this.pickEvent(event, drag.button, null, null);
+    const { slot, handlers } = drag.pick;
+    if (drag.button === 2) {
+      if (!drag.moved) {
+        const menuEvent = { ...pickEvent, point: drag.pressed.point, object: drag.pressed.object };
+        this.call(slot, () => handlers.menu?.(menuEvent));
+      }
+    } else {
+      this.call(slot, () => handlers.release?.(pickEvent, !drag.moved));
+    }
+    if (event.pointerType === 'mouse') {
+      const hit = this.pickAt(event);
+      this.setHovered(hit?.pick ?? null, this.pickEvent(event, 0, hit?.point ?? null, hit?.object ?? null));
+    } else {
+      this.setHovered(null, pickEvent);
+    }
+  };
+
+  private readonly onPointerCancel = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    this.endDrag();
+    const pickEvent = this.pickEvent(event, drag.button, null, null);
+    if (drag.button === 0) {
+      this.call(drag.pick.slot, () => drag.pick.handlers.release?.(pickEvent, false));
+    }
+    this.setHovered(null, pickEvent);
+  };
+
+  private readonly onPointerLeave = (event: PointerEvent): void => {
+    if (event.pointerType === 'mouse') {
+      this.mouse = null;
+    }
+    if (!this.drag && event.pointerType === 'mouse') {
+      this.setHovered(null, this.pickEvent(event, 0, null, null));
+    }
+  };
+
+  private readonly onContextMenu = (event: MouseEvent): void => {
+    // The page's own menu, never over the view
+    event.preventDefault();
+  };
+
+  private endDrag(): void {
+    const drag = this.drag;
+    if (!drag) {
+      return;
+    }
+    this.drag = null;
+    clearTimeout(drag.longPress);
+    try {
+      this.renderer.domElement.releasePointerCapture(drag.pointerId);
+    } catch {
+      // Released already
+    }
+  }
+
+  private setHovered(pick: Pick | null, event: PickEvent): void {
+    const previous = this.hovered;
+    if (previous?.object === pick?.object && previous?.handlers === pick?.handlers) {
+      return;
+    }
+    this.hovered = pick;
+    if (previous) {
+      this.call(previous.slot, () => previous.handlers.hover?.(false, event));
+    }
+    if (pick) {
+      this.call(pick.slot, () => pick.handlers.hover?.(true, event));
+    }
+    this.renderer.domElement.style.cursor = pick ? (pick.handlers.cursor ?? 'pointer') : '';
+  }
+
+  // A pickable object is no longer: not hovered, nor dragged
+  private forgetPick(object: Object3D): void {
+    if (this.drag?.pick.object === object) {
+      this.endDrag();
+    }
+    if (this.hovered?.object === object) {
+      this.hovered = null;
+      this.renderer.domElement.style.cursor = '';
+    }
+  }
+
+  // ── Menu ──
+
+  private showMenu(slot: Slot, x: number, y: number, items: MenuItem[]): void {
+    this.closeMenu();
+    if (items.length === 0) {
+      return;
+    }
+    const element = document.createElement('div');
+    element.className = 'robot-menu';
+    element.setAttribute('role', 'menu');
+    this.menu = { element, slot };
+    this.container.append(element);
+    // A submenu replaces the list, with the way back on top
+    const open = (list: MenuItem[], parents: MenuItem[]) => {
+      element.replaceChildren();
+      const parent = parents.at(-1);
+      if (parent) {
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'robot-menu-back';
+        back.textContent = `‹ ${parent.label}`;
+        back.addEventListener('click', () => open(parents.length > 1 ? parents.at(-2)!.children! : items, parents.slice(0, -1)));
+        element.append(back);
+      }
+      for (const item of list) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'robot-menu-item';
+        button.setAttribute('role', 'menuitem');
+        button.disabled = item.disabled === true;
+        const label = document.createElement('span');
+        label.textContent = item.label;
+        button.append(label);
+        if (item.children?.length) {
+          const more = document.createElement('span');
+          more.className = 'robot-menu-more';
+          more.textContent = '›';
+          button.append(more);
+          button.addEventListener('click', () => open(item.children!, [...parents, item]));
+        } else {
+          button.addEventListener('click', () => {
+            this.closeMenu();
+            this.call(slot, () => item.select?.());
+          });
+        }
+        element.append(button);
+      }
+      this.placeMenu(element, x, y);
+      (element.querySelector('button:not(:disabled)') as HTMLButtonElement | null)?.focus({ preventScroll: true });
+    };
+    open(items, []);
+    window.addEventListener('pointerdown', this.onWindowPointerDown, true);
+    window.addEventListener('keydown', this.onMenuKey, true);
+  }
+
+  // Within the view, however small
+  private placeMenu(element: HTMLElement, x: number, y: number): void {
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    element.style.maxHeight = `${Math.max(60, height - 8)}px`;
+    const { offsetWidth: w, offsetHeight: h } = element;
+    element.style.left = `${Math.max(4, Math.min(x, width - w - 4))}px`;
+    element.style.top = `${Math.max(4, Math.min(y, height - h - 4))}px`;
+  }
+
+  private closeMenu(): void {
+    if (!this.menu) {
+      return;
+    }
+    this.menu.element.remove();
+    this.menu = null;
+    window.removeEventListener('pointerdown', this.onWindowPointerDown, true);
+    window.removeEventListener('keydown', this.onMenuKey, true);
+  }
+
+  private readonly onWindowPointerDown = (event: PointerEvent): void => {
+    if (this.menu && !this.menu.element.contains(event.target as Node)) {
+      this.closeMenu();
+    }
+  };
+
+  private readonly onMenuKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.closeMenu();
+    }
+  };
 
   private emit(): void {
     const displays: DisplayState[] = [];

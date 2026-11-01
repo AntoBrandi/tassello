@@ -29,8 +29,13 @@
 // The viewer frees, with the display, its root and what is in it (geometries,
 // materials, textures, labels), and what it tracks (its subscriptions):
 // dispose() is for the rest, e.g. timers.
+//
+// A display's objects can be picked, as RViz's interactive markers are:
+// pickable(object, handlers) has the viewer tell it when the pointer is over
+// the object, presses, drags and releases it (the view does not move then),
+// or asks for its menu (right click, long touch), which showMenu shows.
 
-import { Group, type Object3D, type Quaternion, type Vector3 } from 'three';
+import { Group, type Object3D, type Quaternion, type Ray, type Vector3 } from 'three';
 
 import { connection, type Connection } from '../../connection.ts';
 
@@ -61,6 +66,62 @@ export interface FrameState {
   pose: Pose | null;
   // Since its transform from its parent arrived, in ms; null if static
   ageMs: number | null;
+}
+
+// The camera the view is seen from, in the fixed frame
+export interface ViewCamera {
+  position: Vector3;
+  // Unit vectors: where it looks, and the view's up
+  direction: Vector3;
+  up: Vector3;
+  orthographic: boolean;
+}
+
+// The pointer, on a pickable object
+export interface PickEvent {
+  // From the camera through the pointer, in the fixed frame
+  ray: Ray;
+  // Where the ray hit the object, in the fixed frame, and the object hit
+  // (the one made pickable or one in it): when pressed, or hovered; null
+  // while dragged
+  point: Vector3 | null;
+  object: Object3D | null;
+  // 0 the primary button (a touch), 2 the secondary
+  button: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+  // In CSS pixels, from the view's top left: where to show a menu
+  x: number;
+  y: number;
+  pointerType: string;
+}
+
+export interface PickHandlers {
+  // The pointer came over the object, or left it: e.g. highlight it
+  hover?(hovered: boolean, event: PickEvent): void;
+  // Pressed with the primary button, or touched: true takes the pointer, so
+  // that the view does not move, until released
+  press?(event: PickEvent): boolean;
+  // Moved while taken
+  drag?(event: PickEvent): void;
+  // Released, or the pointer lost (clicked false): clicked if it barely moved
+  release?(event: PickEvent, clicked: boolean): void;
+  // Right clicked, or touched long without moving (released first): e.g.
+  // show its menu
+  menu?(event: PickEvent): void;
+  // Over it, e.g. 'pointer', 'move', 'grab'; 'pointer' if not given
+  cursor?: string;
+}
+
+export interface MenuItem {
+  label: string;
+  // Shown, not selectable
+  disabled?: boolean;
+  // A submenu, opened in its place
+  children?: MenuItem[];
+  select?(): void;
 }
 
 // What the viewer gives each of its displays
@@ -94,6 +155,14 @@ export interface DisplayContext {
   // The frame the view should be in when its fixed frame is Auto: the robot
   // model's root link. null: none
   suggestFixedFrame(frame: string | null): void;
+  // Where the view is seen from now
+  camera(): ViewCamera;
+  // The viewer tells handlers what the pointer does on the object (or what
+  // is in it), until the returned function is called or the display goes
+  pickable(object: Object3D, handlers: PickHandlers): () => void;
+  // A menu at x, y (CSS pixels from the view's top left), until an item is
+  // selected, Escape, or a press elsewhere; one at a time
+  showMenu(x: number, y: number, items: MenuItem[]): void;
 }
 
 export type DisplayClass<C> = new (context: DisplayContext) => Display<C>;
@@ -125,6 +194,11 @@ export abstract class Display<C = Record<string, unknown>> {
 
   // The view changed between 3D and 2D (context.view)
   onViewChange(): void {}
+
+  // A frame is about to be drawn (on demand: something changed, e.g. the
+  // camera moved): e.g. turn objects to the camera (context.camera()). Not
+  // for render(), which this frame does not need.
+  onRender(): void {}
 
   // What the view fits on Reset, if anything: the robot
   focus(): Object3D | null {
@@ -166,6 +240,14 @@ export abstract class Display<C = Record<string, unknown>> {
 
   protected setNotes(notes: DisplayNote[]): void {
     this.context.setNotes(notes);
+  }
+
+  protected pickable(object: Object3D, handlers: PickHandlers): () => void {
+    return this.context.pickable(object, handlers);
+  }
+
+  protected showMenu(x: number, y: number, items: MenuItem[]): void {
+    this.context.showMenu(x, y, items);
   }
 
   // Why a frame has no pose: for a status

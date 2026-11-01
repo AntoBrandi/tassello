@@ -14,6 +14,8 @@ export const CAMERA_DISPLAY = 'camera-display';
 export const POLYGON_DISPLAY = 'polygon-display';
 export const PATH_DISPLAY = 'path-display';
 export const OCTOMAP_DISPLAY = 'octomap-display';
+export const POSE_DISPLAY = 'pose-display';
+export const INTERACTIVE_MARKERS_DISPLAY = 'interactive-markers-display';
 
 // A new viewer's: the robot, its frames ready to be shown
 export const DEFAULT_DISPLAYS: DisplayInstance[] = [

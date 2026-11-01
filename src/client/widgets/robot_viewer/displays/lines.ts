@@ -1,7 +1,7 @@
 // Lines as the Robot Viewer draws them: a path, a polygon, a camera's
 // frustum, or a plugin's, a width in pixels whatever the zoom (WebGL's own
-// lines are always 1 pixel wide), of one colour or of a colour per segment's
-// end.
+// lines are always 1 pixel wide), or in meters, of one colour or of a colour
+// per segment's end.
 
 import { SRGBColorSpace } from 'three';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -13,12 +13,13 @@ import { parseColor } from '../model.ts';
 export interface LinesStyle {
   // '#rrggbb', unless the segments have colours of their own
   color: string;
-  // In CSS pixels
+  // In CSS pixels, or in meters if worldUnits (e.g. a marker's lines)
   width: number;
   // 0-1
   opacity: number;
   // Drawn over everything, e.g. a frustum inside the robot
   overlay?: boolean;
+  worldUnits?: boolean;
 }
 
 export class LinesLayer {
@@ -36,9 +37,10 @@ export class LinesLayer {
     }
   }
 
-  setStyle({ color, width, opacity, overlay = false }: LinesStyle): void {
+  setStyle({ color, width, opacity, overlay = false, worldUnits = false }: LinesStyle): void {
     this.color = parseColor(color);
     this.applyColor();
+    this.material.worldUnits = worldUnits;
     this.material.linewidth = width;
     this.material.opacity = opacity;
     this.material.depthTest = !overlay;

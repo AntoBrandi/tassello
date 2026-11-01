@@ -1944,6 +1944,75 @@ textarea {
   white-space: nowrap;
 }
 
+/* A display's menu, e.g. an interactive marker's (Viewer.ts): a submenu
+   replaces the list, with the way back on top */
+.robot-menu {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  max-width: min(280px, calc(100% - 8px));
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.robot-menu-item,
+.robot-menu-back {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.robot-menu-item > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.robot-menu-item:hover:not(:disabled),
+.robot-menu-item:focus-visible,
+.robot-menu-back:hover,
+.robot-menu-back:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.robot-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.robot-menu-back {
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 5px 5px 0 0;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.robot-menu-more {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
 .robot-overlay {
   position: absolute;
   inset: 0;

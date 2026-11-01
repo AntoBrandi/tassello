@@ -297,6 +297,7 @@ A display puts its three.js objects in its `root`, which is in the fixed frame, 
 | `onTransforms()` | The frames' poses were updated, about 15 times a second (objects attached are already placed) |
 | `onFixedFrameChange()` | The fixed frame changed: ask again for what was placed in the former (`connection.subscribePoints`) |
 | `onViewChange()` | The view changed between 3D and 2D (`context.view`) |
+| `onRender()` | A frame is about to be drawn (on demand: something changed, e.g. the camera moved): turn objects to the camera (`context.camera()`). Not for `render()` |
 | `focus()` | What **Reset** fits, if anything: the robot model returns the robot |
 | `dispose()` | It goes (hidden, removed, its viewer closed): free what is neither in `root` nor tracked, e.g. timers. The viewer frees `root` and what is in it (geometries, materials, textures, labels' elements) and the subscriptions tracked |
 
@@ -314,21 +315,48 @@ What it is given, as protected members:
 | `this.setStatus(level, message)` | `'ok'`, `'waiting'`, `'warn'` or `'error'`: why it shows nothing, or something wrong. While no display shows anything, the viewer says the first one's in its middle; else in a note |
 | `this.setNotes([{ text, tone }])` | Lines in the viewer's corner: `'info'` at the top right (what is loading), `'accent'` in the highlight colour, `'warn'` |
 | `this.missingFrame(frame)` | Why a frame has no pose, for a status |
+| `this.pickable(object, handlers)` | The viewer tells the handlers what the pointer does on the object or what is in it (see below), until the returned function is called or the display goes |
+| `this.showMenu(x, y, items)` | A menu at `x`, `y` (CSS pixels from the view's top left, as a `PickEvent` gives them): `{ label, disabled, children, select }` items, a submenu opening in its place; closed by a selection, Escape or a press elsewhere |
 | `this.render()` | Draws the view again, after changing objects: it is drawn on demand |
-| `this.context` | The rest: `frames` (every TF frame: `name`, `parent`, `pose`, `ageMs`), `view`, `scale` (the robot's radius, which helpers are sized after), `pixelRatio`, `track(cleanup)` (called when the display goes), `fit()`, `suggestFixedFrame(frame)` (what Auto stands for: the robot model's root link) |
+| `this.context` | The rest: `frames` (every TF frame: `name`, `parent`, `pose`, `ageMs`), `view`, `scale` (the robot's radius, which helpers are sized after), `pixelRatio`, `camera()` (where the view is seen from, in the fixed frame: `position`, `direction`, `up`, `orthographic`), `track(cleanup)` (called when the display goes), `fit()`, `suggestFixedFrame(frame)` (what Auto stands for: the robot model's root link) |
 
 A display that throws shows its error in the viewer; the others carry on.
 
+Objects can be picked, as RViz's interactive markers are: a press on an object made pickable is
+the display's, not the view's (which moves on a press elsewhere). The handlers, all optional, get a
+`PickEvent`: the `ray` from the camera through the pointer and the `point` hit (in the fixed
+frame), the `object` hit, the `button`, the modifier keys, and `x`, `y` in the view.
+
+```ts
+this.pickable(this.flag, {
+  cursor: 'move',
+  hover: (hovered) => this.highlight(hovered),
+  // true takes the pointer until released: the view stays still
+  press: () => true,
+  drag: (event) => this.moveTo(event.ray),
+  release: (event, clicked) => clicked && this.connection.publish('/flag/clicked', 'std_msgs/msg/Empty', {}),
+  // A right click, or a long touch
+  menu: (event) => this.showMenu(event.x, event.y, [{ label: 'Remove', select: () => this.remove() }]),
+});
+```
+
 `tassello/viewer` also has what Tassello's displays are made of: `PointsLayer` (points, coloured by
 intensity, height or their own colours, as the Laser Scan and Point Cloud displays draw them),
-`LinesLayer` (lines of a width in pixels, of one colour or of a colour per segment's end, as the
-Path, Polygon and Camera displays draw them: `setPolyline(points, closed)`, `setSegments(segments,
-colors)`), `rainbow` (RViz's colour scale), `toLinear` (sRGB to the linear colours three.js
-renders), `loadRobot` (a URDF and its meshes), a camera's projection (`cameraInfoTopic`,
+`LinesLayer` (lines of a width in pixels, or in meters with `worldUnits`, of one colour or of a
+colour per segment's end, as the Path, Polygon and Camera displays draw them:
+`setPolyline(points, closed)`, `setSegments(segments, colors)`), `arrowObject` and `axesObject`
+(a pose's solid arrow and axes, as the Pose display draws them), `markerObject` (a
+`visualization_msgs/Marker` as RViz draws it, of any type but `ARROW_STRIP`), what the Interactive
+Markers display is made of (`autoComplete`, completing a marker's controls as
+interactive_markers' client does; `serverTopics`, `UpdateSequence`, `menuTree`; `MarkerDrag`,
+`controlFrame`, `controlAxis`: how a control moves its marker), `rainbow` (RViz's colour scale),
+`toLinear` (sRGB to the linear colours three.js renders), `loadRobot` (a URDF and its meshes),
+`loadMeshResource` (a mesh by its `package://` URL), a camera's projection (`cameraInfoTopic`,
 `intrinsicsOf` a CameraInfo, `intrinsicsFromFov`, `imageCorners` at a distance in its optical
 frame), and the displays themselves (`RobotModelDisplay`, `TfDisplay`, `OccupancyGridDisplay`,
 `LaserScanDisplay`, `PointCloudDisplay`, `PointsDisplay` for points of another kind,
-`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`), to extend: a display
+`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`, `PoseDisplay`,
+`InteractiveMarkersDisplay`), to extend: a display
 registered with `load: () => import('./MyCloud.ts').then((m) => m.MyCloud)`, where `MyCloud`
 extends `PointCloudDisplay`, is a point cloud with something of its own.
 
@@ -472,7 +500,7 @@ A plugin can change the defaults of any widget's properties, Tassello's or anoth
 any status widget's (`'wifi-status'`, `'cpu-status'`), and of any display's
 (`'robot-model-display'`, `'tf-display'`, `'grid-display'`, `'laser-scan-display'`,
 `'point-cloud-display'`, `'octomap-display'`, `'camera-display'`, `'path-display'`,
-`'polygon-display'`).
+`'polygon-display'`, `'pose-display'`, `'interactive-markers-display'`).
 They stand in for the values a panel does not set, so a robot's plugin makes Tassello's widgets
 work for the robot out of the box:
 

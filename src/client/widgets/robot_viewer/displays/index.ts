@@ -7,10 +7,12 @@ import {
   AxesIcon,
   CameraIcon,
   CubeIcon,
+  InteractiveMarkerIcon,
   MapIcon,
   PathIcon,
   PointCloudIcon,
   PolygonIcon,
+  PoseIcon,
   ScanIcon,
   VoxelsIcon,
 } from '../../../icons.tsx';
@@ -18,11 +20,13 @@ import { defineDisplay, type RegisteredDisplay } from '../../types.ts';
 import {
   CAMERA_DISPLAY,
   GRID_DISPLAY,
+  INTERACTIVE_MARKERS_DISPLAY,
   LASER_SCAN_DISPLAY,
   OCTOMAP_DISPLAY,
   PATH_DISPLAY,
   POINT_CLOUD_DISPLAY,
   POLYGON_DISPLAY,
+  POSE_DISPLAY,
   ROBOT_MODEL_DISPLAY,
   TF_DISPLAY,
 } from '../model.ts';
@@ -113,6 +117,29 @@ export interface OctomapDisplayConfig {
   maxDepth: number;
   maxVoxels: number;
   maxRate: number;
+}
+
+export interface PoseDisplayConfig {
+  topic: string;
+  shape: 'arrow' | 'axes';
+  color: string;
+  alpha: number;
+  // In meters
+  shaftLength: number;
+  shaftRadius: number;
+  headLength: number;
+  headRadius: number;
+  axesLength: number;
+  axesRadius: number;
+}
+
+export interface InteractiveMarkersDisplayConfig {
+  // The server's update topic (<ns>/update), or its namespace
+  topic: string;
+  showDescriptions: boolean;
+  showAxes: boolean;
+  // Off: shown only, the view's drags never taken
+  interactive: boolean;
 }
 
 export const robotModelDisplay = defineDisplay<RobotModelDisplayConfig>({
@@ -464,6 +491,80 @@ export const octomapDisplay = defineDisplay<OctomapDisplayConfig>({
   ],
 });
 
+const isArrow = (c: PoseDisplayConfig) => c.shape === 'arrow';
+const isAxes = (c: PoseDisplayConfig) => c.shape === 'axes';
+
+export const poseDisplay = defineDisplay<PoseDisplayConfig>({
+  type: POSE_DISPLAY,
+  name: 'Pose',
+  description: 'A pose (geometry_msgs/PoseStamped, or a PoseWithCovarianceStamped’s), as an arrow or axes, where TF puts its frame',
+  icon: PoseIcon,
+  load: () => import('./PoseDisplay.ts').then((m) => m.PoseDisplay),
+  properties: [
+    {
+      key: 'topic',
+      label: 'Topic',
+      kind: 'topic',
+      default: '/goal_pose',
+      topicTypes: ['geometry_msgs/msg/PoseStamped', 'geometry_msgs/msg/PoseWithCovarianceStamped'],
+      help: 'e.g. Nav2’s goal (/goal_pose), or AMCL’s estimate (/amcl_pose), whose covariance is not drawn',
+    },
+    {
+      key: 'shape',
+      label: 'Shape',
+      kind: 'select',
+      default: 'arrow',
+      options: [
+        { value: 'arrow', label: 'Arrow: along its x' },
+        { value: 'axes', label: 'Axes: x red, y green, z blue' },
+      ],
+    },
+    { key: 'color', label: 'Colour', kind: 'color', default: '#ff1900', visible: isArrow },
+    { key: 'alpha', label: 'Opacity', kind: 'number', default: 1, min: 0, max: 1, step: 0.1 },
+    { key: 'shaftLength', label: 'Shaft length (m)', kind: 'number', default: 1, min: 0, max: 50, step: 0.05, visible: isArrow },
+    { key: 'shaftRadius', label: 'Shaft radius (m)', kind: 'number', default: 0.05, min: 0, max: 5, step: 0.01, visible: isArrow },
+    { key: 'headLength', label: 'Head length (m)', kind: 'number', default: 0.3, min: 0, max: 10, step: 0.05, visible: isArrow },
+    { key: 'headRadius', label: 'Head radius (m)', kind: 'number', default: 0.1, min: 0, max: 5, step: 0.01, visible: isArrow },
+    { key: 'axesLength', label: 'Axes length (m)', kind: 'number', default: 1, min: 0.01, max: 50, step: 0.05, visible: isAxes },
+    { key: 'axesRadius', label: 'Axes radius (m)', kind: 'number', default: 0.1, min: 0.001, max: 5, step: 0.01, visible: isAxes },
+  ],
+});
+
+export const interactiveMarkersDisplay = defineDisplay<InteractiveMarkersDisplayConfig>({
+  type: INTERACTIVE_MARKERS_DISPLAY,
+  name: 'Interactive Markers',
+  description:
+    'An interactive marker server’s markers (visualization_msgs/InteractiveMarker), dragged, clicked and their menus opened, as in RViz',
+  icon: InteractiveMarkerIcon,
+  load: () => import('./InteractiveMarkersDisplay.ts').then((m) => m.InteractiveMarkersDisplay),
+  properties: [
+    {
+      key: 'topic',
+      label: 'Update topic',
+      kind: 'topic',
+      default: '',
+      topicTypes: ['visualization_msgs/msg/InteractiveMarkerUpdate'],
+      placeholder: 'e.g. /basic_controls/update',
+      help: 'The server’s <namespace>/update: its markers are asked for on <namespace>/get_interactive_markers, what is done to them sent on <namespace>/feedback',
+    },
+    {
+      key: 'showDescriptions',
+      label: 'Show the descriptions',
+      kind: 'boolean',
+      default: true,
+      help: 'Each marker’s, above it',
+    },
+    { key: 'showAxes', label: 'Show the axes', kind: 'boolean', default: false, help: 'Of each marker’s pose' },
+    {
+      key: 'interactive',
+      label: 'Interactive',
+      kind: 'boolean',
+      default: true,
+      help: 'Drag a control to move or turn its marker, click a button, right click (or touch long) for its menu. Off: shown only, e.g. on a touchscreen',
+    },
+  ],
+});
+
 export const CORE_DISPLAYS: RegisteredDisplay[] = [
   robotModelDisplay,
   tfDisplay,
@@ -474,4 +575,6 @@ export const CORE_DISPLAYS: RegisteredDisplay[] = [
   cameraDisplay,
   pathDisplay,
   polygonDisplay,
+  poseDisplay,
+  interactiveMarkersDisplay,
 ];

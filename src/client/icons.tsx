@@ -198,6 +198,20 @@ export const PathIcon = icon(
   </>,
 );
 export const VoxelsIcon = icon(<path d="M3 13h8v8H3v-8ZM13 13h8v8h-8v-8ZM8 4h8v8H8V4Z" />);
+// A pose: an arrow from where it is, the way it faces
+export const PoseIcon = icon(
+  <>
+    <circle cx="6" cy="18" r="2" />
+    <path d="M7.5 16.5 19 5M19 5h-6M19 5v6" />
+  </>,
+);
+// An interactive marker: a ring to turn, arrows to move
+export const InteractiveMarkerIcon = icon(
+  <>
+    <ellipse cx="12" cy="12" rx="5.5" ry="5.5" strokeDasharray="3 2.2" />
+    <path d="M12 2v4M12 18v4M2 12h4M18 12h4M10 4l2-2 2 2M10 20l2 2 2-2M4 10l-2 2 2 2M20 10l2 2-2 2" />
+  </>,
+);
 export const QuestionIcon = icon(
   <>
     <circle cx="12" cy="12" r="10" />
