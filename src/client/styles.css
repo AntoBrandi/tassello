@@ -951,6 +951,23 @@ textarea {
   stroke-linejoin: round;
 }
 
+/* A share of a whole (a disk's use), in the reading's colour */
+.status-meter {
+  align-self: center;
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+
+.status-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: currentColor;
+}
+
 /* One cell: the icon or the value. Two: both. Three: the label too. Four:
    all */
 @container status (max-width: 130px) {

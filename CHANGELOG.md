@@ -99,6 +99,13 @@ noted here.
   mode while empty. It is part of the panel's file (`statusBar`: each status widget's `id`,
   `type`, `x` and `w` in columns, `config`), so exported, imported and duplicated with it; the
   example panels have the Wi-Fi and the CPU.
+- Status widget **Disk**: a disk's use, as the File Manager's overview shows the disks, read every
+  30 s while the page is shown (once for all of a page's): the share used or the space free of
+  the disk mounted where chosen, else of the fullest of those written to, with a bar of it; in
+  yellow above 85 %, red above 95 % (thresholds of its own), of its space or of its inodes. Its
+  details: the free space of the size, the space used, the device and file system, the inodes
+  when they run short, and, for the fullest, the other disks. Its type, for `defaults`:
+  `'disk-status'`.
 - Plugins: status widgets of their own, `statusWidgets: [defineStatusWidget({ ... })]`, made as
   widgets are, with a width in the bar's columns (`defaultWidth`, `minWidth`, `STATUS_COLUMNS`);
   `StatusReadout` lays out an icon, a value, a label and a chart as Tassello's do, keeping what

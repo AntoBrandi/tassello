@@ -34,6 +34,7 @@ import { systemMonitorWidget } from './system/SystemMonitorWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
 import { cpuStatusWidget } from './status/CpuStatus.tsx';
+import { diskStatusWidget } from './status/DiskStatus.tsx';
 import { wifiStatusWidget } from './status/WifiStatus.tsx';
 import type { RegisteredDisplay, RegisteredStatusWidget, RegisteredWidget, TasselloClientPlugin } from './types.ts';
 import { webPageWidget } from './web_page/WebPageWidget.tsx';
@@ -66,7 +67,7 @@ const CORE: RegisteredWidget[] = [
   systemMonitorWidget,
 ];
 
-const CORE_STATUS: RegisteredStatusWidget[] = [wifiStatusWidget, cpuStatusWidget];
+const CORE_STATUS: RegisteredStatusWidget[] = [wifiStatusWidget, cpuStatusWidget, diskStatusWidget];
 
 // Types are unique across the three registries, as the defaults are by type
 const registry = new WidgetRegistry(CORE, (type) => statusRegistry.owner(type) ?? displayRegistry.owner(type));

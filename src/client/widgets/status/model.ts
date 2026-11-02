@@ -1,7 +1,8 @@
 // What the status widgets show, worked out from the robot's updates: the
-// Wi-Fi network joined and its signal, the CPU's load and its last minute.
-// Kept apart from the components, to be tested.
+// Wi-Fi network joined and its signal, the CPU's load and its last minute,
+// a disk's use. Kept apart from the components, to be tested.
 
+import type { FsDisk } from '../../../shared/file_manager.ts';
 import {
   DEVICE_ACTIVATED,
   DEVICE_DISCONNECTED,
@@ -9,6 +10,7 @@ import {
   type NetworkState,
 } from '../../../shared/networking.ts';
 import type { SystemSample } from '../../../shared/system.ts';
+import { counted, formatSize } from '../file_manager/model.ts';
 import { bandOf, deviceStatus } from '../networking/model.ts';
 
 // The colour of a reading: see .status-readout in styles.css. off: none to
@@ -155,6 +157,98 @@ export function cpuTitle(sample: SystemSample, cpu: string | null): string {
     `load ${sample.load.map((load) => load.toFixed(2)).join(' ')}`,
   ];
   return [facts.filter(Boolean).join(' · '), cpu].filter(Boolean).join('\n');
+}
+
+// Of a disk's space, the share used, of what its users may fill (not what is
+// kept for root), as the file manager shows it
+export function diskShare(disk: FsDisk): number {
+  const size = disk.used + disk.free;
+  return size > 0 ? disk.used / size : 0;
+}
+
+function inodeShare(disk: FsDisk): number {
+  return disk.inodes && disk.inodes.total > 0 ? (disk.inodes.total - disk.inodes.free) / disk.inodes.total : 0;
+}
+
+// Out of either, no file can be written
+function fullness(disk: FsDisk): number {
+  return Math.max(diskShare(disk), inodeShare(disk));
+}
+
+// The disk shown: the one mounted there, else the fullest of those written
+// to (a read-only one is as full as it was made: an image, a CD), else of all
+export function diskShown(disks: FsDisk[], mount: string): FsDisk | null {
+  if (mount) {
+    return disks.find((disk) => disk.mount === mount) ?? null;
+  }
+  const writable = disks.filter((disk) => !disk.readOnly);
+  let fullest: FsDisk | null = null;
+  for (const disk of writable.length > 0 ? writable : disks) {
+    if (!fullest || fullness(disk) > fullness(fullest)) {
+      fullest = disk;
+    }
+  }
+  return fullest;
+}
+
+export interface DiskReading {
+  tone: StatusTone;
+  // Of its space used, 0..1; null if no disk is shown
+  share: number | null;
+  // 76%, or 120 GB free
+  value: string;
+  // Its mount point
+  label: string;
+  // The details, one per line
+  title: string;
+}
+
+const TONES: StatusTone[] = ['off', 'ok', 'warn', 'critical'];
+
+// The file manager's overview of the disks, in a reading: of the disk mounted
+// there ('' the fullest), its share used or its free space; above the
+// thresholds (in %) of its space or of its inodes, filling, then full
+export function diskReading(
+  disks: FsDisk[] | null,
+  error: string | null,
+  mount: string,
+  show: 'used' | 'free',
+  warnAbove: number,
+  criticalAbove: number,
+): DiskReading {
+  const none = (value: string, label: string, title: string): DiskReading => ({ tone: 'off', share: null, value, label, title });
+  if (!disks) {
+    return none(error ? '—' : '…', mount || 'Disk', error ?? 'Reading the robot’s disks…');
+  }
+  const disk = diskShown(disks, mount);
+  if (!disk) {
+    return none('—', mount || 'No disk', mount ? `No disk is mounted at ${mount}` : 'The robot’s file systems could not be read');
+  }
+  const share = diskShare(disk);
+  const inodes = disk.inodes && disk.inodes.total > 0 ? disk.inodes : null;
+  const inodesTone = inodes ? loadTone(inodeShare(disk), warnAbove, criticalAbove) : 'ok';
+  const spaceTone = loadTone(share, warnAbove, criticalAbove);
+  const others = mount ? [] : disks.filter((other) => other !== disk);
+  return {
+    tone: TONES.indexOf(inodesTone) > TONES.indexOf(spaceTone) ? inodesTone : spaceTone,
+    share,
+    value: show === 'free' ? formatSize(disk.free) : percent(share * 100),
+    label: disk.mount,
+    title: [
+      `${disk.mount}: ${formatSize(disk.free)} free of ${formatSize(disk.total)} · ${formatSize(disk.used)} used, ${percent(share * 100)}`,
+      [disk.device, disk.type, disk.readOnly ? 'read-only' : null].filter(Boolean).join(' · '),
+      inodes && inodesTone !== 'ok'
+        ? `${percent(inodeShare(disk) * 100)} of its inodes used: ${counted(inodes.free, 'file')} more at most`
+        : null,
+      others.length > 0 ? `The fullest of ${disks.length} disks; the others:` : null,
+      ...others.map(
+        (other) =>
+          `${other.mount}: ${formatSize(other.free)} free, ${percent(diskShare(other) * 100)} used${other.readOnly ? ', read-only' : ''}`,
+      ),
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  };
 }
 
 export interface ChartPoint {

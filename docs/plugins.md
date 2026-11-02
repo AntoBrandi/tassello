@@ -497,7 +497,7 @@ Prefix the plugin's own classes: they apply to the whole page.
 ### Defaults
 
 A plugin can change the defaults of any widget's properties, Tassello's or another plugin's, of
-any status widget's (`'wifi-status'`, `'cpu-status'`), and of any display's
+any status widget's (`'wifi-status'`, `'cpu-status'`, `'disk-status'`), and of any display's
 (`'robot-model-display'`, `'tf-display'`, `'grid-display'`, `'laser-scan-display'`,
 `'point-cloud-display'`, `'octomap-display'`, `'camera-display'`, `'path-display'`,
 `'polygon-display'`, `'pose-display'`, `'interactive-markers-display'`).

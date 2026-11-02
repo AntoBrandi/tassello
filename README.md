@@ -112,10 +112,13 @@ upload them again.
 
 Above its board, each panel has a **status bar** of readings at a glance, its own: e.g. the
 **Wi-Fi** network the robot is on and its signal (in yellow when weak, red when too weak or
-disconnected), the **CPU**'s load, of all the cores or of the busiest, with its last minute. It is
-one row of 24 columns stretched to the window's width, so that what is at its right end stays
-there on any screen; narrower, a status widget shows less (the icon or the value, then both, the
-network's name, the CPU's chart). In edit mode, as on the board, **＋ Status** at its end adds
+disconnected), the **CPU**'s load, of all the cores or of the busiest, with its last minute, a
+**Disk**'s use (one chosen, or the fullest: the share used or the space free, with a bar, in
+yellow when filling and red when full, as the File Manager colours it; its details and the other
+disks under the pointer). It is one row of 24 columns stretched to the window's width, so that
+what is at its right end stays there on any screen; narrower, a status widget shows less (the
+icon or the value, then both, the network's name or the disk's mount point, the CPU's chart or
+the disk's bar). In edit mode, as on the board, **＋ Status** at its end adds
 status widgets, after the one selected; drag one to move it and its corner to resize it, a move
 or resize onto another being refused; click it to edit its properties, and remove it with its
 **×** or **Delete**. Every change is saved and undone like the panel's; the arrow keys move the
