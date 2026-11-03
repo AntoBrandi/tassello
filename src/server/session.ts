@@ -46,6 +46,7 @@ import type { Tf } from './tf.ts';
 import type { TopicMonitors } from './topic_monitor.ts';
 import type { TopicPublishing } from './topic_publishing.ts';
 import type { Topics } from './topics.ts';
+import type { TwistMuxes } from './twist_mux.ts';
 import { errorMessage, toJson } from './util.ts';
 
 export interface SessionServices {
@@ -62,6 +63,7 @@ export interface SessionServices {
   ros: Ros;
   rosout: Rosout;
   diagnostics: Diagnostics;
+  twistMuxes: TwistMuxes;
   terminals: Terminals;
   networking: Networking;
   behaviorTrees: BehaviorTrees;
@@ -484,6 +486,18 @@ export class Session implements FrameSink, PluginSession {
           services.diagnostics.watch(string(message.topic, 'topic'), {
             onStatus: (state, text) => this.sendStreamStatus(id, state, text),
             onUpdate: (update) => this.send({ type: 'diagnostics', id, ...update }),
+          }),
+        );
+        return;
+      }
+
+      case 'twistmux.subscribe': {
+        const id = subscriptionId(message.id);
+        this.unsubscribe(id);
+        this.subscriptions.set(
+          id,
+          services.twistMuxes.watch(string(message.node, 'node'), {
+            onUpdate: (state) => this.send({ type: 'twistmux', id, ...state }),
           }),
         );
         return;

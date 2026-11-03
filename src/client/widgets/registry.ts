@@ -33,6 +33,7 @@ import { speedometerWidget } from './speedometer/SpeedometerWidget.tsx';
 import { systemMonitorWidget } from './system/SystemMonitorWidget.tsx';
 import { teleopWidget } from './TeleopWidget.tsx';
 import { terminalWidget } from './terminal/TerminalWidget.tsx';
+import { twistMuxWidget } from './twist_mux/TwistMuxWidget.tsx';
 import { cpuStatusWidget } from './status/CpuStatus.tsx';
 import { diskStatusWidget } from './status/DiskStatus.tsx';
 import { wifiStatusWidget } from './status/WifiStatus.tsx';
@@ -45,6 +46,7 @@ export { resolveConfig, type DisplayEntry, type StatusWidgetEntry, type WidgetEn
 const CORE: RegisteredWidget[] = [
   teleopWidget,
   speedometerWidget,
+  twistMuxWidget,
   navigationWidget,
   robotViewerWidget,
   armTeleopWidget,

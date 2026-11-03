@@ -23,6 +23,7 @@ import type { ParamInfo, ParamValue } from './parameters.ts';
 import type { PointsLayout } from './points.ts';
 import type { BagCapabilities, BagInfo, BagsRequest, Playback, Recording, RecordOptions } from './rosbag.ts';
 import type { SystemInfo, SystemSample, TrendPoint } from './system.ts';
+import type { TwistMuxState } from './twist_mux.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
@@ -563,6 +564,18 @@ export interface DiagnosticsSubscribe {
   topic: string;
 }
 
+// A twist_mux node, by its full name (/twist_mux), for the Twist Mux
+// inspector: its inputs, locks and output, which input passes and what became
+// of their messages (see src/shared/twist_mux.ts), as twistmux updates, at
+// most TWIST_MUX_RATE a second while anything changes. The server follows it
+// once for every page: its configuration (diagnostics, else parameters), the
+// graph, and every message of its inputs, locks and output.
+export interface TwistMuxSubscribe {
+  type: 'twistmux.subscribe';
+  id: number;
+  node: string;
+}
+
 // A terminal on the robot: the user's login shell, or a command, on a
 // pseudo-terminal, as the server's user. It outlives the page: the page opens
 // it again by its name after a reload or a reconnection, and gets what it
@@ -692,7 +705,8 @@ export type ClientMessage =
   | ParamsLoad
   | BagsSubscribe
   | BagsAction
-  | SystemSubscribe;
+  | SystemSubscribe
+  | TwistMuxSubscribe;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 
@@ -1243,6 +1257,12 @@ export interface BagsUpdate {
   capabilities: BagCapabilities | null;
 }
 
+// Of a twist_mux subscription: all of it, its flows since the last update
+export interface TwistMuxUpdate extends TwistMuxState {
+  type: 'twistmux';
+  id: number;
+}
+
 // Of a system subscription: all of it at first, then what changed
 export interface SystemUpdate {
   type: 'system';
@@ -1301,6 +1321,7 @@ export type ServerMessage =
   | ParamsUpdate
   | BagsUpdate
   | SystemUpdate
+  | TwistMuxUpdate
   | PanelsChanged
   | ErrorMessage;
 

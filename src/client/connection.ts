@@ -81,6 +81,8 @@ import {
   type TopicMonitorSubscribe,
   type TopicPublish,
   type TopicSubscribe,
+  type TwistMuxSubscribe,
+  type TwistMuxUpdate,
 } from '../shared/protocol.ts';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
@@ -253,7 +255,8 @@ type Request =
   | Omit<TopicPublish, 'id'>
   | Omit<ActionSubscribe, 'id'>
   | Omit<BagsSubscribe, 'id'>
-  | Omit<SystemSubscribe, 'id'>;
+  | Omit<SystemSubscribe, 'id'>
+  | Omit<TwistMuxSubscribe, 'id'>;
 
 interface Subscription {
   // Or made anew on every connection
@@ -282,6 +285,7 @@ interface Subscription {
   action?: ActionHandlers;
   bags?: (update: BagsUpdate) => void;
   system?: (update: SystemUpdate) => void;
+  twistMux?: (update: TwistMuxUpdate) => void;
 }
 
 const MIN_RETRY_MS = 500;
@@ -718,6 +722,13 @@ export class Connection {
   // disks and networks (see SystemUpdate), every second, with the last
   // minutes' history first. Renewed on every connection. Returns the
   // unsubscribe function.
+  // A twist_mux node (its full name): its inputs, locks and output, which
+  // input passes and what became of the messages since the last update, at
+  // most TWIST_MUX_RATE times a second while anything changes
+  subscribeTwistMux(node: string, callback: (update: TwistMuxUpdate) => void): () => void {
+    return this.subscribe({ type: 'twistmux.subscribe', node }, { twistMux: callback });
+  }
+
   subscribeSystem(callback: (update: SystemUpdate) => void): () => void {
     return this.subscribe({ type: 'system.subscribe' }, { system: callback });
   }
@@ -976,6 +987,9 @@ export class Connection {
         break;
       case 'system':
         this.subscriptions.get(message.id)?.system?.(message);
+        break;
+      case 'twistmux':
+        this.subscriptions.get(message.id)?.twistMux?.(message);
         break;
     }
     this.messageListeners.forEach((listener) => listener(message));

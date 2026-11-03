@@ -476,3 +476,18 @@ export const SpeedometerIcon = icon(
 );
 // Out of the page, into a tab of its own
 export const ExternalLinkIcon = icon(<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />);
+// A multiplexer: three inputs, one output
+export const TwistMuxIcon = icon(
+  <>
+    <path d="M9 3.5v17l7-4v-9l-7-4Z" />
+    <path d="M3 7.5h6M3 12h6M3 16.5h6M16 12h5" />
+  </>,
+);
+// LockIcon's, its shackle open
+export const UnlockIcon = icon(
+  <>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 7.7-1.5" />
+  </>,
+);
+export const WarningIcon = icon(<path d="M12 3.5 2.5 20h19L12 3.5ZM12 10v4.5M12 17.5h.01" />);

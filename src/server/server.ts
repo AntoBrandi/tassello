@@ -45,6 +45,7 @@ import { Tf } from './tf.ts';
 import { TopicMonitors } from './topic_monitor.ts';
 import { TopicPublishing } from './topic_publishing.ts';
 import { Topics } from './topics.ts';
+import { TwistMuxes } from './twist_mux.ts';
 import { defaultPanelsDirectory, errorMessage, ownPage, tasselloRoot } from './util.ts';
 
 export interface ServerOptions {
@@ -139,6 +140,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const parameters = new Parameters(node, logger);
   const rosout = new Rosout(node, logger);
   const diagnostics = new Diagnostics(node, logger);
+  const twistMuxes = new TwistMuxes(node, logger, parameters, diagnostics);
   const terminals = new Terminals(logger);
   const networking = new Networking(logger);
   const system = new SystemMonitor(logger);
@@ -198,6 +200,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         ros,
         rosout,
         diagnostics,
+        twistMuxes,
         terminals,
         networking,
         behaviorTrees,

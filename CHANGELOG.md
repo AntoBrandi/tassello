@@ -125,6 +125,28 @@ noted here.
   max speed, at round steps (faster commands pegged at the end, in red), and the angular
   velocity under it. A command not renewed within its timeout (0.5 s, as base controllers'
   `cmd_vel_timeout`) shows as a stop: the latest may be the last of a publisher gone.
+- Twist Mux widget: a twist_mux node, live, as the multiplexer it is. Its inputs, the highest
+  priority first, with their topics, timeouts, rates and publishers; its locks above it, wired
+  into its top, locked (red) or free, the lock priority a dashed line between the inputs it
+  leaves and those it masks; the mux, its arm joining the input that has the priority to the
+  output; the output, its rate, its latest command and the input it came from. Each message
+  moves along its wire: on through the arm to the output if it passes, stopped at the mux if
+  outranked or locked out. Each input says what it is doing (*Passes*, *Holds* without a
+  timeout though silent, *Blocked*, *Locked*, *Idle*, *Standby*, *Never* at priority 0). Other
+  nodes publishing on the output, bypassing the mux, inputs it does not subscribe to (remapped)
+  and publishers of a type it does not take (`Twist` on a `TwistStamped` mux) are pointed out.
+  What it takes and what it publishes are each its own, as the graph shows them: `Twist`,
+  `TwistStamped`, or `Twist → TwistStamped`, as older versions do with `use_stamped`.
+  Its node is Auto (the graph's twist_mux) or chosen; wide, the output beside the mux, narrow,
+  under the inputs. Its type, for `defaults`: `'twist-mux'`.
+- A new `twistmux.subscribe` subscription (`TwistMuxState`, `src/shared/twist_mux.ts`): the
+  server follows a twist_mux once for every page, its configuration from its diagnostics
+  (what it runs with) or its parameters, its inputs, locks and output subscribed as twist_mux
+  does (each input as the mux subscribes to it, the output as it publishes it), and works out
+  which input has the priority as twist_mux does, each message found again on the output by its
+  velocities, and its header if the mux forwards it; a lock published once before is as its
+  diagnostics say. `TwistMuxState`'s `inputType` and `outputType`. Plugins:
+  `connection.subscribeTwistMux(node, callback)`.
 - Edit mode selects several widgets: Ctrl+click (⌘, Shift) adds one, or takes a selected one
   out; a band dragged across the board from an empty place selects those it touches (with Ctrl
   or Shift, added to those selected). Dragging any of them moves them together, refused as a

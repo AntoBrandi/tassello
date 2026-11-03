@@ -1635,6 +1635,586 @@ textarea {
   color: var(--danger);
 }
 
+/* ── Twist Mux ─────────────────────────────────────────────────────────────── */
+
+.mux {
+  --mux-pass: var(--success);
+  --mux-pass-soft: rgb(47 191 113 / 14%);
+  --mux-lock: var(--danger);
+  --mux-lock-soft: rgb(240 82 82 / 12%);
+  --mux-warn: var(--warning);
+  --mux-wire: var(--border-strong);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Darker on white, to be read */
+@media (prefers-color-scheme: light) {
+  .mux {
+    --mux-pass: #1f9a5a;
+    --mux-pass-soft: rgb(31 154 90 / 11%);
+    --mux-lock: #cf2f2f;
+    --mux-lock-soft: rgb(207 47 47 / 9%);
+    --mux-warn: #b06a00;
+  }
+}
+
+.mux-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.mux-toolbar-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.mux-node {
+  overflow: hidden;
+  font: 600 12px var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mux-node-select {
+  width: auto;
+  min-width: 0;
+  max-width: 55%;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font: 12px var(--mono);
+}
+
+.mux-pill {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.mux-spacer {
+  flex: 1;
+}
+
+.mux-diag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.mux-diag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mux-pass);
+}
+
+.mux-diag.level-1 .mux-diag-dot {
+  background: var(--warning);
+}
+
+.mux-diag.level-2 .mux-diag-dot {
+  background: var(--danger);
+}
+
+.mux-diag.level-3 .mux-diag-dot {
+  background: #a395f0;
+}
+
+.mux-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.mux-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mux-message.error {
+  color: var(--danger);
+}
+
+.mux-scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+.mux-diagram {
+  position: relative;
+}
+
+.mux-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+/* The wires */
+
+.mux-wire {
+  fill: none;
+  stroke: var(--mux-wire);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition:
+    stroke 0.2s,
+    opacity 0.2s;
+}
+
+.mux-wire.input.passing {
+  stroke: var(--mux-pass);
+  stroke-width: 3;
+}
+
+.mux-wire.input.holding {
+  stroke: var(--mux-pass);
+  stroke-dasharray: 2 5;
+}
+
+.mux-wire.input.blocked {
+  stroke: var(--text-muted);
+}
+
+.mux-wire.input.locked {
+  stroke: var(--mux-lock);
+  stroke-dasharray: 6 4;
+  opacity: 0.75;
+}
+
+.mux-wire.input:is(.idle, .never) {
+  stroke: var(--border);
+  stroke-dasharray: 3 5;
+}
+
+.mux-wire.lock {
+  stroke-dasharray: 4 4;
+}
+
+.mux-wire.lock.locked {
+  stroke: var(--mux-lock);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+
+.mux-wire.output {
+  stroke-width: 3;
+}
+
+.mux-wire.output.passing {
+  stroke: var(--mux-pass);
+}
+
+.mux-wire.bypass {
+  stroke: var(--mux-warn);
+  stroke-dasharray: 4 3;
+}
+
+.mux-lockline {
+  stroke: var(--mux-lock);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+/* The mux */
+
+.mux-shape {
+  fill: var(--surface-2);
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.mux-shape.locked {
+  stroke: var(--mux-lock);
+}
+
+.mux-shape.gone {
+  stroke-dasharray: 5 4;
+  opacity: 0.6;
+}
+
+.mux-pin {
+  fill: var(--surface);
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+}
+
+.mux-pin.selected {
+  fill: var(--mux-pass);
+  stroke: var(--mux-pass);
+}
+
+.mux-arm {
+  stroke: var(--text-muted);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.mux-arm.passing {
+  stroke: var(--mux-pass);
+}
+
+.mux-arm.holding {
+  stroke: var(--mux-pass);
+  opacity: 0.6;
+}
+
+.mux-arm.open {
+  opacity: 0.7;
+}
+
+.mux-label {
+  fill: var(--text-muted);
+  font: 700 9px var(--font);
+  letter-spacing: 0.08em;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* The messages: of the colour of what became of them; those stopped at the
+   mux burst as rings */
+
+.mux-dot {
+  --dot: var(--mux-pass);
+  fill: var(--dot);
+}
+
+.mux-dot:is(.outranked, .dropped, .lock-off) {
+  --dot: var(--text-muted);
+}
+
+.mux-dot:is(.locked, .lock-on) {
+  --dot: var(--mux-lock);
+}
+
+.mux-dot.other {
+  --dot: var(--mux-warn);
+}
+
+.mux-dot.stopped {
+  fill-opacity: 0.2;
+  stroke: var(--dot);
+  stroke-width: 1.5;
+}
+
+/* The cards */
+
+.mux-card {
+  position: absolute;
+  display: grid;
+  align-content: center;
+  gap: 2px 6px;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 14%);
+  font-size: 12px;
+  line-height: 1.3;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    opacity 0.2s;
+}
+
+.mux-card.compact {
+  padding: 3px 7px;
+}
+
+.mux-priority {
+  grid-area: prio;
+  min-width: 26px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  font: 600 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.mux-name {
+  grid-area: name;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mux-warning {
+  grid-area: warn;
+  align-self: center;
+  color: var(--mux-warn);
+}
+
+.mux-tag {
+  grid-area: tag;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mux-sub {
+  grid-area: sub;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mux-sub code {
+  color: var(--text);
+  font: 11px var(--mono);
+}
+
+.mux-sub .mux-dim,
+.mux-sub code.mux-dim {
+  color: var(--text-muted);
+}
+
+.mux-input {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'prio name warn tag'
+    'sub sub sub sub';
+  align-items: center;
+}
+
+.mux-input.passing {
+  border-color: var(--mux-pass);
+  background: linear-gradient(var(--mux-pass-soft), var(--mux-pass-soft)), var(--surface);
+  box-shadow:
+    0 0 0 1px var(--mux-pass),
+    0 0 16px var(--mux-pass-soft);
+}
+
+.mux-input:is(.passing, .holding) .mux-tag {
+  color: var(--mux-pass);
+}
+
+.mux-input.passing .mux-priority {
+  background: var(--mux-pass);
+  color: #fff;
+}
+
+.mux-input.holding {
+  border-color: var(--mux-pass);
+  border-style: dashed;
+}
+
+.mux-input.blocked .mux-tag {
+  color: var(--text);
+}
+
+.mux-input.locked {
+  border-color: color-mix(in srgb, var(--mux-lock) 55%, var(--border));
+  background:
+    repeating-linear-gradient(135deg, var(--mux-lock-soft) 0 6px, transparent 6px 12px),
+    var(--surface);
+}
+
+.mux-input.locked .mux-tag {
+  color: var(--mux-lock);
+}
+
+.mux-input:is(.idle, .never) {
+  opacity: 0.62;
+}
+
+.mux-lock {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon name warn'
+    'sub sub sub';
+  align-items: center;
+}
+
+.mux-lock.compact {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'icon name warn prio';
+}
+
+.mux-priority.inline {
+  display: inline-block;
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 10px;
+}
+
+.mux-lock-icon {
+  grid-area: icon;
+  color: var(--text-muted);
+}
+
+.mux-state {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mux-lock.free .mux-state {
+  color: var(--mux-pass);
+}
+
+.mux-lock.locked {
+  border-color: var(--mux-lock);
+  background: linear-gradient(var(--mux-lock-soft), var(--mux-lock-soft)), var(--surface);
+  box-shadow: 0 0 12px var(--mux-lock-soft);
+}
+
+.mux-lock.locked :is(.mux-lock-icon, .mux-state) {
+  color: var(--mux-lock);
+}
+
+.mux-lock.locked .mux-priority {
+  background: var(--mux-lock);
+  color: #fff;
+}
+
+.mux-output {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name rate'
+    'sub sub'
+    'twist twist'
+    'bypass bypass';
+  align-items: center;
+}
+
+.mux-output .mux-name {
+  font: 600 12px var(--mono);
+}
+
+.mux-rate {
+  grid-area: rate;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mux-output.flowing {
+  border-color: var(--mux-pass);
+}
+
+.mux-output.flowing .mux-rate {
+  color: var(--mux-pass);
+}
+
+.mux-output .mux-twist {
+  grid-area: twist;
+  color: var(--text);
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.mux-output .mux-bypass {
+  display: flex;
+  grid-area: bypass;
+  align-items: center;
+  gap: 4px;
+  color: var(--mux-warn);
+}
+
+.mux-lockline-label {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--mux-lock);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.mux-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mux-status-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.mux-status.ok .mux-status-dot {
+  background: var(--mux-pass);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.mux-status.warn {
+  color: var(--mux-warn);
+}
+
+.mux-status.warn .mux-status-dot {
+  background: var(--mux-warn);
+}
+
+.mux-status.error {
+  color: var(--mux-lock);
+}
+
+.mux-status.error .mux-status-dot {
+  background: var(--mux-lock);
+}
+
+.mux-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mux-status.ok .mux-status-dot {
+    animation: none;
+  }
+}
+
 /* ── Button ────────────────────────────────────────────────────────────────── */
 
 .command-button {

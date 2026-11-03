@@ -1,0 +1,139 @@
+// A twist_mux node as the Twist Mux inspector shows it (see
+// src/server/twist_mux.ts): its inputs and locks, as its parameters (or its
+// diagnostics) configure them, its output, which input passes, and what
+// became of the messages since the last update.
+//
+// twist_mux forwards an input's message to its output (cmd_vel_out) when that
+// input has the priority: the highest of those not masked, the first by name
+// among equals, above 0. An input is masked when its latest message is older
+// than its timeout (0: never), or when its priority is below the lock
+// priority: the highest of the locks locked, those whose latest
+// std_msgs/Bool is true or older than their timeout.
+
+// Updates a second at most, while anything changes
+export const TWIST_MUX_RATE = 10;
+
+// What became of an input's message: forwarded to the output; stopped by the
+// input that has the priority (of a higher one, or the same and first by
+// name, or one with no timeout that keeps it while silent); stopped by a lock
+// (its priority below the lock priority); or not forwarded though it should
+// have been, as far as the dashboard can tell (a lock published before it
+// watched, say).
+export type MuxFate = 'passed' | 'outranked' | 'locked' | 'dropped';
+
+export const MUX_FATES: readonly MuxFate[] = ['passed', 'outranked', 'locked', 'dropped'];
+
+export interface MuxInput {
+  // Its parameters' prefix after `topics.`: "navigation" for topics.navigation
+  name: string;
+  // As the mux resolves it, in its namespace: /nav_vel
+  topic: string;
+  // In seconds: masked without a message for this long. 0: never.
+  timeout: number;
+  // 0 to 255
+  priority: number;
+  // The nodes publishing on it
+  publishers: string[];
+  // When its latest message came, on the server's clock; null: none since
+  // the server watched it
+  lastAt: number | null;
+  // Messages a second, over the latest 2 s
+  rate: number;
+  // Its latest command: linear x, y, z, angular x, y, z
+  twist: number[] | null;
+  // No message within its timeout
+  expired: boolean;
+  // Expired, or of a priority below the lock priority
+  masked: boolean;
+  // It has the priority: its messages pass
+  selected: boolean;
+  // Its messages since the last update, by what became of them
+  flow: Record<MuxFate, number>;
+  // Why it is not followed as it should be: '' if it is
+  error: string;
+}
+
+export interface MuxLock {
+  // Its parameters' prefix after `locks.`: "pause" for locks.pause
+  name: string;
+  topic: string;
+  // In seconds: locked without a message for this long. 0: never.
+  timeout: number;
+  // The inputs of a lower priority are masked while it is locked
+  priority: number;
+  publishers: string[];
+  lastAt: number | null;
+  // Its latest message's data; null: none since the server watched it
+  value: boolean | null;
+  // No message within its timeout: its publisher is gone
+  expired: boolean;
+  locked: boolean;
+  // Whence `locked`: its messages; twist_mux's diagnostics, without them (e.g.
+  // published once, before the server watched); else twist_mux's default
+  // (free, or locked if it has a timeout)
+  source: 'messages' | 'diagnostics' | 'default';
+  // Its messages since the last update: true ones, false ones
+  flow: { on: number; off: number };
+  error: string;
+}
+
+export interface MuxOutput {
+  // cmd_vel_out as remapped, e.g. /cmd_vel; null until the mux is found
+  topic: string | null;
+  // The other nodes publishing on it, bypassing the mux
+  publishers: string[];
+  lastAt: number | null;
+  rate: number;
+  twist: number[] | null;
+  // The input its latest message came from; null: elsewhere, or not known
+  source: string | null;
+  // Its messages since the last update: from each input, by name, and from
+  // other publishers
+  flow: { inputs: Record<string, number>; other: number };
+  error: string;
+}
+
+// twist_mux's own "Twist mux status" (diagnostic_updater, once a second)
+export interface MuxDiagnostics {
+  // OK 0, WARN 1, ERROR 2
+  level: number;
+  message: string;
+  // Not received for a while
+  stale: boolean;
+  // Its "current priority": the lock priority, as twist_mux has it
+  priority: number | null;
+}
+
+export interface TwistMuxState {
+  // Its full name
+  node: string;
+  // The dashboard's own node, which may be among the publishers (its teleop
+  // widgets')
+  self: string;
+  // In the ROS graph
+  found: boolean;
+  // What its inputs take and what it publishes, geometry_msgs/msg/Twist or
+  // TwistStamped, as it subscribes and publishes: they may differ (some
+  // versions take Twist and, with use_stamped, publish TwistStamped). null
+  // until known.
+  inputType: string | null;
+  outputType: string | null;
+  // Whence the inputs and locks: twist_mux's diagnostics, which say what it
+  // runs with, or its parameters, until they come; null: neither yet
+  configFrom: 'parameters' | 'diagnostics' | null;
+  // By name, as twist_mux orders them
+  inputs: MuxInput[];
+  locks: MuxLock[];
+  output: MuxOutput;
+  // The highest priority of the locks locked; 0: none is
+  lockPriority: number;
+  // The lock that sets it
+  lockedBy: string | null;
+  // The input that has the priority
+  selected: string | null;
+  diagnostics: MuxDiagnostics | null;
+  // What is wrong with its configuration, or why it is not followed
+  problems: string[];
+  // Of the update, on the server's clock
+  time: number;
+}
