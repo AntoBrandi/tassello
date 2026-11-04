@@ -44,6 +44,18 @@ tassello
 and open `http://<robot>:8080`. The first start creates the panels directory with two example
 panels, Teleoperation and Navigation.
 
+Everyone signs in (see [Security](#security)). The first start also creates the user **admin**,
+an administrator, with a password made at random, which only the server's user can read:
+
+```bash
+cat ~/.local/share/tassello/auth/initial-admin-password
+```
+
+Sign in with it: the page then asks for a password of your own, and the file is deleted. For a
+fleet, `TASSELLO_ADMIN_PASSWORD=...` gives admin its first password instead (not asked to
+change). Users added before the first start (`tassello users add ada --role admin`) mean no
+admin is made.
+
 Source the workspaces whose messages the widgets use too, a robot's own (`/opt/<vendor>/…`, a
 colcon workspace's `install/setup.bash`): rclnodejs needs JavaScript code of every interface it
 uses, which it makes when installed for the packages then sourced. Tassello makes that of the
@@ -61,6 +73,13 @@ tassello [options] [--ros-args ...]
       --plugin <plugin>     loads a plugin: a folder, or an installed package's name. Repeatable
       --no-discover         loads only those plugins, not the installed ones
       --node-name <name>    the ROS node's name (tassello)
+      --no-auth             no sign-in: anyone who opens the page can do anything
+      --auth-dir <dir>      where the users and their sessions are kept (~/.local/share/tassello/auth)
+      --session-idle <h>    hours without use after which one signs in again (12)
+      --tls-cert <file>     serves HTTPS with this certificate (PEM)...
+      --tls-key <file>      ...and its private key (PEM)
+
+tassello users <list|add|passwd|role|disable|enable|remove> ...   the users, see Security
 ```
 
 ROS arguments go after `--ros-args`, e.g. `tassello --ros-args -p use_sim_time:=true`. The port
@@ -602,18 +621,61 @@ See **[docs/plugins.md](docs/plugins.md)**.
 
 ## Security
 
-Tassello has no login. **Anyone who can open the page can drive the robot, publish on any topic,
-call any service and send or cancel any goal (the ROS Monitor), change any node's parameters
-(Parameters), record, play and delete rosbags (Rosbags), run any command as
-the server's user (the Terminal, a shell), read, write, upload, move and delete any of the
-files that user can (the File Manager), and change the robot's networks and read their passwords
-(Networking)**: keep it on a network you trust, or behind a reverse proxy
-with authentication (it serves everything under `/`, its WebSocket at `/ws`). Changes to the files
-are accepted from the dashboard's own pages only (they send a header that another site's page
-cannot), and the root, the home folder and the system's top folders (`/usr`, `/etc`…) are never
-deleted nor moved. Terminals open, networks change and rosbags are deleted from the dashboard's
-own pages only too: those whose origin is the host they reached (the `Host` header, or the
-`X-Forwarded-Host` a reverse proxy sets), which another site's page cannot pretend.
+Everyone signs in, with a username and a password, and has a **role**. The server checks the role
+of every request and of every message of the page; the page only hides what a role cannot use.
+
+| Role | Can |
+|---|---|
+| **Viewer** | Watch: cameras, maps, the robot model, logs, diagnostics, plots, the ROS graph and its messages, parameters, rosbags, the system monitor, behavior trees |
+| **Operator** | Also operate the robot: drive it (Teleop, Arm Teleop), send navigation goals and pose estimates, press buttons, publish on topics, call services, send and cancel goals, set and load parameters, start and stop services, record and play rosbags, plugins' requests; see the robot's files and networks |
+| **Administrator** | Also everything about the robot's system: edit the panels, open terminals, change the files (File Manager, behavior tree files), change the networks and read their passwords, delete rosbags, manage the users |
+
+The users are managed in the page (the account menu, *Users…*, for administrators) or on the
+robot, as the server's user, which also recovers a forgotten password:
+
+```bash
+tassello users list
+tassello users add bob --role operator --name "Bob"   # asks for the password
+tassello users passwd bob                              # or: echo "$PASSWORD" | tassello users passwd bob
+tassello users role bob viewer
+tassello users disable bob                             # enable, remove
+```
+
+How it is protected:
+
+- **The default administrator**, `admin`, is made only while there is no user. Its password is
+  96 random bits in `initial-admin-password` (0600), never in the log; it must be changed at the
+  first sign-in, as must every password an administrator makes for someone (a new user, a
+  forgotten password): until then, the session can do nothing else.
+- **Passwords** are hashed with scrypt (OWASP's cost: N=2^15, r=8, p=3), each with its own salt,
+  in `~/.local/share/tassello/auth/users.json`, readable by the server's user only. A password
+  has at least 12 characters, not the username, nor little more than a common one (NIST SP
+  800-63B: length, not composition rules). Users change theirs from the account menu.
+- **Sessions** are 256 random bits in an `HttpOnly`, `SameSite=Strict` cookie (`Secure` over
+  HTTPS), of which the server keeps only a hash. A session ends when signed out, after 12 hours
+  unused (`--session-idle`) or 7 days, when its user's password changes (the other sessions of
+  one who changes their own), or when the user is disabled or removed; a user whose role changes
+  gets it at once. Pages of a session that ended go back to the sign-in.
+- **Failed sign-ins** slow down, by username and by address: after 5 (20 from one address), each
+  waits twice as long as the one before, up to 15 minutes. A wrong username and a wrong password
+  get the same answer in the same time. Sign-ins, failures and changes of users are logged.
+- **Other sites' pages** cannot use the dashboard through a visitor's browser: WebSockets open
+  only from the dashboard's own pages (whose origin is the host they reached: the `Host` header,
+  or the `X-Forwarded-Host` a reverse proxy sets), changes need a header another site's page
+  cannot send, and the page cannot be put in another site's frame (`frame-ancestors 'none'`).
+- **HTTPS**: over HTTP, passwords and sessions cross the network readable by whoever is on it.
+  Serve HTTPS with `--tls-cert` and `--tls-key` (a certificate for the robot's name, e.g. from
+  your organization's CA, or `mkcert`), or put Tassello behind a reverse proxy that does (it
+  serves everything under `/`, its WebSocket at `/ws`; forward `X-Forwarded-Proto`).
+
+The root, the home folder and the system's top folders (`/usr`, `/etc`…) are never deleted nor
+moved by the File Manager. Behind a proxy the addresses failed sign-ins slow down are the proxy's.
+
+How it is built, and what changes when upgrading to it: **[docs/sign-in.md](docs/sign-in.md)**.
+
+`--no-auth` turns the sign-in off: **anyone who can open the page can then drive the robot, run
+any command as the server's user (a terminal), read and change its files and its networks**.
+Only on a network you trust.
 
 ## How it works
 

@@ -1,18 +1,23 @@
 #!/usr/bin/env node
-// The tassello command: starts the server, or creates a plugin.
+// The tassello command: starts the server, creates a plugin, or manages the
+// users who sign in.
 //
 //   tassello [options] [--ros-args ...]
 //   tassello create-plugin <folder> [--name <package name>]
+//   tassello users <list|add|passwd|role|disable|enable|remove> ...
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { DEFAULT_IDLE_HOURS } from './auth.ts';
 import { createPlugin } from './create_plugin.ts';
+import { usersCommand, USERS_USAGE } from './users_cli.ts';
 import { errorMessage, tasselloRoot } from './util.ts';
 
 const USAGE = `Usage: tassello [options] [--ros-args ...]
        tassello create-plugin <folder> [--name <package name>]
+       tassello users <command> ...   (tassello users --help)
 
 Serves the dashboard at http://<host>:<port>, as a ROS 2 node: source your
 ROS 2 setup (e.g. /opt/ros/jazzy/setup.bash) first.
@@ -28,6 +33,14 @@ Options:
                             (ROS packages of the sourced workspaces, npm packages
                             named tassello-plugin-*)
       --node-name <name>    the ROS node's name (tassello)
+      --no-auth             no sign-in: anyone who opens the page can do
+                            anything. Only on a network you trust
+      --auth-dir <dir>      where the users and their sessions are kept
+                            (~/.local/share/tassello/auth)
+      --session-idle <h>    hours without use after which one signs in again
+                            (${DEFAULT_IDLE_HOURS})
+      --tls-cert <file>     serves HTTPS with this certificate (PEM)...
+      --tls-key <file>      ...and its private key (PEM)
   -v, --version
   -h, --help
 
@@ -42,6 +55,16 @@ function version(): string {
 async function main(argv: string[]): Promise<void> {
   const rosArgs = argv.indexOf('--ros-args');
   const args = rosArgs < 0 ? argv : argv.slice(0, rosArgs);
+
+  if (args[0] === 'users') {
+    if (args.includes('--help') || args.includes('-h') || args.length === 1) {
+      console.log(USERS_USAGE);
+      process.exitCode = args.length === 1 ? 2 : 0;
+      return;
+    }
+    process.exitCode = await usersCommand(args.slice(1));
+    return;
+  }
 
   if (args[0] === 'create-plugin') {
     const { values, positionals } = parseArgs({
@@ -67,6 +90,11 @@ async function main(argv: string[]): Promise<void> {
       plugin: { type: 'string', multiple: true, default: [] },
       'no-discover': { type: 'boolean', default: false },
       'node-name': { type: 'string', default: 'tassello' },
+      'no-auth': { type: 'boolean', default: false },
+      'auth-dir': { type: 'string' },
+      'session-idle': { type: 'string', default: String(DEFAULT_IDLE_HOURS) },
+      'tls-cert': { type: 'string' },
+      'tls-key': { type: 'string' },
       version: { type: 'boolean', short: 'v' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -81,8 +109,19 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   const port = Number(values.port);
-  if (positionals.length > 0 || !Number.isInteger(port) || port < 0 || port > 65535) {
-    console.error(positionals.length > 0 ? `Unexpected argument "${positionals[0]}"` : `Invalid port "${values.port}"`);
+  const idle = Number(values['session-idle']);
+  const problem =
+    positionals.length > 0
+      ? `Unexpected argument "${positionals[0]}"`
+      : !Number.isInteger(port) || port < 0 || port > 65535
+        ? `Invalid port "${values.port}"`
+        : !(idle > 0 && idle <= 24 * 365)
+          ? `Invalid --session-idle "${values['session-idle']}": hours, more than 0`
+          : (values['tls-cert'] === undefined) !== (values['tls-key'] === undefined)
+            ? '--tls-cert and --tls-key go together'
+            : null;
+  if (problem) {
+    console.error(problem);
     console.error(USAGE);
     process.exitCode = 2;
     return;
@@ -99,6 +138,13 @@ async function main(argv: string[]): Promise<void> {
     plugins: values.plugin,
     discoverPlugins: !values['no-discover'],
     nodeName: values['node-name'],
+    auth: !values['no-auth'],
+    authDir: values['auth-dir'] && path.resolve(values['auth-dir']),
+    sessionIdleHours: idle,
+    tls:
+      values['tls-cert'] && values['tls-key']
+        ? { cert: path.resolve(values['tls-cert']), key: path.resolve(values['tls-key']) }
+        : undefined,
   });
 }
 

@@ -17,6 +17,7 @@
 
 import type rclnodejs from 'rclnodejs';
 
+import type { AuthUser } from '../shared/auth.ts';
 import type { Logger } from './util.ts';
 
 export type { Logger };
@@ -24,6 +25,9 @@ export type { Logger };
 // The page a request or stream comes from: one per open page, until it closes
 export interface PluginSession {
   readonly id: string;
+  // Who signed in on the page (see src/shared/auth.ts): a plugin may refuse
+  // what their role should not do. Requests already need an operator.
+  readonly user: AuthUser;
 }
 
 // Answers a request: its result (or a promise of it), sent to the page as

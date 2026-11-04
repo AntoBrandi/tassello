@@ -485,6 +485,7 @@ Hooks:
 | `Modal` | The page's modal dialog |
 | `Joystick` | The teleop's pad: `axes` (`'xy'`, `'x'`, `'y'`), `onMove(x, y)` in -1..1 |
 | `imageUrl(value)` | The URL of an `image` property's value |
+| `currentUser()`, `may(role)` | Who signed in (`username`, `displayName`, `role`), and whether their role is at least `role`: to hide what they cannot do. The server refuses it anyway |
 | `*Icon` | Tassello's icons, 24×24 line drawings in the current colour |
 
 ### Styles
@@ -563,7 +564,10 @@ the plugin's widgets still load, and its requests report why it did not start.
 | `commandWidget(type, { property, fallback })` | Widgets of this type run a bash command of their config, like the button (see below) |
 | `onShutdown(callback)` | Called when the server stops, before the node is destroyed |
 
-`session.id` tells the pages apart: one per open page.
+`session.id` tells the pages apart: one per open page. `session.user` is who signed in on it
+(`username`, `displayName`, `role`): requests need an operator, streams a viewer; refuse what
+their role should not do (`session.user.role === 'admin'`; the roles are `'viewer'`,
+`'operator'`, `'admin'`, each allowed what those before it are).
 
 The page is trusted to be Tassello's, not to be right: check the params.
 

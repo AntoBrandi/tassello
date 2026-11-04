@@ -11705,3 +11705,259 @@ textarea {
 .modal.resizable .plot-dialog > .modal-actions {
   margin-top: auto;
 }
+
+/* ── Sign-in and users ─────────────────────────────────────────────────────── */
+
+.login-page {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+
+.login-card {
+  width: min(400px, 100%);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+  color: var(--accent);
+}
+
+.login-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.login-subtitle {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-form h1 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.login-form .field input {
+  width: 100%;
+}
+
+.login-submit {
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+}
+
+.login-error {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.login-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.login-hint code {
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.account-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-button:hover {
+  border-color: var(--accent);
+}
+
+.account-menu .menu-list {
+  min-width: 220px;
+}
+
+.account-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-who span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.users-dialog {
+  gap: 14px;
+}
+
+.users-table-wrap {
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.users-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.users-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.users-table tr.disabled .users-name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.users-username,
+.users-when {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.users-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.users-given {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+
+.users-password {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 14px;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.users-given-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.users-add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.users-add h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.users-add-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.users-password-field {
+  display: flex;
+  gap: 6px;
+}
+
+.users-password-field input {
+  min-width: 0;
+  flex: 1;
+}
+
+.users-password-field .mono {
+  font-family: var(--mono);
+}
+
+.users-roles {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.users-roles div {
+  display: flex;
+  gap: 6px;
+}
+
+.users-roles dt {
+  min-width: 96px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.users-roles dd {
+  margin: 0;
+}
+
+.modal.wide:has(.users-dialog) {
+  width: min(780px, 100%);
+}

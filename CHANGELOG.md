@@ -6,6 +6,28 @@ noted here.
 
 ## Unreleased
 
+- **Sign-in and roles.** Everyone signs in with a username and a password, and is a viewer
+  (watches), an operator (also drives and operates the robot) or an administrator (also the
+  panels, terminals, files, networks and users). The server checks the role of every request and
+  WebSocket message; the page hides what a role cannot use: the widgets not for it, edit mode but
+  for administrators, the File Manager, Networking, Parameters and Rosbags read-only below their
+  role. **Breaking:** a robot without users gets one, `admin`, whose random password is in
+  `~/.local/share/tassello/auth/initial-admin-password` (or is `TASSELLO_ADMIN_PASSWORD`), to be
+  changed at the first sign-in; `--no-auth` keeps the old behaviour.
+- Passwords an administrator makes for someone (a new user, a reset) are changed at their first
+  sign-in, before anything else.
+- Passwords hashed with scrypt; sessions in HttpOnly, SameSite=Strict cookies, ending when
+  signed out, unused for 12 hours (`--session-idle`), after 7 days, or when the password changes;
+  failed sign-ins slowed down by username and address; sign-ins and changes of users logged.
+- Users managed in the page (account menu, *Users…*) or on the robot: `tassello users list`,
+  `add`, `passwd`, `role`, `disable`, `enable`, `remove`. Users change their own password.
+- HTTPS: `--tls-cert` and `--tls-key`.
+- Other sites' pages can no longer reach the robot through a visitor's browser: WebSockets open
+  from the dashboard's own pages only (before: terminals, networks and deleting rosbags only),
+  every change of the REST API needs the dashboard's header, and the page cannot be framed.
+- Plugins: widgets' `role` and `changeRole`; `currentUser()` and `may(role)` of `tassello/sdk`;
+  the server side's `session.user`. Plugins' requests need an operator.
+
 - Robot Viewer widget, in place of the Robot Model: the robot in 3D, or from above in 2D (the
   toolbar's **3D** and **2D**), as RViz shows it, made of *displays* drawn in a fixed frame,
   chosen in the toolbar from the TF frames (**Auto**: the robot model's root link, as the Robot

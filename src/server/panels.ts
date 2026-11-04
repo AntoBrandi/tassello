@@ -24,10 +24,13 @@ import type { Logger } from './util.ts';
 // An error the HTTP API reports to the client with its status
 export class HttpError extends Error {
   readonly status: number;
+  // Sent with the error, e.g. Retry-After
+  readonly headers: Record<string, string>;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, headers: Record<string, string> = {}) {
     super(message);
     this.status = status;
+    this.headers = headers;
   }
 }
 

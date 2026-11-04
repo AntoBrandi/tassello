@@ -12,7 +12,7 @@ import type { BehaviorTreeFile, BehaviorTreeModels, BehaviorTreeSaved, BtNodeLib
 import { parseXmlSource, sourceText, type SourceElement } from '../shared/xml.ts';
 import { resolveTreeFile } from './behavior_tree_file.ts';
 import { isBehaviorTreeXml } from './files.ts';
-import { contentVersion, errorMessage, packageShareDirectory, replaceFile, type Logger } from './util.ts';
+import { contentVersion, errorMessage, isSecret, packageShareDirectory, replaceFile, type Logger } from './util.ts';
 
 export type FileState = Omit<BehaviorTreeFile, 'type' | 'id'>;
 export type ModelsState = Omit<BehaviorTreeModels, 'type' | 'id'>;
@@ -37,6 +37,9 @@ async function stamp(file: string): Promise<string> {
 }
 
 async function readText(file: string): Promise<string> {
+  if (await isSecret(file)) {
+    throw new Error(`${file} is kept from the dashboard: it holds the users’ passwords`);
+  }
   const stat = await fs.stat(file);
   if (!stat.isFile()) {
     throw new Error(`${file} is not a file`);

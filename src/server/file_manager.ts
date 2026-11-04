@@ -620,13 +620,21 @@ export async function receiveFile(body: AsyncIterable<Buffer>, target: string, m
 }
 
 // The arguments of tar archiving, gzipped, entries of one folder
-export function archiveArguments(files: string[]): string[] {
+// exclude: folders under the folder, relative to it, left out (secretsUnder)
+export function archiveArguments(files: string[], exclude: string[] = []): string[] {
   const folder = path.dirname(files[0]);
   if (files.some((file) => path.dirname(file) !== folder || file === path.parse(file).root)) {
     throw new HttpError(400, 'Entries of one folder only are downloaded together');
   }
   // ./: names starting with - are not options
-  return ['-czf', '-', '-C', folder, ...files.map((file) => `./${path.basename(file)}`)];
+  return [
+    '-czf',
+    '-',
+    ...exclude.map((relative) => `--exclude=./${relative}`),
+    '-C',
+    folder,
+    ...files.map((file) => `./${path.basename(file)}`),
+  ];
 }
 
 // Of the list, by key, the largest TOP kept

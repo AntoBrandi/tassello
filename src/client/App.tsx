@@ -5,7 +5,7 @@
 //
 // The board shows the layout of the window's kind of device (desktop, tablet,
 // phone: see board/layouts.ts). Edit mode can show and arrange those of the
-// others, at their width.
+// others, at their width. Only administrators edit the panels.
 //
 // A panel is exported as its file, the layouts of every device included, and
 // files are imported as new panels (see panel_files.ts).
@@ -16,7 +16,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Device, Panel, PanelSummary, Rect, StatusWidgetInstance, WidgetInstance } from '../shared/panel.ts';
+import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
+import { AccountMenu } from './account/AccountMenu.tsx';
 import { api } from './api.ts';
+import { may, signInEnabled } from './auth.ts';
 import { Board } from './board/Board.tsx';
 import { freeSpot } from './board/geometry.ts';
 import { DEVICES, deviceFor, fits, layoutFor, movedBy, withHidden, withoutLayout, withRects } from './board/layouts.ts';
@@ -149,7 +152,7 @@ function usePanelSaver() {
         pending.current = null;
         fetch(`/api/panels/${encodeURIComponent(panel.id)}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', [DASHBOARD_CLIENT_HEADER]: connection.clientId ?? '' },
           body: JSON.stringify(panel),
           keepalive: true,
         });
@@ -671,6 +674,7 @@ export function App() {
   const selected =
     editing && selection.length === 1 ? panel?.widgets.find((w) => w.id === selection[0]) : undefined;
   const selectedStatus = editing ? panel?.statusBar?.find((w) => w.id === statusSelection) : undefined;
+  const mayEdit = may('admin');
   const statusText = { connecting: 'Connecting…', open: `Connected to ${connection.hostname}`, closed: 'Disconnected, reconnecting…' }[status];
 
   return (
@@ -776,14 +780,17 @@ export function App() {
             )}
           </div>
         )}
-        <div className="mode-switch" role="group" aria-label="Mode">
-          <button type="button" aria-label="View" title="View" aria-pressed={!editing} onClick={() => switchMode('view')}>
-            <EyeIcon /> <span className="hide-narrow">View</span>
-          </button>
-          <button type="button" aria-label="Edit" title="Edit" aria-pressed={editing} onClick={() => switchMode('edit')}>
-            <PencilIcon /> <span className="hide-narrow">Edit</span>
-          </button>
-        </div>
+        {mayEdit && (
+          <div className="mode-switch" role="group" aria-label="Mode">
+            <button type="button" aria-label="View" title="View" aria-pressed={!editing} onClick={() => switchMode('view')}>
+              <EyeIcon /> <span className="hide-narrow">View</span>
+            </button>
+            <button type="button" aria-label="Edit" title="Edit" aria-pressed={editing} onClick={() => switchMode('edit')}>
+              <PencilIcon /> <span className="hide-narrow">Edit</span>
+            </button>
+          </div>
+        )}
+        {signInEnabled() && <AccountMenu />}
       </header>
 
       {panel && !loadError && (editing || (panel.statusBar?.length ?? 0) > 0) && (
@@ -807,14 +814,18 @@ export function App() {
           <div className="empty-state">
             <h1>No panels yet</h1>
             <p>A panel is a board of widgets: create one for each task, e.g. teleoperation or navigation.</p>
-            <div className="empty-state-actions">
-              <button type="button" className="button primary" onClick={createPanel}>
-                <PlusIcon /> Create a panel
-              </button>
-              <button type="button" className="button" onClick={chooseImport}>
-                Import a panel…
-              </button>
-            </div>
+            {mayEdit ? (
+              <div className="empty-state-actions">
+                <button type="button" className="button primary" onClick={createPanel}>
+                  <PlusIcon /> Create a panel
+                </button>
+                <button type="button" className="button" onClick={chooseImport}>
+                  Import a panel…
+                </button>
+              </div>
+            ) : (
+              <p>An administrator creates them.</p>
+            )}
           </div>
         ) : loadError ? (
           <div className="empty-state">
@@ -884,8 +895,10 @@ export function App() {
               <div className="board-hint">
                 {editing ? (
                   <>This panel is empty: add widgets with <strong>Add widget</strong>.</>
-                ) : (
+                ) : mayEdit ? (
                   <>This panel is empty: switch to <strong>Edit</strong> to add widgets.</>
+                ) : (
+                  <>This panel is empty: an administrator adds its widgets.</>
                 )}
               </div>
             )}

@@ -14,6 +14,7 @@ import type {
 } from '../shared/file_manager.ts';
 import type { Panel, PanelSummary, TopicInfo } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER, type PluginInfo } from '../shared/protocol.ts';
+import { checkSession } from './auth.ts';
 import { connection } from './connection.ts';
 
 // An error the server answered with: its HTTP status, and what it says.
@@ -38,6 +39,10 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      // Signed out meanwhile: back to the sign-in
+      void checkSession();
+    }
     let message = `${response.status} ${response.statusText}`;
     try {
       message = ((await response.json()) as { error?: string }).error ?? message;
@@ -63,7 +68,11 @@ export interface DirectoryListing {
 }
 
 async function upload(file: Blob): Promise<{ name: string }> {
-  const response = await fetch('/api/uploads', { method: 'POST', body: file });
+  const response = await fetch('/api/uploads', {
+    method: 'POST',
+    headers: { [DASHBOARD_CLIENT_HEADER]: connection.clientId ?? '' },
+    body: file,
+  });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `${response.status} ${response.statusText}`);

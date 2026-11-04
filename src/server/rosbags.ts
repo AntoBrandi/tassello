@@ -124,9 +124,9 @@ export class Rosbags {
     return entry?.process ? entry.recording : null;
   }
 
-  // What a page asks (see BagsRequest); deleting from the dashboard's own
-  // pages only, as the File Manager does
-  act(request: BagsRequest, ownPage: boolean): Promise<unknown> {
+  // What a page asks (see BagsRequest); deleting by administrators only, as
+  // the File Manager does
+  act(request: BagsRequest, mayDelete: boolean): Promise<unknown> {
     switch (request.action) {
       case 'record': {
         const { action: _, ...record } = request;
@@ -135,8 +135,8 @@ export class Rosbags {
       case 'stop':
         return this.stop(request.path);
       case 'delete':
-        if (!ownPage) {
-          return Promise.reject(new Error('Rosbags are deleted from the dashboard’s own pages only'));
+        if (!mayDelete) {
+          return Promise.reject(new Error('Rosbags are deleted by administrators only'));
         }
         return this.delete(request.paths);
       case 'play': {

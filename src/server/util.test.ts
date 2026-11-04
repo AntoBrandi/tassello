@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
-import { ownPage, toJson } from './util.ts';
+import { isSecret, keepSecret, ownPage, secretsUnder, toJson } from './util.ts';
 
 test('toJson makes typed arrays and BigInt JSON friendly', () => {
   const message = {
@@ -35,4 +38,25 @@ test('ownPage: the dashboard\'s pages, directly or through a proxy, not other si
   assert.equal(ownPage({ host: 'robot.local:8080', origin: 'https://evil.example' }), false);
   assert.equal(ownPage({ host: 'robot.local:8080', origin: 'http://robot.local:9090' }), false);
   assert.equal(ownPage({ host: 'robot.local:8080', origin: 'null' }), false);
+});
+
+test('secret folders: their files, and links to them, are secret', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tassello-secret-'));
+  try {
+    const secret = path.join(root, 'data', 'auth');
+    await mkdir(secret, { recursive: true });
+    await writeFile(path.join(secret, 'users.json'), '{}');
+    await writeFile(path.join(root, 'notes.txt'), 'hi');
+    await symlink(path.join(secret, 'users.json'), path.join(root, 'innocent.yaml'));
+    keepSecret(secret);
+    assert.equal(await isSecret(path.join(secret, 'users.json')), true);
+    assert.equal(await isSecret(secret), true);
+    assert.equal(await isSecret(path.join(root, 'innocent.yaml')), true);
+    assert.equal(await isSecret(path.join(root, 'notes.txt')), false);
+    assert.equal(await isSecret(`${secret}-not`), false);
+    assert.deepEqual(secretsUnder(root), [path.join('data', 'auth')]);
+    assert.deepEqual(secretsUnder(path.join(root, 'elsewhere')), []);
+  } finally {
+    await rm(root, { recursive: true });
+  }
 });
