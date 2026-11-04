@@ -12,6 +12,7 @@ function widget(id: string, x: number, y: number, w: number, h: number): WidgetI
 const panel: Panel = {
   id: 'drive',
   name: 'Drive',
+  minRole: 'operator',
   widgets: [widget('map', 0, 0, 12, 10), widget('camera', 12, 0, 6, 4)],
   layouts: {
     tablet: { rects: { map: { x: 0, y: 0, w: 8, h: 8 }, camera: { x: 8, y: 0, w: 4, h: 4 } }, hidden: [] },
@@ -20,7 +21,7 @@ const panel: Panel = {
 };
 
 test('a panel file has the name, the widgets and the layouts of every device', () => {
-  assert.deepEqual(panelFile(panel), { name: 'Drive', widgets: panel.widgets, layouts: panel.layouts });
+  assert.deepEqual(panelFile(panel), { name: 'Drive', minRole: 'operator', widgets: panel.widgets, layouts: panel.layouts });
   assert.equal(panelFileName(panel), 'drive.json');
   assert.deepEqual(readPanelFile(panelFileText(panel)), panelFile(panel));
   assert.ok(panelFileText(panel).endsWith('}\n'));
@@ -28,7 +29,7 @@ test('a panel file has the name, the widgets and the layouts of every device', (
 
 test('a panel file has its status bar, if it has one', () => {
   const statusBar = [{ id: 'wifi', type: 'wifi-status', x: 20, w: 4, config: { warnBelow: 40 } }];
-  assert.deepEqual(panelFile({ ...panel, statusBar }), { name: 'Drive', widgets: panel.widgets, layouts: panel.layouts, statusBar });
+  assert.deepEqual(panelFile({ ...panel, statusBar }), { name: 'Drive', minRole: 'operator', widgets: panel.widgets, layouts: panel.layouts, statusBar });
   assert.deepEqual(readPanelFile(panelFileText({ ...panel, statusBar })).statusBar, statusBar);
   assert.equal('statusBar' in panelFile({ ...panel, statusBar: [] }), false);
 });
@@ -43,7 +44,12 @@ test('a panel file leaves out the places of widgets removed, and layouts if none
     tablet: { rects: { map: { x: 0, y: 0, w: 8, h: 8 } }, hidden: [] },
     phone: { rects: { map: { x: 0, y: 0, w: 6, h: 6 } }, hidden: [] },
   });
-  assert.equal('layouts' in panelFile({ id: 'p', name: 'P', widgets: [] }), false);
+  assert.equal('layouts' in panelFile({ id: 'p', name: 'P', minRole: 'viewer', widgets: [] }), false);
+});
+
+test('a panel file keeps who sees the panel', () => {
+  assert.equal(panelFile(panel).minRole, 'operator');
+  assert.equal(readPanelFile(panelFileText(panel)).minRole, 'operator');
 });
 
 test('only panels are read from files', () => {

@@ -13,6 +13,7 @@ import type {
   FsText,
 } from '../shared/file_manager.ts';
 import type { Panel, PanelSummary, TopicInfo } from '../shared/panel.ts';
+import type { PanelFile } from './panel_files.ts';
 import { DASHBOARD_CLIENT_HEADER, type PluginInfo } from '../shared/protocol.ts';
 import { checkSession } from './auth.ts';
 import { connection } from './connection.ts';
@@ -101,7 +102,8 @@ export function imageUrl(image: string): string | null {
 export const api = {
   listPanels: () => request<PanelSummary[]>('GET', '/api/panels'),
   getPanel: (id: string) => request<Panel>('GET', panelUrl(id)),
-  createPanel: (panel: Omit<Panel, 'id'>) => request<Panel>('POST', '/api/panels', panel),
+  // minRole: viewers' if not given (an imported file of before)
+  createPanel: (panel: PanelFile) => request<Panel>('POST', '/api/panels', panel),
   savePanel: (panel: Panel) => request<Panel>('PUT', panelUrl(panel.id), panel),
   deletePanel: (id: string) => request<void>('DELETE', panelUrl(id)),
   listTopics: () => request<TopicInfo[]>('GET', '/api/topics'),

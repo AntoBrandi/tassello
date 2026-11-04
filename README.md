@@ -78,6 +78,9 @@ tassello [options] [--ros-args ...]
       --session-idle <h>    hours without use after which one signs in again (12)
       --tls-cert <file>     serves HTTPS with this certificate (PEM)...
       --tls-key <file>      ...and its private key (PEM)
+      --anonymous-role <r>  viewer: anyone not signed in watches, as a viewer
+                            (kiosks); signing in operates. none: everyone signs in
+      --frame-ancestors <l> sites that may frame the page, e.g. "'self' https://ops.example.com" ('none')
 
 tassello users <list|add|passwd|role|disable|enable|remove> ...   the users, see Security
 ```
@@ -630,6 +633,15 @@ of every request and of every message of the page; the page only hides what a ro
 | **Operator** | Also operate the robot: drive it (Teleop, Arm Teleop), send navigation goals and pose estimates, press buttons, publish on topics, call services, send and cancel goals, set and load parameters, start and stop services, record and play rosbags, plugins' requests; see the robot's files and networks |
 | **Administrator** | Also everything about the robot's system: edit the panels, open terminals, change the files (File Manager, behavior tree files), change the networks and read their passwords, delete rosbags, manage the users |
 
+**Who sees a panel** is its choice: in edit mode, ⋯ → *Visible to*: viewers and up, operators and
+up, or administrators only. The server lists and sends a panel, and runs its commands, for those
+roles only. Panels of before are everyone's; new ones are administrators' until said otherwise.
+Widgets have no role of their own: what a role cannot do is refused, and the widget says *Not
+allowed for your role*.
+
+**Kiosks and wall displays** can watch without signing in: `--anonymous-role viewer` makes anyone
+not signed in a viewer, with a *Sign in* button to operate.
+
 The users are managed in the page (the account menu, *Users…*, for administrators) or on the
 robot, as the server's user, which also recovers a forgotten password:
 
@@ -662,7 +674,8 @@ How it is protected:
 - **Other sites' pages** cannot use the dashboard through a visitor's browser: WebSockets open
   only from the dashboard's own pages (whose origin is the host they reached: the `Host` header,
   or the `X-Forwarded-Host` a reverse proxy sets), changes need a header another site's page
-  cannot send, and the page cannot be put in another site's frame (`frame-ancestors 'none'`).
+  cannot send, and the page cannot be put in another site's frame (`frame-ancestors 'none'`)
+  but those of `--frame-ancestors`, e.g. another Tassello's Web Page widget.
 - **HTTPS**: over HTTP, passwords and sessions cross the network readable by whoever is on it.
   Serve HTTPS with `--tls-cert` and `--tls-key` (a certificate for the robot's name, e.g. from
   your organization's CA, or `mkcert`), or put Tassello behind a reverse proxy that does (it

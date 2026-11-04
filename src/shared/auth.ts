@@ -67,6 +67,9 @@ export interface AuthStatus {
   enabled: boolean;
   // null: not signed in
   user: AuthUser | null;
+  // Not signed in, watching as a viewer (--anonymous-role viewer): signing in
+  // operates
+  anonymous: boolean;
   // The user signed in must choose a new password before anything else
   mustChangePassword: boolean;
   hostname: string;
@@ -169,7 +172,9 @@ const MESSAGE_ROLES: Record<ClientMessage['type'], Role> = {
   'params.load': 'operator',
   'bt.record': 'operator',
   'bags.action': 'operator',
-  'plugin.request': 'operator',
+  // Each plugin handler's own role is checked by the PluginHost: an
+  // operator's unless it says otherwise
+  'plugin.request': 'viewer',
   // The robot's system: a shell, its networks, its files
   'terminal.open': 'admin',
   'terminal.input': 'admin',
@@ -179,6 +184,19 @@ const MESSAGE_ROLES: Record<ClientMessage['type'], Role> = {
   'network.action': 'admin',
   'bt.file.save': 'admin',
 };
+
+// Why a message or a request is refused for the user's role: the page shows
+// it as it is
+const NOT_ALLOWED = 'Not allowed for your role';
+
+// A refusal for the role, as the server words it: not worth trying again
+export function isNotAllowed(message: string): boolean {
+  return message.startsWith(NOT_ALLOWED);
+}
+
+export function notAllowedMessage(needed: Role): string {
+  return `${NOT_ALLOWED}: it takes ${needed === 'admin' ? 'an administrator' : `an ${ROLE_LABELS[needed].toLowerCase()}`}`;
+}
 
 // The role a message needs; unknown ones, the highest
 export function requiredRole(message: ClientMessage): Role {

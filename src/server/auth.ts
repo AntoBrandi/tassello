@@ -55,6 +55,8 @@ const ADMIN_PASSWORD_VARIABLE = 'TASSELLO_ADMIN_PASSWORD';
 
 // Who anyone is without sign-in (--no-auth)
 const ANONYMOUS: AuthUser = { username: 'anonymous', displayName: 'Anyone', role: 'admin', provider: 'none' };
+// Who has not signed in, with --anonymous-role viewer
+const GUEST: AuthUser = { username: 'guest', displayName: 'Guest', role: 'viewer', provider: 'none' };
 
 interface StoredSession {
   username: string;
@@ -87,6 +89,8 @@ export interface AuthOptions {
   idleHours: number;
   hostname: string;
   logger: Logger;
+  // Who has not signed in: a viewer (kiosk screens), or nobody (null)
+  anonymousRole?: 'viewer' | null;
 }
 
 // ── Failed attempts ──
@@ -270,13 +274,10 @@ export class Auth extends EventEmitter<{ changed: [username: string] }> {
       return { user: ANONYMOUS, session: null, mustChangePassword: false };
     }
     const token = parseCookies(req.headers.cookie).get(this.cookieName);
-    if (!token || token.length > 128) {
-      return null;
-    }
-    const key = tokenKey(token);
-    const user = await this.sessionUser(key);
-    if (!user) {
-      return null;
+    const key = token && token.length <= 128 ? tokenKey(token) : null;
+    const user = key && (await this.sessionUser(key));
+    if (!key || !user) {
+      return this.options.anonymousRole === 'viewer' ? { user: GUEST, session: null, mustChangePassword: false } : null;
     }
     this.touch(key);
     return { user: authUser(user), session: key, mustChangePassword: user.mustChangePassword };
@@ -383,6 +384,7 @@ export class Auth extends EventEmitter<{ changed: [username: string] }> {
     return {
       enabled: this.enabled,
       user: identity?.user ?? null,
+      anonymous: this.enabled && identity !== null && identity.session === null,
       mustChangePassword: identity?.mustChangePassword ?? false,
       hostname: this.options.hostname,
       minPasswordLength: MIN_PASSWORD_LENGTH,
@@ -443,7 +445,7 @@ export class Auth extends EventEmitter<{ changed: [username: string] }> {
   private async changeOwnPassword(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // Not require(): those who must change it may
     const identity = await this.identify(req);
-    if (!identity) {
+    if (!identity?.session) {
       throw new HttpError(401, 'Sign in first');
     }
     const body = await readJson(req);
@@ -542,6 +544,7 @@ export class Auth extends EventEmitter<{ changed: [username: string] }> {
     return {
       enabled: true,
       user: authUser(user),
+      anonymous: false,
       mustChangePassword: user.mustChangePassword,
       hostname: this.options.hostname,
       minPasswordLength: MIN_PASSWORD_LENGTH,

@@ -29,9 +29,11 @@ import { pathToFileURL } from 'node:url';
 
 import type rclnodejs from 'rclnodejs';
 
+import { isRole, notAllowedMessage, roleAtLeast, type Role } from '../shared/auth.ts';
 import type { PluginInfo } from '../shared/protocol.ts';
 import type {
   CommandWidget,
+  HandlerOptions,
   PluginContext,
   PluginSession,
   RequestHandler,
@@ -255,11 +257,25 @@ function prefixed(logger: Logger, name: string): Logger {
   };
 }
 
+// A handler's role, as declared; a plugin's typo is the highest role, not
+// the lowest
+function handlerRole(options: HandlerOptions | undefined, fallback: Role): Role {
+  const role = options?.role;
+  return role === undefined ? fallback : isRole(role) ? role : 'admin';
+}
+
+// Throws as session.ts refuses a message for the user's role
+function allowed(session: PluginSession, role: Role): void {
+  if (!roleAtLeast(session.user.role, role)) {
+    throw new Error(notAllowedMessage(role));
+  }
+}
+
 // The plugins loaded, and what their server sides registered
 export class PluginHost {
   readonly plugins: Plugin[];
-  private readonly handlers = new Map<string, RequestHandler>();
-  private readonly streams = new Map<string, StreamHandler>();
+  private readonly handlers = new Map<string, { handler: RequestHandler; role: Role }>();
+  private readonly streams = new Map<string, { handler: StreamHandler; role: Role }>();
   private readonly shutdownCallbacks: (() => void | Promise<void>)[] = [];
 
   constructor(plugins: Plugin[]) {
@@ -280,8 +296,10 @@ export class PluginHost {
         node: services.node,
         rclnodejs: services.rclnodejs,
         logger,
-        handle: (method, handler) => this.handlers.set(key(plugin.name, method), handler),
-        stream: (name, handler) => this.streams.set(key(plugin.name, name), handler),
+        handle: (method, handler, options) =>
+          this.handlers.set(key(plugin.name, method), { handler, role: handlerRole(options, 'operator') }),
+        stream: (name, handler, options) =>
+          this.streams.set(key(plugin.name, name), { handler, role: handlerRole(options, 'viewer') }),
         commandWidget: (type, command) => services.commandWidget(type, command),
         onShutdown: (callback) => this.shutdownCallbacks.push(callback),
       };
@@ -318,11 +336,12 @@ export class PluginHost {
   }
 
   async request(plugin: string, method: string, params: unknown, session: PluginSession): Promise<unknown> {
-    const handler = this.handlers.get(key(plugin, method));
-    if (!handler) {
+    const registered = this.handlers.get(key(plugin, method));
+    if (!registered) {
       throw new Error(this.missing(plugin, `request "${method}"`));
     }
-    return handler(params, session);
+    allowed(session, registered.role);
+    return registered.handler(params, session);
   }
 
   // Returns what closes the stream
@@ -333,11 +352,12 @@ export class PluginHost {
     emit: (data: unknown) => void,
     session: PluginSession,
   ): () => void {
-    const handler = this.streams.get(key(plugin, stream));
-    if (!handler) {
+    const registered = this.streams.get(key(plugin, stream));
+    if (!registered) {
       throw new Error(this.missing(plugin, `stream "${stream}"`));
     }
-    return handler(params, emit, session) ?? (() => {});
+    allowed(session, registered.role);
+    return registered.handler(params, emit, session) ?? (() => {});
   }
 
   async shutdown(logger: Logger): Promise<void> {

@@ -17,7 +17,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Device, Panel, PanelSummary, Rect, StatusWidgetInstance, WidgetInstance } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
+import type { Role } from '../shared/auth.ts';
+import { NEW_PANEL_ROLE } from '../shared/panel.ts';
 import { AccountMenu } from './account/AccountMenu.tsx';
+import { PanelVisibilityDialog, VISIBILITY_LABELS } from './PanelVisibilityDialog.tsx';
 import { api } from './api.ts';
 import { may, signInEnabled } from './auth.ts';
 import { Board } from './board/Board.tsx';
@@ -501,13 +504,20 @@ export function App() {
       return;
     }
     try {
-      const created = await api.createPanel({ name, widgets: [] });
+      const created = await api.createPanel({ name, widgets: [], minRole: NEW_PANEL_ROLE });
       await refreshPanels();
       showPanel(created.id);
       setMode('edit');
     } catch (e) {
       notify(`Could not create the panel: ${errorText(e)}`, 'error');
     }
+  };
+
+  const [visibilityOpen, setVisibilityOpen] = useState(false);
+  const changeVisibility = async (minRole: Role) => {
+    updatePanel((p) => ({ ...p, minRole }));
+    await saver.flush();
+    await refreshPanels();
   };
 
   const renamePanel = async () => {
@@ -764,6 +774,16 @@ export function App() {
                       <button type="button" role="menuitem" onClick={renamePanel}>
                         Rename panel…
                       </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setVisibilityOpen(true);
+                        }}
+                      >
+                        Visible to: {VISIBILITY_LABELS[panel.minRole].toLowerCase()}…
+                      </button>
                       <button type="button" role="menuitem" onClick={duplicatePanel}>
                         Duplicate panel
                       </button>
@@ -792,6 +812,14 @@ export function App() {
         )}
         {signInEnabled() && <AccountMenu />}
       </header>
+      {visibilityOpen && panel && mayEdit && (
+        <PanelVisibilityDialog
+          name={panel.name}
+          minRole={panel.minRole}
+          onChange={(minRole) => void changeVisibility(minRole)}
+          onClose={() => setVisibilityOpen(false)}
+        />
+      )}
 
       {panel && !loadError && (editing || (panel.statusBar?.length ?? 0) > 0) && (
         <StatusBar

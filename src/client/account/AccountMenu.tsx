@@ -4,7 +4,7 @@
 import { useState, type FormEvent } from 'react';
 
 import { passwordProblem, ROLE_LABELS } from '../../shared/auth.ts';
-import { auth, currentUser, may } from '../auth.ts';
+import { auth, currentUser, isGuest, may, signInUrl } from '../auth.ts';
 import { Modal } from '../dialogs.tsx';
 import { notify } from '../notifications.tsx';
 import { UsersDialog } from './UsersDialog.tsx';
@@ -20,6 +20,13 @@ export function AccountMenu() {
   const [dialog, setDialog] = useState<'password' | 'users' | null>(null);
   if (!user) {
     return null;
+  }
+  if (isGuest()) {
+    return (
+      <a className="button account-sign-in" href={signInUrl()} title="Watching as a viewer: sign in to operate">
+        Sign in
+      </a>
+    );
   }
   const choose = (next: 'password' | 'users') => {
     setOpen(false);

@@ -29,6 +29,11 @@ export function LoginPage({ status }: { status: AuthStatus }) {
         ) : (
           <SignInForm />
         )}
+        {status.anonymous && (
+          <a className="login-hint login-back" href={location.pathname}>
+            Watch without signing in
+          </a>
+        )}
       </div>
     </div>
   );

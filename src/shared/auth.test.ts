@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { passwordProblem, requiredRole, roleAtLeast } from './auth.ts';
+import { isNotAllowed, notAllowedMessage, passwordProblem, requiredRole, roleAtLeast } from './auth.ts';
 import type { ClientMessage } from './protocol.ts';
 
 const message = (value: object) => value as ClientMessage;
@@ -43,4 +43,19 @@ test('passwords: long, not the username, not a repeated or common one', () => {
   assert.match(passwordProblem('abababababababab', 'ada') ?? '', /repetitive/);
   assert.match(passwordProblem('password123456', 'ada') ?? '', /common/);
   assert.match(passwordProblem('Password1234!', 'ada') ?? '', /common/);
+});
+
+test('refusals for the role say so, and are told apart', () => {
+  assert.equal(notAllowedMessage('operator'), 'Not allowed for your role: it takes an operator');
+  assert.equal(notAllowedMessage('admin'), 'Not allowed for your role: it takes an administrator');
+  assert.equal(isNotAllowed(notAllowedMessage('viewer')), true);
+  assert.equal(isNotAllowed('Service /x is not available'), false);
+});
+
+test('the viewer streams of 0.10 to 0.18 are a viewer’s', () => {
+  for (const type of ['octomap.subscribe', 'points.subscribe', 'tf.frames', 'twistmux.subscribe'] as const) {
+    assert.equal(requiredRole({ type } as ClientMessage), 'viewer', type);
+  }
+  // Each plugin handler says its own role
+  assert.equal(requiredRole({ type: 'plugin.request' } as ClientMessage), 'viewer');
 });

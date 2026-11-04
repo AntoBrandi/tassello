@@ -11788,6 +11788,14 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.account-sign-in {
+  text-decoration: none;
+}
+
+.login-back {
+  text-align: center;
+}
+
 .account-button {
   display: grid;
   width: 32px;

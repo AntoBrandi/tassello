@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { slugify } from '../shared/panel.ts';
-import { HttpError, PanelStore, sanitizePanel } from './panels.ts';
+import { HttpError, PanelRoles, PanelStore, sanitizePanel, seesPanel } from './panels.ts';
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -22,8 +22,12 @@ test('sanitizePanel keeps the known fields and fills defaults', () => {
   assert.deepEqual(panel, {
     id: 'drive',
     name: 'Drive',
+    // Panels of before are everyone's
+    minRole: 'viewer',
     widgets: [{ ...widget, title: '', config: {} }],
   });
+  assert.equal(sanitizePanel({ name: 'Arm', minRole: 'operator' }, 'arm').minRole, 'operator');
+  assert.throws(() => sanitizePanel({ name: 'Arm', minRole: 'root' }, 'arm'), /minRole must be/);
 });
 
 test('sanitizePanel keeps the device layouts of the widgets it has', () => {
@@ -77,11 +81,13 @@ test('the store creates, lists, saves and deletes panels', async () => {
     store.on('changed', (...args) => changes.push(args));
     const first = await store.create({ name: 'Demo' }, 'me');
     assert.equal(first.id, 'demo-2');
-    await store.save('demo-2', { name: 'Renamed', widgets: [widget] }, null);
+    await store.save('demo-2', { name: 'Renamed', widgets: [widget], minRole: 'operator' }, null);
     assert.deepEqual(await store.list(), [
-      { id: 'demo', name: 'Demo' },
-      { id: 'demo-2', name: 'Renamed' },
+      { id: 'demo', name: 'Demo', minRole: 'viewer' },
+      { id: 'demo-2', name: 'Renamed', minRole: 'operator' },
     ]);
+    assert.equal(await store.minRole('demo-2'), 'operator');
+    assert.equal(await store.minRole('none'), null);
     // The id is the file name, not part of the content
     const saved = JSON.parse(await readFile(path.join(root, 'panels', 'demo-2.json'), 'utf8'));
     assert.equal(saved.id, undefined);
@@ -89,15 +95,18 @@ test('the store creates, lists, saves and deletes panels', async () => {
     assert.equal(await store.remove('demo-2', null), true);
     assert.equal(await store.remove('demo-2', null), false);
     assert.equal(await store.get('../demo'), null);
+    // Who saw it before, and who sees it after
     assert.deepEqual(changes, [
-      ['demo-2', false, 'me'],
-      ['demo-2', false, null],
-      ['demo-2', true, null],
+      ['demo-2', false, 'me', { before: null, after: 'viewer' }],
+      ['demo-2', false, null, { before: 'viewer', after: 'operator' }],
+      ['demo-2', true, null, { before: 'operator', after: null }],
     ]);
 
     // A broken file is skipped by the list, and reported by get
     await writeFile(path.join(root, 'panels', 'broken.json'), '{');
-    assert.deepEqual(await store.list(), [{ id: 'demo', name: 'Demo' }]);
+    assert.deepEqual(await store.list(), [{ id: 'demo', name: 'Demo', minRole: 'viewer' }]);
+    // A broken panel: an administrator's to see, and mend
+    assert.equal(await store.minRole('broken'), 'admin');
     await assert.rejects(store.get('broken'), HttpError);
     assert.deepEqual((await readdir(path.join(root, 'panels'))).sort(), ['broken.json', 'demo.json']);
   } finally {
@@ -112,6 +121,7 @@ test('a panel created from a file keeps the layouts of every device, as the file
     await store.init();
     const file = {
       name: 'Drive',
+      minRole: 'operator',
       widgets: [{ id: 'w1', type: 'button', title: '', x: 0, y: 0, w: 2, h: 1, config: { command: 'true' } }],
       layouts: {
         tablet: { rects: { w1: { x: 4, y: 0, w: 4, h: 2 } }, hidden: [] },
@@ -120,6 +130,9 @@ test('a panel created from a file keeps the layouts of every device, as the file
     };
     const created = await store.create(file, null);
     assert.deepEqual(await store.get(created.id), { id: 'drive', ...file });
+    // A file of before: everyone's
+    const { minRole: _, ...before } = file;
+    assert.equal((await store.create({ ...before, name: 'Old' }, null)).minRole, 'viewer');
     assert.equal(await readFile(path.join(root, 'panels', 'drive.json'), 'utf8'), `${JSON.stringify(file, null, 2)}\n`);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -162,5 +175,34 @@ test('sanitizePanel keeps the status bar, its widgets in their places, and refus
   ];
   for (const value of bad) {
     assert.throws(() => sanitizePanel({ name: 'x', widgets: [], statusBar: value }, 'x'), HttpError, JSON.stringify(value));
+  }
+});
+
+test('who sees each panel is kept as they change', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tassello-panels-'));
+  try {
+    const store = new PanelStore(path.join(root, 'panels'), [], silent);
+    await store.init();
+    await store.create({ name: 'Watch' }, null);
+    const roles = new PanelRoles(store);
+    await roles.load();
+    assert.equal(roles.known('watch'), 'viewer');
+    assert.equal(roles.known('drive'), undefined);
+    await store.create({ name: 'Drive', minRole: 'operator' }, null);
+    assert.equal(roles.known('drive'), 'operator');
+    await store.remove('drive', null);
+    assert.equal(roles.known('drive'), null);
+    // A file copied in meanwhile: read when asked
+    await writeFile(path.join(root, 'panels', 'arm.json'), JSON.stringify({ name: 'Arm', minRole: 'admin' }));
+    assert.equal(await roles.of('arm'), 'admin');
+
+    assert.equal(seesPanel('viewer', 'viewer'), true);
+    assert.equal(seesPanel('viewer', 'operator'), false);
+    assert.equal(seesPanel('admin', 'admin'), true);
+    // No panel: administrators only
+    assert.equal(seesPanel('operator', null), false);
+    assert.equal(seesPanel('operator', undefined), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

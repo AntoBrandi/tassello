@@ -42,10 +42,24 @@ use, so that nobody presses a button that will be refused.
 | `src/server/users_cli.ts` | `tassello users ...` |
 | `src/client/auth.ts`, `src/client/account/` | Who is signed in, the sign-in page, the account menu, the users dialog |
 
-**Widgets declare who they are for.** `role` hides a widget from lower roles (Teleop, Arm Teleop
-and Button are for operators, Terminal for admins). `changeRole` forces a widget's `readOnly`
-property for lower roles (File Manager and Networking below admin, Parameters and Rosbags below
-operator). Plugins use the same fields.
+**Panels say who sees them.** Each panel has a `minRole`, chosen by administrators in edit mode
+(⋯ → *Visible to*: viewers and up, operators and up, administrators only). The server lists and
+sends a panel only to those roles (`GET /api/panels` leaves the others out, `GET
+/api/panels/<id>` answers 404), tells only their pages of its changes and its commands' states,
+and runs its commands (`command.run`, `command.stop`) only for them. Panels saved before have
+none: they are everyone's, as they were. New panels are for administrators until said
+otherwise. Widgets have no role of their own: what one does is refused by the server, below its
+role, with *Not allowed for your role: it takes an operator*, which the widget shows.
+
+**Watching without signing in.** `--anonymous-role viewer` makes anyone who has not signed in a
+viewer (a *Sign in* button in the header, to operate): for kiosk screens and wall displays, and
+deployments that relied on an open dashboard. The default, `none`, asks everyone to sign in.
+
+**Framing.** The page refuses to be framed (`frame-ancestors 'none'`, `X-Frame-Options: DENY`),
+against clickjacking. `--frame-ancestors "'self' https://ops.example.com"` lets those sites frame
+it, e.g. a Web Page widget of another Tassello; `X-Frame-Options` is then left out, as it cannot
+list sites. The session cookie is `SameSite=Strict`, so a framed dashboard of another site is not
+signed in: give it `--anonymous-role viewer`.
 
 **Sessions.** Signing in sets a cookie holding 32 random bytes: `HttpOnly`, `SameSite=Strict`,
 `Secure` over HTTPS, named after the port, since robots on one host share cookies. The server
@@ -131,7 +145,10 @@ change asked: for fleets provisioned by script.
 | A robot run as a systemd service | Signing in as `admin` needs the password from the robot | As the service's user: `cat ~/.local/share/tassello/auth/initial-admin-password`, sign in, choose a password |
 | A fleet of robots | Each has its own users | `Environment=TASSELLO_ADMIN_PASSWORD=...` in the unit for the first start, or `echo "$PASSWORD" \| tassello users add ops --role admin` in the provisioning |
 | Phones and tablets on the home screen, wall displays | They sign in once, then again after 12 hours unused or after 7 days | Raise `--session-idle` for displays; give them a viewer account |
-| Anyone not an admin | No edit mode; some widgets say they are not for them, others are read-only | Give each person the role they need |
+| Anyone not an admin | No edit mode; what their role cannot do is refused, and says so | Give each person the role they need |
+| Their panels | Kept as they were, visible to everyone; new ones administrators' only | *Visible to* in each panel's ⋯ menu |
+| Kiosk screens, wall displays, an open dashboard | Ask to sign in | `--anonymous-role viewer`: they watch without signing in |
+| A Tassello shown in another's Web Page widget | Refused in a frame | `--frame-ancestors` with the other's address, and `--anonymous-role viewer` |
 | Robots on a trusted network that want things as before | Nothing, with `--no-auth` | Add `--no-auth` to the command; the server warns at every start |
 | Behind a reverse proxy | Works as before. The proxy's own login may now be redundant | Forward `X-Forwarded-Proto` and `X-Forwarded-Host`; note that failed sign-ins slow down by the proxy's address |
 | Served over plain HTTP | Works, but passwords cross the network readable; the server warns | `--tls-cert` and `--tls-key`, or HTTPS at the proxy |
@@ -139,9 +156,10 @@ change asked: for fleets provisioned by script.
 
 **For plugins** (`tassello/sdk` and `tassello/server` change, as a new minor version may):
 
-- their requests (`plugin.request`) need an operator, their streams a viewer;
+- their requests need an operator, their streams a viewer, unless their handlers say otherwise
+  (`ctx.handle(name, handler, { role: 'viewer' })`);
 - the server side gets `session.user` (`username`, `displayName`, `role`) to refuse more;
-- widgets may set `role` and `changeRole`; the page side gets `currentUser()` and `may(role)`;
+- the page side gets `currentUser()` and `may(role)`, optional helpers;
 - a plugin's REST calls or `fetch` from its widgets need the session cookie, which the browser
   sends by itself, and the `X-Dashboard-Client` header for changes.
 

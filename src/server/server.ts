@@ -19,7 +19,7 @@ import path from 'node:path';
 import rclnodejs from 'rclnodejs';
 import { WebSocketServer } from 'ws';
 
-import type { ServerMessage } from '../shared/protocol.ts';
+import type { Role } from '../shared/auth.ts';
 import { Actions } from './actions.ts';
 import { Auth, type Identity } from './auth.ts';
 import { Arm } from './arm.ts';
@@ -32,7 +32,7 @@ import { Interfaces } from './interfaces.ts';
 import { makeMessageCode } from './message_code.ts';
 import { Networking } from './networking.ts';
 import { Overlays } from './overlays.ts';
-import { PanelStore } from './panels.ts';
+import { PanelRoles, PanelStore, seesPanel } from './panels.ts';
 import { Parameters } from './parameters.ts';
 import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
@@ -75,6 +75,10 @@ export interface ServerOptions {
   sessionIdleHours: number;
   // HTTPS with this certificate and its key (PEM files), else HTTP
   tls?: { cert: string; key: string };
+  // Who has not signed in: a viewer, or nobody (null, the default)
+  anonymousRole?: 'viewer' | null;
+  // The sites that may frame the page (util.ts checkFrameAncestors)
+  frameAncestors?: string;
 }
 
 // Connections that miss a ping for this long are dropped: a page whose
@@ -172,6 +176,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     port,
     tls: options.tls !== undefined,
     idleHours: options.sessionIdleHours,
+    anonymousRole: options.anonymousRole ?? null,
     hostname: os.hostname(),
     logger,
   });
@@ -180,6 +185,9 @@ export async function startServer(options: ServerOptions): Promise<void> {
   keepSecret(authDir);
   if (auth.enabled) {
     logger.info(`Users in ${authDir}`);
+    if (options.anonymousRole === 'viewer') {
+      logger.warn('--anonymous-role viewer: anyone who opens the page watches the robot without signing in');
+    }
   } else {
     logger.warn('Sign-in is turned off (--no-auth): anyone who opens the page can do anything');
   }
@@ -195,13 +203,36 @@ export async function startServer(options: ServerOptions): Promise<void> {
   });
   const sessions = new Set<Session>();
 
-  function broadcast(message: ServerMessage): void {
+  // Who sees each panel: a panel's changes and its commands' states reach
+  // only the pages of those
+  const panelRoles = new PanelRoles(store);
+  await panelRoles.load();
+  store.on('changed', (id, deleted, origin, { before, after }) => {
     for (const session of sessions) {
-      session.send(message);
+      const role = session.user.role;
+      if (seesPanel(role, after)) {
+        session.send({ type: 'panels.changed', id, deleted, origin });
+      } else if (before !== null && seesPanel(role, before)) {
+        // Hidden from them now: gone, as far as they know
+        session.send({ type: 'panels.changed', id, deleted: true, origin });
+      }
     }
-  }
-  store.on('changed', (id, deleted, origin) => broadcast({ type: 'panels.changed', id, deleted, origin }));
-  commands.on('state', (state) => broadcast({ type: 'command', state }));
+  });
+  commands.on('state', (state) => {
+    const send = (minRole: Role | null) => {
+      for (const session of sessions) {
+        if (seesPanel(session.user.role, minRole)) {
+          session.send({ type: 'command', state });
+        }
+      }
+    };
+    const known = panelRoles.known(state.panelId);
+    if (known === undefined) {
+      void panelRoles.of(state.panelId).then(send);
+    } else {
+      send(known);
+    }
+  });
 
   const handler = createRequestHandler({
     store,
@@ -210,6 +241,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     plugins: host,
     auth,
     tls: options.tls !== undefined,
+    frameAncestors: options.frameAncestors,
     uploadsDir,
     topics: () =>
       node
@@ -280,6 +312,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
         rosbags,
         system,
         plugins: host,
+        panelRoles,
         hostname: os.hostname(),
       },
       identity.user,

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 
 import { WebSocket } from 'ws';
 
-import { requiredRole, roleAtLeast, ROLE_LABELS, type AuthUser } from '../shared/auth.ts';
+import { notAllowedMessage, requiredRole, roleAtLeast, type AuthUser } from '../shared/auth.ts';
 import { MAX_TRUNCATE, MAX_WINDOW } from '../shared/monitor.ts';
 import {
   FRAME_HEADER_BYTES,
@@ -24,6 +24,7 @@ import type { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import type { BehaviorTreePlayback } from './behavior_tree_playback.ts';
 import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
+import { seesPanel, type PanelRoles } from './panels.ts';
 import type { Diagnostics } from './diagnostics.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
 import type { Interfaces } from './interfaces.ts';
@@ -79,6 +80,8 @@ export interface SessionServices {
   rosbags: Rosbags;
   system: SystemMonitor;
   plugins: PluginHost;
+  // Who sees each panel: its commands are theirs only
+  panelRoles: PanelRoles;
   hostname: string;
 }
 
@@ -196,7 +199,12 @@ export class Session implements FrameSink, PluginSession {
       }
     });
     this.send({ type: 'hello', clientId: this.id, hostname: services.hostname, time: Date.now(), user });
-    this.send({ type: 'commands', states: services.commands.snapshot() });
+    this.send({
+      type: 'commands',
+      states: services.commands
+        .snapshot()
+        .filter((state) => seesPanel(user.role, services.panelRoles.known(state.panelId))),
+    });
   }
 
   send(message: ServerMessage): void {
@@ -262,7 +270,7 @@ export class Session implements FrameSink, PluginSession {
     this.onActivity();
     const needed = requiredRole(message);
     if (!roleAtLeast(this.user.role, needed)) {
-      this.refuse(message, `Not allowed: ${ROLE_LABELS[this.user.role].toLowerCase()}s cannot do this, it takes ${needed === 'admin' ? 'an administrator' : `an ${ROLE_LABELS[needed].toLowerCase()}`}`);
+      this.refuse(message, notAllowedMessage(needed));
       return;
     }
     try {
@@ -278,6 +286,9 @@ export class Session implements FrameSink, PluginSession {
     const { id } = message as { id?: unknown };
     if (message.type === 'service.action' && typeof id === 'number') {
       this.send({ type: 'service.result', id, error: reason });
+    } else if (message.type === 'topic.publish' && typeof id === 'number') {
+      // Its stream ends at once, failed
+      this.send({ type: 'topic.published', id, count: 0, done: true, error: reason });
     } else if (ANSWERED.has(message.type) && typeof id === 'number') {
       this.answer(id, Promise.reject(new Error(reason)));
     } else if ((message.type.endsWith('.subscribe') || message.type === 'terminal.open') && typeof id === 'number') {
@@ -971,14 +982,26 @@ export class Session implements FrameSink, PluginSession {
       }
 
       case 'command.run':
-        services.commands
-          .run(string(message.panelId, 'panelId'), string(message.widgetId, 'widgetId'))
+      case 'command.stop': {
+        const panelId = string(message.panelId, 'panelId');
+        const widgetId = string(message.widgetId, 'widgetId');
+        const run = message.type === 'command.run';
+        services.panelRoles
+          .of(panelId)
+          .then(async (minRole) => {
+            // A panel they do not see: as if it had no such widget
+            if (!seesPanel(this.user.role, minRole)) {
+              throw new Error(`Panel "${panelId}" has no widget "${widgetId}" running a command: is it saved?`);
+            }
+            if (run) {
+              await services.commands.run(panelId, widgetId);
+            } else {
+              services.commands.stop(panelId, widgetId);
+            }
+          })
           .catch((e: unknown) => this.reportError(errorMessage(e)));
         return;
-
-      case 'command.stop':
-        services.commands.stop(string(message.panelId, 'panelId'), string(message.widgetId, 'widgetId'));
-        return;
+      }
 
       default:
         throw new Error(`Unknown message type "${(message as { type?: unknown }).type}"`);

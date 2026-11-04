@@ -7,8 +7,10 @@ import { EventEmitter } from 'node:events';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { isRole, roleAtLeast, type Role } from '../shared/auth.ts';
 import {
   PANEL_ID_PATTERN,
+  panelRole,
   SMALL_DEVICES,
   slugify,
   STATUS_COLUMNS,
@@ -65,10 +67,14 @@ export function sanitizePanel(value: unknown, id: string): Panel {
   if (!Array.isArray(widgets) || widgets.length > MAX_WIDGETS) {
     throw new HttpError(400, `widgets must be an array of at most ${MAX_WIDGETS} widgets`);
   }
+  if (value.minRole !== undefined && !isRole(value.minRole)) {
+    throw new HttpError(400, 'minRole must be viewer, operator or admin');
+  }
   const ids = new Set<string>();
   const sanitized: Panel = {
     id,
     name,
+    minRole: panelRole(value.minRole),
     widgets: widgets.map((widget: unknown, index): WidgetInstance => {
       const where = `widgets[${index}]`;
       if (!isObject(widget)) {
@@ -191,9 +197,16 @@ function sanitizeStatusBar(value: unknown): StatusWidgetInstance[] {
   });
 }
 
+// Who saw the panel before the change, and who sees it after (its minRole:
+// null where there was no panel, or is no longer)
+export interface PanelVisibility {
+  before: Role | null;
+  after: Role | null;
+}
+
 interface PanelEvents {
   // origin: the clientId of the change's author, null if unknown
-  changed: [id: string, deleted: boolean, origin: string | null];
+  changed: [id: string, deleted: boolean, origin: string | null, visibility: PanelVisibility];
 }
 
 export class PanelStore extends EventEmitter<PanelEvents> {
@@ -245,7 +258,7 @@ export class PanelStore extends EventEmitter<PanelEvents> {
       try {
         const panel = await this.get(id);
         if (panel) {
-          panels.push({ id, name: panel.name });
+          panels.push({ id, name: panel.name, minRole: panel.minRole });
         }
       } catch (e) {
         this.logger.warn((e as Error).message);
@@ -287,7 +300,7 @@ export class PanelStore extends EventEmitter<PanelEvents> {
     }
     const panel = sanitizePanel(value, id);
     await this.write(panel, 'wx');
-    this.emit('changed', id, false, origin);
+    this.emit('changed', id, false, origin, { before: null, after: panel.minRole });
     return panel;
   }
 
@@ -296,8 +309,9 @@ export class PanelStore extends EventEmitter<PanelEvents> {
       throw new HttpError(400, `Invalid panel id "${id}"`);
     }
     const panel = sanitizePanel(value, id);
+    const before = await this.minRole(id);
     await this.write(panel, 'w');
-    this.emit('changed', id, false, origin);
+    this.emit('changed', id, false, origin, { before, after: panel.minRole });
     return panel;
   }
 
@@ -305,6 +319,7 @@ export class PanelStore extends EventEmitter<PanelEvents> {
     if (!PANEL_ID_PATTERN.test(id)) {
       return false;
     }
+    const before = await this.minRole(id);
     try {
       await fs.unlink(this.file(id));
     } catch (e) {
@@ -313,8 +328,18 @@ export class PanelStore extends EventEmitter<PanelEvents> {
       }
       throw e;
     }
-    this.emit('changed', id, true, origin);
+    this.emit('changed', id, true, origin, { before, after: null });
     return true;
+  }
+
+  // Who sees the panel; null if there is none (or it cannot be read: nobody
+  // but an administrator, who sees them all)
+  async minRole(id: string): Promise<Role | null> {
+    try {
+      return (await this.get(id))?.minRole ?? null;
+    } catch {
+      return 'admin';
+    }
   }
 
   private file(id: string): string {
@@ -334,4 +359,40 @@ export class PanelStore extends EventEmitter<PanelEvents> {
     await fs.writeFile(tmp, text);
     await fs.rename(tmp, this.file(id));
   }
+}
+
+// Who sees each panel, kept as the panels change, for what is sent to the
+// pages of each role: changes of panels, the states of their commands
+export class PanelRoles {
+  private readonly store: PanelStore;
+  // null: no such panel
+  private readonly roles = new Map<string, Role | null>();
+
+  constructor(store: PanelStore) {
+    this.store = store;
+    store.on('changed', (id, _deleted, _origin, { after }) => this.roles.set(id, after));
+  }
+
+  async load(): Promise<void> {
+    for (const panel of await this.store.list()) {
+      this.roles.set(panel.id, panel.minRole);
+    }
+  }
+
+  // undefined: not known yet (a file copied into the panels' folder)
+  known(id: string): Role | null | undefined {
+    return this.roles.get(id);
+  }
+
+  async of(id: string): Promise<Role | null> {
+    if (!this.roles.has(id)) {
+      this.roles.set(id, await this.store.minRole(id));
+    }
+    return this.roles.get(id) ?? null;
+  }
+}
+
+// Whether a role sees a panel of that minRole: no panel, administrators only
+export function seesPanel(role: Role, minRole: Role | null | undefined): boolean {
+  return roleAtLeast(role, minRole ?? 'admin');
 }

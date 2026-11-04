@@ -49,7 +49,7 @@ import sharp from 'sharp';
 
 import type { Role } from '../shared/auth.ts';
 import type { FsConflict, FsResult } from '../shared/file_manager.ts';
-import type { TopicInfo } from '../shared/panel.ts';
+import { maySeePanel, type TopicInfo } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
 import type { Auth } from './auth.ts';
 import { listDisks, spaceOf } from './disks.ts';
@@ -84,7 +84,15 @@ import {
 import { decodeNetpbm, NETPBM_EXTENSIONS } from './netpbm.ts';
 import { HttpError, type PanelStore } from './panels.ts';
 import type { PluginHost } from './plugins.ts';
-import { errorMessage, isSecret, packageShareDirectory, secretsUnder, type Logger } from './util.ts';
+import {
+  DEFAULT_FRAME_ANCESTORS,
+  errorMessage,
+  frameHeaders,
+  isSecret,
+  packageShareDirectory,
+  secretsUnder,
+  type Logger,
+} from './util.ts';
 
 export interface HttpServices {
   store: PanelStore;
@@ -97,6 +105,8 @@ export interface HttpServices {
   auth: Auth;
   // Served over HTTPS
   tls: boolean;
+  // checkFrameAncestors'; DEFAULT_FRAME_ANCESTORS if not given
+  frameAncestors?: string;
   logger: Logger;
 }
 
@@ -142,11 +152,10 @@ const SANDBOXED = {
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
   'X-Content-Type-Options': 'nosniff',
 };
-// Of every response: never in another site's frame (its buttons clicked
-// through a decoy), never read by another site's page
+// Of every response: never read by another site's page, and never in another
+// site's frame (its buttons clicked through a decoy) but those of
+// --frame-ancestors (frameHeaders)
 const SECURITY_HEADERS = {
-  'Content-Security-Policy': "frame-ancestors 'none'",
-  'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'same-origin',
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -172,7 +181,10 @@ export function createRequestHandler(services: HttpServices): RequestListener {
 }
 
 async function handle(services: HttpServices, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+  for (const [name, value] of Object.entries({
+    ...SECURITY_HEADERS,
+    ...frameHeaders(services.frameAncestors ?? DEFAULT_FRAME_ANCESTORS),
+  })) {
     res.setHeader(name, value);
   }
   if (services.tls) {
@@ -230,11 +242,12 @@ async function api(
     // ask the server, which does not allow it
     throw new HttpError(403, 'Changes are accepted from the dashboard’s pages only');
   }
-  await auth.require(req, apiRole(method, route));
+  const { user } = await auth.require(req, apiRole(method, route));
 
   if (resource === 'panels' && id === undefined) {
     if (method === 'GET') {
-      return sendJson(res, 200, await store.list());
+      // Only those their role sees
+      return sendJson(res, 200, (await store.list()).filter((panel) => maySeePanel(user.role, panel)));
     }
     if (method === 'POST') {
       return sendJson(res, 201, await store.create(await readJson(req), author));
@@ -242,7 +255,8 @@ async function api(
   } else if (resource === 'panels' && id && rest.length === 0) {
     if (method === 'GET') {
       const panel = await store.get(id);
-      if (!panel) {
+      // Not theirs to see: as if there were none
+      if (!panel || !maySeePanel(user.role, panel)) {
         throw new HttpError(404, `No panel "${id}"`);
       }
       return sendJson(res, 200, panel);

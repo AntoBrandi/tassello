@@ -9,6 +9,7 @@
 
 import { Group, Matrix4, MeshLambertMaterial, Quaternion, type Object3D, type Ray, Vector3 } from 'three';
 
+import { isNotAllowed } from '../../../../shared/auth.ts';
 import { Display, normalizeFrame, type DisplayContext, type MenuItem, type PickEvent, type PickHandlers } from '../display.ts';
 import {
   autoComplete,
@@ -363,6 +364,11 @@ export class InteractiveMarkersDisplay extends Display<InteractiveMarkersDisplay
           this.asking = false;
           this.sequence.stop();
           this.serverError = errorText(e);
+          if (isNotAllowed(this.serverError)) {
+            // Asking again changes nothing: the role is said, not retried
+            this.setStatus('error', this.serverError);
+            return;
+          }
           this.updateStatus();
           this.retryTimer = window.setTimeout(() => this.ask(), RETRY_MS);
         },

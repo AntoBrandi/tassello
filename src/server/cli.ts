@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import { DEFAULT_IDLE_HOURS } from './auth.ts';
 import { createPlugin } from './create_plugin.ts';
 import { usersCommand, USERS_USAGE } from './users_cli.ts';
-import { errorMessage, tasselloRoot } from './util.ts';
+import { checkFrameAncestors, DEFAULT_FRAME_ANCESTORS, errorMessage, tasselloRoot } from './util.ts';
 
 const USAGE = `Usage: tassello [options] [--ros-args ...]
        tassello create-plugin <folder> [--name <package name>]
@@ -41,6 +41,14 @@ Options:
                             (${DEFAULT_IDLE_HOURS})
       --tls-cert <file>     serves HTTPS with this certificate (PEM)...
       --tls-key <file>      ...and its private key (PEM)
+      --anonymous-role <role>
+                            viewer: anyone who has not signed in watches, as a
+                            viewer (kiosk screens); signing in operates. none:
+                            everyone signs in (none)
+      --frame-ancestors <list>
+                            the sites whose pages may show the dashboard in a
+                            frame, e.g. 'self' https://ops.example.com (a Web
+                            Page widget of another Tassello). ('none')
   -v, --version
   -h, --help
 
@@ -95,6 +103,8 @@ async function main(argv: string[]): Promise<void> {
       'session-idle': { type: 'string', default: String(DEFAULT_IDLE_HOURS) },
       'tls-cert': { type: 'string' },
       'tls-key': { type: 'string' },
+      'anonymous-role': { type: 'string', default: 'none' },
+      'frame-ancestors': { type: 'string', default: DEFAULT_FRAME_ANCESTORS },
       version: { type: 'boolean', short: 'v' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -110,6 +120,15 @@ async function main(argv: string[]): Promise<void> {
   }
   const port = Number(values.port);
   const idle = Number(values['session-idle']);
+  const anonymous = values['anonymous-role'];
+  let frameAncestors = DEFAULT_FRAME_ANCESTORS;
+  try {
+    frameAncestors = checkFrameAncestors(values['frame-ancestors']);
+  } catch (e) {
+    console.error(errorMessage(e));
+    process.exitCode = 2;
+    return;
+  }
   const problem =
     positionals.length > 0
       ? `Unexpected argument "${positionals[0]}"`
@@ -119,7 +138,9 @@ async function main(argv: string[]): Promise<void> {
           ? `Invalid --session-idle "${values['session-idle']}": hours, more than 0`
           : (values['tls-cert'] === undefined) !== (values['tls-key'] === undefined)
             ? '--tls-cert and --tls-key go together'
-            : null;
+            : anonymous !== 'viewer' && anonymous !== 'none'
+              ? `Invalid --anonymous-role "${anonymous}": viewer or none`
+              : null;
   if (problem) {
     console.error(problem);
     console.error(USAGE);
@@ -141,6 +162,8 @@ async function main(argv: string[]): Promise<void> {
     auth: !values['no-auth'],
     authDir: values['auth-dir'] && path.resolve(values['auth-dir']),
     sessionIdleHours: idle,
+    anonymousRole: anonymous === 'viewer' ? 'viewer' : null,
+    frameAncestors,
     tls:
       values['tls-cert'] && values['tls-key']
         ? { cert: path.resolve(values['tls-cert']), key: path.resolve(values['tls-key']) }

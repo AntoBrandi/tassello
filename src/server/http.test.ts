@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
 import { Auth } from './auth.ts';
 import { apiRole, createRequestHandler } from './http.ts';
+import { checkFrameAncestors, frameHeaders } from './util.ts';
 import { PanelStore } from './panels.ts';
 import type { PluginHost } from './plugins.ts';
 import { UserStore } from './users.ts';
@@ -80,9 +81,32 @@ test('the server: its page for anyone, the API for its users by role, never fram
     assert.equal((await put(admin, {})).status, 403);
     assert.equal((await put(admin)).status, 200);
     assert.equal((await store.get('drive'))?.name, 'Drive');
+
+    // Panels for operators: hidden from viewers, as if there were none
+    await store.save('arm', { name: 'Arm', minRole: 'operator' }, null);
+    const list = async (cookie: string) =>
+      ((await (await fetch(`${url}/api/panels`, { headers: { Cookie: cookie } })).json()) as { id: string }[]).map((p) => p.id);
+    assert.deepEqual(await list(viewer), ['drive']);
+    assert.deepEqual(await list(admin), ['arm', 'drive']);
+    assert.equal((await fetch(`${url}/api/panels/arm`, { headers: { Cookie: viewer } })).status, 404);
+    assert.equal((await fetch(`${url}/api/panels/arm`, { headers: { Cookie: admin } })).status, 200);
   } finally {
     server.close();
     await auth.stop();
     await rm(dir, { recursive: true });
   }
+});
+
+test('--frame-ancestors: nobody by default, else the sites given, without X-Frame-Options', () => {
+  assert.deepEqual(frameHeaders("'none'"), { 'Content-Security-Policy': "frame-ancestors 'none'", 'X-Frame-Options': 'DENY' });
+  assert.deepEqual(frameHeaders("'self' https://ops.example.com"), {
+    'Content-Security-Policy': "frame-ancestors 'self' https://ops.example.com",
+  });
+  assert.equal(checkFrameAncestors(" 'self'   https://*.example.com:8443 "), "'self' https://*.example.com:8443");
+  assert.equal(checkFrameAncestors("'none'"), "'none'");
+  assert.throws(() => checkFrameAncestors(''), /empty/);
+  // No other directive slipped in
+  assert.throws(() => checkFrameAncestors("'self'; script-src *"), /is not/);
+  assert.throws(() => checkFrameAncestors("'unsafe-inline'"), /is not/);
+  assert.throws(() => checkFrameAncestors("'none' 'self'"), /is not/);
 });

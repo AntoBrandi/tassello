@@ -10,6 +10,11 @@ import { notify } from './notifications.tsx';
 import { loadPlugins } from './plugins.ts';
 import './styles.css';
 
+// A guest (--anonymous-role viewer) chose to sign in: ?signin
+function wantsSignIn(): boolean {
+  return new URLSearchParams(location.search).has('signin');
+}
+
 const root = createRoot(document.getElementById('root')!);
 const status = await loadAuth().catch(() => null);
 
@@ -19,7 +24,7 @@ if (!status) {
       <div className="login-card">The robot cannot be reached: reload the page when it is.</div>
     </div>,
   );
-} else if (status.enabled && (!status.user || status.mustChangePassword)) {
+} else if (status.enabled && (!status.user || status.mustChangePassword || (status.anonymous && wantsSignIn()))) {
   root.render(
     <StrictMode>
       <LoginPage status={status} />

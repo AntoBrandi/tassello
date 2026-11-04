@@ -51,7 +51,25 @@ export function may(role: Role): boolean {
 
 // Loads the page again: the sign-in, or the dashboard as who they are now
 function restart(): void {
-  location.reload();
+  const url = new URL(location.href);
+  if (url.searchParams.has('signin')) {
+    url.searchParams.delete('signin');
+    location.replace(url);
+  } else {
+    location.reload();
+  }
+}
+
+// Watching without signing in (--anonymous-role viewer)
+export function isGuest(): boolean {
+  return status?.anonymous ?? false;
+}
+
+// The sign-in page, for a guest
+export function signInUrl(): string {
+  const url = new URL(location.href);
+  url.searchParams.set('signin', '');
+  return url.toString();
 }
 
 export const auth = {

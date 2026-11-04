@@ -25,7 +25,7 @@ interface Setup {
 // /api/drive (an operator's)
 async function withAuth(
   run: (setup: Setup) => Promise<void>,
-  options: { enabled?: boolean; idleHours?: number; dir?: string } = {},
+  options: { enabled?: boolean; idleHours?: number; dir?: string; anonymousRole?: 'viewer' | null } = {},
 ): Promise<void> {
   const dir = options.dir ?? (await mkdtemp(path.join(tmpdir(), 'tassello-auth-')));
   const warnings: string[] = [];
@@ -40,6 +40,7 @@ async function withAuth(
     idleHours: options.idleHours ?? 12,
     hostname: 'robot',
     logger,
+    anonymousRole: options.anonymousRole,
   });
   await auth.init();
   const server: Server = createServer((req, res) => {
@@ -249,6 +250,34 @@ test('changes come from the dashboard’s pages only', async () => {
     assert.equal(response.status, 403);
     assert.equal(response.headers.get('set-cookie'), null);
   });
+});
+
+test('--anonymous-role viewer: watching without signing in, operating signed in', async () => {
+  await withAuth(
+    async ({ url, users }) => {
+      await users.add({ username: 'ada', role: 'operator', password: PASSWORD });
+      const guest = new Browser(url);
+      const { body } = await guest.call('GET', '/api/auth/session');
+      assert.equal(body.anonymous, true);
+      assert.equal(body.user.role, 'viewer');
+      assert.equal((await guest.call('GET', '/api/watch')).status, 200);
+      const refused = await guest.call('GET', '/api/drive');
+      assert.equal(refused.status, 403);
+      // A guest has no password to change
+      assert.equal((await guest.call('POST', '/api/auth/password', { current: 'x', password: 'y' })).status, 401);
+
+      const ada = new Browser(url);
+      await ada.login('ada');
+      const signedIn = (await ada.call('GET', '/api/auth/session')).body;
+      assert.equal(signedIn.anonymous, false);
+      assert.equal(signedIn.user.username, 'ada');
+      assert.equal((await ada.call('GET', '/api/drive')).status, 200);
+      // Signed out: a guest again
+      await ada.call('POST', '/api/auth/logout');
+      assert.equal((await ada.call('GET', '/api/auth/session')).body.anonymous, true);
+    },
+    { anonymousRole: 'viewer' },
+  );
 });
 
 test('signing out ends the session', async () => {

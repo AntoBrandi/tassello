@@ -6,6 +6,11 @@
 // lay them out on a fixed number of columns (see src/client/board/layouts.ts):
 // automatically from the desktop layout, unless the panel has a layout of its
 // own for the device.
+//
+// minRole: who sees the panel (src/shared/auth.ts), the server enforcing it;
+// administrators see them all.
+
+import { isRole, roleAtLeast, type Role } from './auth.ts';
 
 export interface WidgetInstance {
   id: string;
@@ -77,11 +82,25 @@ export interface Panel {
   layouts?: Partial<Record<SmallDevice, DeviceLayout>>;
   // Its status widgets; none if missing
   statusBar?: StatusWidgetInstance[];
+  // The lowest role that sees it; 'viewer' if missing (panels saved before)
+  minRole: Role;
 }
 
 export interface PanelSummary {
   id: string;
   name: string;
+  minRole: Role;
+}
+
+// Panels made in the page are for administrators until they say otherwise
+export const NEW_PANEL_ROLE: Role = 'admin';
+
+export function panelRole(value: unknown): Role {
+  return isRole(value) ? value : 'viewer';
+}
+
+export function maySeePanel(role: Role, panel: { minRole: Role }): boolean {
+  return roleAtLeast(role, panel.minRole);
 }
 
 export interface TopicInfo {

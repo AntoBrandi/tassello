@@ -149,3 +149,32 @@ export async function replaceFile(file: string, text: string): Promise<void> {
   }
   await fs.writeFile(file, text);
 }
+
+export const DEFAULT_FRAME_ANCESTORS = "'none'";
+
+// A CSP source list of sites whose pages may frame the dashboard: 'none',
+// 'self', or origins such as https://ops.example.com or https://*.example.com
+const FRAME_SOURCE = /^(?:'self'|https?:|https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::(?:\d{1,5}|\*))?)$/i;
+
+// Throws what is wrong with a --frame-ancestors list; else the list
+export function checkFrameAncestors(value: string): string {
+  const sources = value.trim().split(/\s+/).filter(Boolean);
+  if (sources.length === 1 && sources[0] === "'none'") {
+    return "'none'";
+  }
+  const wrong = sources.find((source) => !FRAME_SOURCE.test(source));
+  if (sources.length === 0 || wrong !== undefined) {
+    throw new Error(
+      `--frame-ancestors: ${wrong === undefined ? 'empty' : `"${wrong}" is not`} 'none', 'self' or an origin such as https://ops.example.com`,
+    );
+  }
+  return sources.join(' ');
+}
+
+// Who may frame the page: nobody unless sites are given, then those only
+// (X-Frame-Options cannot list them, so it is left out)
+export function frameHeaders(frameAncestors: string): Record<string, string> {
+  return frameAncestors === DEFAULT_FRAME_ANCESTORS
+    ? { 'Content-Security-Policy': "frame-ancestors 'none'", 'X-Frame-Options': 'DENY' }
+    : { 'Content-Security-Policy': `frame-ancestors ${frameAncestors}` };
+}
