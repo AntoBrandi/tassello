@@ -485,6 +485,7 @@ Hooks:
 | `Modal` | The page's modal dialog |
 | `Joystick` | The teleop's pad: `axes` (`'xy'`, `'x'`, `'y'`), `onMove(x, y)` in -1..1 |
 | `imageUrl(value)` | The URL of an `image` property's value |
+| `currentUser()`, `may(role)` | Optional: who signed in (`username`, `displayName`, `role`), and whether their role is at least `role`, to hide or disable what they cannot do. The server refuses it anyway, and who sees a widget is its panel's choice (*Visible to*) |
 | `*Icon` | Tassello's icons, 24×24 line drawings in the current colour |
 
 ### Styles
@@ -558,12 +559,29 @@ the plugin's widgets still load, and its requests report why it did not start.
 | `node` | The server's ROS node (rclnodejs), shared by every plugin: create publishers, subscriptions, clients on it |
 | `rclnodejs` | The rclnodejs module |
 | `logger` | Logs through the node, prefixed with the plugin's name |
-| `handle(method, (params, session) => result)` | Answers `connection.request(plugin, method, params)`. The result (or its promise) goes to the page as JSON; what it throws is the page's error |
-| `stream(name, (params, emit, session) => close)` | Opens a stream for `connection.subscribePlugin`; `emit(data)` sends it data. Returns what closes it, called when the page unsubscribes or goes away |
+| `handle(method, (params, session) => result, { role? })` | Answers `connection.request(plugin, method, params)`. The result (or its promise) goes to the page as JSON; what it throws is the page's error. `role`: who may call it, `'operator'` if not given |
+| `stream(name, (params, emit, session) => close, { role? })` | Opens a stream for `connection.subscribePlugin`; `emit(data)` sends it data. Returns what closes it, called when the page unsubscribes or goes away. `role`: who may open it, `'viewer'` if not given |
 | `commandWidget(type, { property, fallback })` | Widgets of this type run a bash command of their config, like the button (see below) |
 | `onShutdown(callback)` | Called when the server stops, before the node is destroyed |
 
-`session.id` tells the pages apart: one per open page.
+`session.id` tells the pages apart: one per open page. `session.user` is who signed in on it
+(`username`, `displayName`, `role`; the roles are `'viewer'`, `'operator'`, `'admin'`, each
+allowed what those before it are).
+
+**Roles.** Each handler declares who may use it, and the server refuses the others before calling
+it, with *Not allowed for your role: it takes an operator*, which the page shows as the request's
+error or the stream's status. A request changes something by default, so it is an operator's; a
+stream only watches, so it is a viewer's. Say so when it is otherwise:
+
+```js
+ctx.handle('battery', () => readBattery(), { role: 'viewer' });  // only reads
+ctx.handle('dock', () => dock());                                 // an operator's
+ctx.handle('calibrate', () => calibrate(), { role: 'admin' });    // the robot's system
+ctx.stream('raw-can', streamCan, { role: 'operator' });
+```
+
+A role misspelled is taken as `'admin'`. For finer checks, by the params, refuse in the handler
+with `session.user.role`.
 
 The page is trusted to be Tassello's, not to be right: check the params.
 

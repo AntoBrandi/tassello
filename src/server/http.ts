@@ -32,6 +32,11 @@
 //     GET  download?path=[&path=...]    a file, or folders and files as a .tar.gz
 //     GET  view?path=                   an image, PGM and PPM ones as PNG
 //   GET    /plugins/<name>/<path>       a file of the plugin's client folder
+//   /api/auth/...                       signing in and the users: see auth.ts
+//
+// With sign-in on, everything but the page itself and /api/auth needs a
+// session: watching (GET) a viewer's, the robot's folders and files an
+// operator's, changing the panels and the files an administrator's.
 
 import { spawn } from 'node:child_process';
 import { createReadStream, promises as fs, type Stats } from 'node:fs';
@@ -42,9 +47,11 @@ import { gzip } from 'node:zlib';
 
 import sharp from 'sharp';
 
+import type { Role } from '../shared/auth.ts';
 import type { FsConflict, FsResult } from '../shared/file_manager.ts';
-import type { TopicInfo } from '../shared/panel.ts';
+import { maySeePanel, type TopicInfo } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
+import type { Auth } from './auth.ts';
 import { listDisks, spaceOf } from './disks.ts';
 import {
   analyzeFolder,
@@ -77,7 +84,15 @@ import {
 import { decodeNetpbm, NETPBM_EXTENSIONS } from './netpbm.ts';
 import { HttpError, type PanelStore } from './panels.ts';
 import type { PluginHost } from './plugins.ts';
-import { errorMessage, packageShareDirectory, type Logger } from './util.ts';
+import {
+  DEFAULT_FRAME_ANCESTORS,
+  errorMessage,
+  frameHeaders,
+  isSecret,
+  packageShareDirectory,
+  secretsUnder,
+  type Logger,
+} from './util.ts';
 
 export interface HttpServices {
   store: PanelStore;
@@ -87,6 +102,11 @@ export interface HttpServices {
   // Where uploaded images and behavior trees are kept
   uploadsDir: string;
   plugins: PluginHost;
+  auth: Auth;
+  // Served over HTTPS
+  tls: boolean;
+  // checkFrameAncestors'; DEFAULT_FRAME_ANCESTORS if not given
+  frameAncestors?: string;
   logger: Logger;
 }
 
@@ -132,6 +152,15 @@ const SANDBOXED = {
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
   'X-Content-Type-Options': 'nosniff',
 };
+// Of every response: never read by another site's page, and never in another
+// site's frame (its buttons clicked through a decoy) but those of
+// --frame-ancestors (frameHeaders)
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'same-origin',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+};
 
 export function createRequestHandler(services: HttpServices): RequestListener {
   return (req, res) => {
@@ -145,17 +174,30 @@ export function createRequestHandler(services: HttpServices): RequestListener {
       if (res.headersSent) {
         res.destroy();
       } else {
-        sendJson(res, status, { error: errorMessage(e) });
+        sendJson(res, status, { error: errorMessage(e) }, e instanceof HttpError ? e.headers : {});
       }
     });
   };
 }
 
 async function handle(services: HttpServices, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  for (const [name, value] of Object.entries({
+    ...SECURITY_HEADERS,
+    ...frameHeaders(services.frameAncestors ?? DEFAULT_FRAME_ANCESTORS),
+  })) {
+    res.setHeader(name, value);
+  }
+  if (services.tls) {
+    // A day: a robot whose HTTPS is turned off again is reachable tomorrow
+    res.setHeader('Strict-Transport-Security', 'max-age=86400');
+  }
   const { pathname } = new URL(req.url ?? '/', 'http://localhost');
-  if (pathname === '/api' || pathname.startsWith('/api/')) {
+  if (pathname === '/api/auth' || pathname.startsWith('/api/auth/')) {
+    await services.auth.handle(req, res, pathname.split('/').slice(3).map(decodeURIComponent));
+  } else if (pathname === '/api' || pathname.startsWith('/api/')) {
     await api(services, req, res, pathname.split('/').slice(2).map(decodeURIComponent));
   } else if (pathname.startsWith('/plugins/')) {
+    await services.auth.require(req, 'viewer');
     const [name, ...rest] = pathname.split('/').slice(2).map(decodeURIComponent);
     const dir = name ? services.plugins.clientDir(name) : null;
     if (!dir) {
@@ -169,8 +211,24 @@ async function handle(services: HttpServices, req: IncomingMessage, res: ServerR
   }
 }
 
+// The role a request of the API needs
+export function apiRole(method: string, route: string[]): Role {
+  const [resource, id] = route;
+  const reading = method === 'GET' || method === 'HEAD';
+  if (resource === 'fs') {
+    return reading ? 'operator' : 'admin';
+  }
+  if (resource === 'files' && id === 'list') {
+    return 'operator';
+  }
+  if (resource === 'uploads' && !reading) {
+    return 'operator';
+  }
+  return reading ? 'viewer' : 'admin';
+}
+
 async function api(
-  { store, topics, uploadsDir, plugins, logger }: HttpServices,
+  { store, topics, uploadsDir, plugins, auth, logger }: HttpServices,
   req: IncomingMessage,
   res: ServerResponse,
   route: string[],
@@ -179,10 +237,17 @@ async function api(
   const author = typeof origin === 'string' && origin ? origin : null;
   const [resource, id, ...rest] = route;
   const method = req.method ?? 'GET';
+  if (method !== 'GET' && method !== 'HEAD' && typeof origin !== 'string') {
+    // Another site's page cannot send the header: its browser would first
+    // ask the server, which does not allow it
+    throw new HttpError(403, 'Changes are accepted from the dashboard’s pages only');
+  }
+  const { user } = await auth.require(req, apiRole(method, route));
 
   if (resource === 'panels' && id === undefined) {
     if (method === 'GET') {
-      return sendJson(res, 200, await store.list());
+      // Only those their role sees
+      return sendJson(res, 200, (await store.list()).filter((panel) => maySeePanel(user.role, panel)));
     }
     if (method === 'POST') {
       return sendJson(res, 201, await store.create(await readJson(req), author));
@@ -190,7 +255,8 @@ async function api(
   } else if (resource === 'panels' && id && rest.length === 0) {
     if (method === 'GET') {
       const panel = await store.get(id);
-      if (!panel) {
+      // Not theirs to see: as if there were none
+      if (!panel || !maySeePanel(user.role, panel)) {
         throw new HttpError(404, `No panel "${id}"`);
       }
       return sendJson(res, 200, panel);
@@ -240,9 +306,10 @@ async function api(
   throw new HttpError(405, `${method} not allowed on ${req.url}`);
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
+function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   const text = JSON.stringify(body);
   res.writeHead(status, {
+    ...headers,
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(text),
     'Cache-Control': 'no-store',
@@ -268,6 +335,14 @@ async function readJson(req: IncomingMessage, limit = MAX_BODY_BYTES): Promise<u
 }
 
 let analyses = 0;
+
+// The users' passwords are never read for a page, by anyone
+async function refuseSecret(file: string): Promise<string> {
+  if (await isSecret(file)) {
+    throw new HttpError(403, `${file} is kept from the dashboard: it holds the users’ passwords`);
+  }
+  return file;
+}
 
 // The file manager's API (see file_manager.ts): route is the method and the
 // action, "GET list"
@@ -301,7 +376,7 @@ async function fsApi(req: IncomingMessage, res: ServerResponse, route: string, l
       }
     }
     case 'GET text': {
-      const text = await readText(resolvePath(query.get('path')), query.get('stamp'));
+      const text = await readText(await refuseSecret(resolvePath(query.get('path'))), query.get('stamp'));
       return text ? sendJson(res, 200, text) : sendNothing(res);
     }
     case 'PUT text': {
@@ -339,7 +414,7 @@ async function fsApi(req: IncomingMessage, res: ServerResponse, route: string, l
       return sendJson(res, 201, { paths: [target], conflicts: [] } satisfies FsResult);
     }
     case 'GET download': {
-      const files = query.getAll('path').map((value) => resolvePath(value));
+      const files = await Promise.all(query.getAll('path').map((value) => refuseSecret(resolvePath(value))));
       if (files.length === 0) {
         throw new HttpError(400, 'No path');
       }
@@ -352,7 +427,7 @@ async function fsApi(req: IncomingMessage, res: ServerResponse, route: string, l
       return stat?.isFile() ? sendDownload(res, files[0], stat) : sendArchive(res, files, logger);
     }
     case 'GET view': {
-      const file = resolvePath(query.get('path'));
+      const file = await refuseSecret(resolvePath(query.get('path')));
       const extension = path.extname(file).toLowerCase();
       if (!NETPBM_EXTENSIONS.has(extension)) {
         if (!IMAGE_EXTENSIONS.has(extension) && extension !== '.ico') {
@@ -460,7 +535,7 @@ function sendDownload(res: ServerResponse, file: string, stat: Stats): void {
 async function sendArchive(res: ServerResponse, files: string[], logger: Logger): Promise<void> {
   const folder = path.dirname(files[0]);
   const name = files.length === 1 ? path.basename(files[0]) : `${path.basename(folder) || 'root'}-${files.length}-items`;
-  const tar = spawn('tar', archiveArguments(files), { stdio: ['ignore', 'pipe', 'pipe'] });
+  const tar = spawn('tar', archiveArguments(files, secretsUnder(folder)), { stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise<void>((resolve, reject) => {
     tar.once('spawn', resolve);
     tar.once('error', (e) => reject(new HttpError(500, `Cannot archive: tar ${(e as NodeJS.ErrnoException).code ?? errorMessage(e)}`)));

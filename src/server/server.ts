@@ -5,17 +5,23 @@
 //
 // The port and the panels directory are also ROS parameters, whose defaults
 // are the options given: --ros-args -p port:=8000 -p panels_dir:=<dir>
+//
+// Who may do what is auth.ts's: a page's WebSocket opens only for a signed-in
+// user, from the dashboard's own pages, and each of its messages needs a role
+// (src/shared/auth.ts).
 
-import { existsSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { existsSync, readFileSync } from 'node:fs';
+import { createServer, type IncomingMessage } from 'node:http';
+import { createServer as createTlsServer } from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 
 import rclnodejs from 'rclnodejs';
 import { WebSocketServer } from 'ws';
 
-import type { ServerMessage } from '../shared/protocol.ts';
+import type { Role } from '../shared/auth.ts';
 import { Actions } from './actions.ts';
+import { Auth, type Identity } from './auth.ts';
 import { Arm } from './arm.ts';
 import { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import { BehaviorTrees } from './behavior_trees.ts';
@@ -26,7 +32,7 @@ import { Interfaces } from './interfaces.ts';
 import { makeMessageCode } from './message_code.ts';
 import { Networking } from './networking.ts';
 import { Overlays } from './overlays.ts';
-import { PanelStore } from './panels.ts';
+import { PanelRoles, PanelStore, seesPanel } from './panels.ts';
 import { Parameters } from './parameters.ts';
 import { Paths } from './paths.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
@@ -42,11 +48,12 @@ import { SystemdServices } from './systemd.ts';
 import { Teleop } from './teleop.ts';
 import { Terminals } from './terminals.ts';
 import { Tf } from './tf.ts';
+import { UserStore } from './users.ts';
 import { TopicMonitors } from './topic_monitor.ts';
 import { TopicPublishing } from './topic_publishing.ts';
 import { Topics } from './topics.ts';
 import { TwistMuxes } from './twist_mux.ts';
-import { defaultPanelsDirectory, errorMessage, ownPage, tasselloRoot } from './util.ts';
+import { defaultAuthDirectory, defaultPanelsDirectory, errorMessage, keepSecret, tasselloRoot } from './util.ts';
 
 export interface ServerOptions {
   port: number;
@@ -60,6 +67,18 @@ export interface ServerOptions {
   // Also load the plugins found in the ament index and in node_modules
   discoverPlugins: boolean;
   nodeName: string;
+  // Sign-in, on unless false
+  auth: boolean;
+  // The users and the sessions, ~/.local/share/tassello/auth if not given
+  authDir?: string;
+  // Hours without a request or a message after which a session ends
+  sessionIdleHours: number;
+  // HTTPS with this certificate and its key (PEM files), else HTTP
+  tls?: { cert: string; key: string };
+  // Who has not signed in: a viewer, or nobody (null, the default)
+  anonymousRole?: 'viewer' | null;
+  // The sites that may frame the page (util.ts checkFrameAncestors)
+  frameAncestors?: string;
 }
 
 // Connections that miss a ping for this long are dropped: a page whose
@@ -149,6 +168,32 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const rosbags = new Rosbags(ros, logger);
   const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir, rosbags);
   const behaviorTreeFiles = new BehaviorTreeFiles(uploadsDir, logger);
+  const authDir = options.authDir ?? defaultAuthDirectory();
+  const auth = new Auth({
+    enabled: options.auth,
+    users: new UserStore(path.join(authDir, 'users.json')),
+    dir: authDir,
+    port,
+    tls: options.tls !== undefined,
+    idleHours: options.sessionIdleHours,
+    anonymousRole: options.anonymousRole ?? null,
+    hostname: os.hostname(),
+    logger,
+  });
+  await auth.init();
+  // The password hashes: never in a page, whatever reads files for one
+  keepSecret(authDir);
+  if (auth.enabled) {
+    logger.info(`Users in ${authDir}`);
+    if (options.anonymousRole === 'viewer') {
+      logger.warn('--anonymous-role viewer: anyone who opens the page watches the robot without signing in');
+    }
+  } else {
+    logger.warn('Sign-in is turned off (--no-auth): anyone who opens the page can do anything');
+  }
+  if (!options.tls && auth.enabled) {
+    logger.warn('Served over HTTP: passwords and sessions cross the network readable, use HTTPS (--tls-cert, --tls-key) or a proxy');
+  }
   const host = new PluginHost(plugins);
   await host.activate({
     node,
@@ -158,32 +203,85 @@ export async function startServer(options: ServerOptions): Promise<void> {
   });
   const sessions = new Set<Session>();
 
-  function broadcast(message: ServerMessage): void {
+  // Who sees each panel: a panel's changes and its commands' states reach
+  // only the pages of those
+  const panelRoles = new PanelRoles(store);
+  await panelRoles.load();
+  store.on('changed', (id, deleted, origin, { before, after }) => {
     for (const session of sessions) {
-      session.send(message);
+      const role = session.user.role;
+      if (seesPanel(role, after)) {
+        session.send({ type: 'panels.changed', id, deleted, origin });
+      } else if (before !== null && seesPanel(role, before)) {
+        // Hidden from them now: gone, as far as they know
+        session.send({ type: 'panels.changed', id, deleted: true, origin });
+      }
     }
-  }
-  store.on('changed', (id, deleted, origin) => broadcast({ type: 'panels.changed', id, deleted, origin }));
-  commands.on('state', (state) => broadcast({ type: 'command', state }));
+  });
+  commands.on('state', (state) => {
+    const send = (minRole: Role | null) => {
+      for (const session of sessions) {
+        if (seesPanel(session.user.role, minRole)) {
+          session.send({ type: 'command', state });
+        }
+      }
+    };
+    const known = panelRoles.known(state.panelId);
+    if (known === undefined) {
+      void panelRoles.of(state.panelId).then(send);
+    } else {
+      send(known);
+    }
+  });
 
-  const server = createServer(
-    createRequestHandler({
-      store,
-      wwwDir,
-      logger,
-      plugins: host,
-      uploadsDir,
-      topics: () =>
-        node
-          .getTopicNamesAndTypes()
-          .map(({ name, types }) => ({ name, types }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-    }),
-  );
+  const handler = createRequestHandler({
+    store,
+    wwwDir,
+    logger,
+    plugins: host,
+    auth,
+    tls: options.tls !== undefined,
+    frameAncestors: options.frameAncestors,
+    uploadsDir,
+    topics: () =>
+      node
+        .getTopicNamesAndTypes()
+        .map(({ name, types }) => ({ name, types }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+  });
+  const server = options.tls
+    ? createTlsServer({ cert: readFileSync(options.tls.cert), key: readFileSync(options.tls.key) }, handler)
+    : createServer(handler);
 
+  // Who each connection is, from its upgrade request
+  const identities = new WeakMap<IncomingMessage, Identity>();
   // The pages' messages are small: velocities, subscriptions
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1024 * 1024 });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    maxPayload: 1024 * 1024,
+    verifyClient: ({ req }, done) => {
+      auth.verifyUpgrade(req).then(
+        (result) => {
+          if ('user' in result) {
+            identities.set(req, result);
+            done(true);
+          } else {
+            done(false, result.status, result.reason);
+          }
+        },
+        () => done(false, 500),
+      );
+    },
+  });
+  // Pages connected, with who they are
+  const signedIn = new Map<Session, Identity>();
   wss.on('connection', (ws, req) => {
+    const identity = identities.get(req);
+    if (!identity) {
+      ws.close(4401, 'Sign in first');
+      return;
+    }
     const session = new Session(
       ws,
       {
@@ -214,12 +312,15 @@ export async function startServer(options: ServerOptions): Promise<void> {
         rosbags,
         system,
         plugins: host,
+        panelRoles,
         hostname: os.hostname(),
       },
-      ownPage(req.headers),
+      identity.user,
+      () => identity.session && auth.touch(identity.session),
       req.socket.localAddress ?? null,
     );
     sessions.add(session);
+    signedIn.set(session, identity);
     logger.debug(`Page connected from ${req.socket.remoteAddress}`);
     let alive = true;
     ws.on('pong', () => {
@@ -236,12 +337,33 @@ export async function startServer(options: ServerOptions): Promise<void> {
     }, HEARTBEAT_MS);
     ws.on('close', () => {
       clearInterval(heartbeat);
+      signedIn.delete(session);
       if (sessions.delete(session)) {
         session.close();
       }
     });
     ws.on('error', (e) => logger.warn(`WebSocket error: ${errorMessage(e)}`));
   });
+
+  // Signed out, or no longer allowed what they were: their pages connect again
+  // (or go back to the sign-in), as who they are now
+  async function recheck(only: string | null): Promise<void> {
+    for (const [session, identity] of signedIn) {
+      if (!identity.session || (only !== null && identity.user.username !== only)) {
+        continue;
+      }
+      const user = await auth.lookup(identity.session);
+      if (!user) {
+        session.end(4401, 'Signed out');
+      } else if (user.role !== identity.user.role) {
+        session.end(4403, 'Role changed');
+      }
+    }
+  }
+  auth.on('changed', (username) => void recheck(username));
+  // Sessions that expired meanwhile
+  const sweep = setInterval(() => void recheck(null), 60_000);
+  sweep.unref();
 
   let stopping = false;
   function shutdown(code: number): void {
@@ -254,6 +376,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     terminals.stopAll();
     networking.stopAll();
     system.stop();
+    clearInterval(sweep);
     // Stops the robot if a page was driving it, while the node still runs
     for (const session of sessions) {
       session.close();
@@ -271,6 +394,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     void Promise.all([
       host.shutdown(logger),
       rosbags.stopAll(),
+      auth.stop(),
       new Promise((resolve) => setTimeout(resolve, 200)),
     ]).finally(() => {
       node.destroy();
@@ -290,5 +414,5 @@ export async function startServer(options: ServerOptions): Promise<void> {
   wss.on('error', () => {});
   node.spin();
   await new Promise<void>((resolve) => server.listen(port, options.host, resolve));
-  logger.info(`Dashboard at http://${os.hostname()}:${port}`);
+  logger.info(`Dashboard at ${options.tls ? 'https' : 'http'}://${os.hostname()}:${port}`);
 }

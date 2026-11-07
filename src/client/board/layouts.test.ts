@@ -14,6 +14,7 @@ function widget(id: string, x: number, y: number, w: number, h: number): WidgetI
 const panel: Panel = {
   id: 'p',
   name: 'P',
+  minRole: 'viewer',
   widgets: [
     widget('button', 0, 10, 3, 1),
     widget('map', 0, 0, 12, 10),

@@ -348,3 +348,14 @@ test('analyses sum folders up, by entry and by type', async () => {
     await rejectsWith(analyzeFolder(path.join(root, 'notes')), 400);
   });
 });
+
+test('archiveArguments leaves out the folders asked', () => {
+  assert.deepEqual(archiveArguments(['/home/robot/.local'], ['.local/share/tassello/auth']), [
+    '-czf',
+    '-',
+    '--exclude=./.local/share/tassello/auth',
+    '-C',
+    '/home/robot',
+    './.local',
+  ]);
+});

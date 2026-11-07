@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,6 +27,13 @@ export function packageShareDirectory(name: string): string | null {
 export function defaultPanelsDirectory(): string {
   const data = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
   return path.join(data, 'tassello', 'panels');
+}
+
+// The users and their sessions: apart from the panels, which are copied
+// between robots
+export function defaultAuthDirectory(): string {
+  const data = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+  return path.join(data, 'tassello', 'auth');
 }
 
 // Tassello's package folder, where its package.json is: the server runs from
@@ -60,6 +67,34 @@ export function ownPage(headers: IncomingHttpHeaders): boolean {
   const forwarded = headers['x-forwarded-host'];
   const proxied = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0].trim();
   return [headers.host, proxied].some((reached) => reached?.toLowerCase() === host);
+}
+
+// Folders whose files the dashboard never reads for a page, by their real
+// paths: the users' (their password hashes), which even an operator's File
+// Manager must not hand over
+const secretFolders: string[] = [];
+
+export function keepSecret(folder: string): void {
+  let real = path.resolve(folder);
+  try {
+    real = realpathSync(real);
+  } catch {
+    // Not made yet: as named
+  }
+  secretFolders.push(real);
+}
+
+// The file, or what its links lead to, is in a secret folder
+export async function isSecret(file: string): Promise<boolean> {
+  const real = await fs.realpath(file).catch(() => path.resolve(file));
+  return secretFolders.some((folder) => real === folder || real.startsWith(folder + path.sep));
+}
+
+// The secret folders in folder, relative to it: what an archive of it leaves out
+export function secretsUnder(folder: string): string[] {
+  const base = path.resolve(folder);
+  const prefix = base === path.sep ? base : base + path.sep;
+  return secretFolders.filter((secret) => secret.startsWith(prefix)).map((secret) => path.relative(base, secret));
 }
 
 export function errorMessage(e: unknown): string {
@@ -113,4 +148,33 @@ export async function replaceFile(file: string, text: string): Promise<void> {
     }
   }
   await fs.writeFile(file, text);
+}
+
+export const DEFAULT_FRAME_ANCESTORS = "'none'";
+
+// A CSP source list of sites whose pages may frame the dashboard: 'none',
+// 'self', or origins such as https://ops.example.com or https://*.example.com
+const FRAME_SOURCE = /^(?:'self'|https?:|https?:\/\/(?:\*\.)?[a-z0-9.-]+(?::(?:\d{1,5}|\*))?)$/i;
+
+// Throws what is wrong with a --frame-ancestors list; else the list
+export function checkFrameAncestors(value: string): string {
+  const sources = value.trim().split(/\s+/).filter(Boolean);
+  if (sources.length === 1 && sources[0] === "'none'") {
+    return "'none'";
+  }
+  const wrong = sources.find((source) => !FRAME_SOURCE.test(source));
+  if (sources.length === 0 || wrong !== undefined) {
+    throw new Error(
+      `--frame-ancestors: ${wrong === undefined ? 'empty' : `"${wrong}" is not`} 'none', 'self' or an origin such as https://ops.example.com`,
+    );
+  }
+  return sources.join(' ');
+}
+
+// Who may frame the page: nobody unless sites are given, then those only
+// (X-Frame-Options cannot list them, so it is left out)
+export function frameHeaders(frameAncestors: string): Record<string, string> {
+  return frameAncestors === DEFAULT_FRAME_ANCESTORS
+    ? { 'Content-Security-Policy': "frame-ancestors 'none'", 'X-Frame-Options': 'DENY' }
+    : { 'Content-Security-Policy': `frame-ancestors ${frameAncestors}` };
 }

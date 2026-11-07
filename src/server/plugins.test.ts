@@ -110,6 +110,10 @@ test('the host activates the server sides and dispatches to them', async () => {
         activate(ctx) {
           ctx.handle('echo', (params, session) => ({ params, session: session.id, plugin: ctx.name }));
           ctx.handle('fail', () => { throw new Error('no'); });
+          ctx.handle('look', () => 'seen', { role: 'viewer' });
+          ctx.handle('wipe', () => 'wiped', { role: 'admin' });
+          ctx.handle('typo', () => 'typo', { role: 'viewers' });
+          ctx.stream('secret', (params, emit) => emit('s'), { role: 'operator' });
           ctx.stream('count', (params, emit) => { emit(params.from); emit(params.from + 1); return () => emit('closed'); });
           ctx.commandWidget('good.runner', { property: 'command' });
         },
@@ -133,7 +137,7 @@ test('the host activates the server sides and dispatches to them', async () => {
     assert.equal(host.info()[0].error, null);
     assert.match(host.info()[1].error ?? '', /no activate/);
 
-    const session = { id: 'page' };
+    const session = { id: 'page', user: { username: 'ada', displayName: 'Ada', role: 'operator' as const, provider: 'local' } };
     assert.deepEqual(await host.request('good', 'echo', 1, session), { params: 1, session: 'page', plugin: 'good' });
     await assert.rejects(host.request('good', 'fail', null, session), /no/);
     await assert.rejects(host.request('good', 'other', null, session), /has no request "other"/);
@@ -145,6 +149,17 @@ test('the host activates the server sides and dispatches to them', async () => {
     close();
     assert.deepEqual(emitted, [5, 6, 'closed']);
     assert.throws(() => host.open('good', 'other', null, () => {}, session), /has no stream "other"/);
+
+    // Each handler's role: requests an operator's, streams a viewer's, unless said
+    const viewer = { ...session, user: { ...session.user, role: 'viewer' as const } };
+    assert.equal(await host.request('good', 'look', null, viewer), 'seen');
+    await assert.rejects(host.request('good', 'echo', null, viewer), /Not allowed for your role: it takes an operator/);
+    await assert.rejects(host.request('good', 'wipe', null, session), /Not allowed for your role: it takes an administrator/);
+    // A role misspelled: the highest
+    await assert.rejects(host.request('good', 'typo', null, session), /an administrator/);
+    host.open('good', 'count', { from: 1 }, () => {}, viewer)();
+    assert.throws(() => host.open('good', 'secret', null, () => {}, viewer), /Not allowed for your role/);
+    host.open('good', 'secret', null, () => {}, session)();
   } finally {
     await rm(root, { recursive: true });
   }

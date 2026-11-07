@@ -1,11 +1,13 @@
 // One WebSocket connection, i.e. one open dashboard page: dispatches its
 // messages and owns what it started (teleop streams, subscriptions), released
-// when it closes.
+// when it closes. Its user is who signed in on the page: each message needs a
+// role (requiredRole), those of a lower one are refused.
 
 import { randomUUID } from 'node:crypto';
 
 import { WebSocket } from 'ws';
 
+import { notAllowedMessage, requiredRole, roleAtLeast, type AuthUser } from '../shared/auth.ts';
 import { MAX_TRUNCATE, MAX_WINDOW } from '../shared/monitor.ts';
 import {
   FRAME_HEADER_BYTES,
@@ -22,6 +24,7 @@ import type { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import type { BehaviorTreePlayback } from './behavior_tree_playback.ts';
 import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
+import { seesPanel, type PanelRoles } from './panels.ts';
 import type { Diagnostics } from './diagnostics.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
 import type { Interfaces } from './interfaces.ts';
@@ -77,6 +80,8 @@ export interface SessionServices {
   rosbags: Rosbags;
   system: SystemMonitor;
   plugins: PluginHost;
+  // Who sees each panel: its commands are theirs only
+  panelRoles: PanelRoles;
   hostname: string;
 }
 
@@ -128,6 +133,22 @@ function strings(value: unknown, field: string): string[] {
   return value.map((v: string) => v.trim()).filter(Boolean);
 }
 
+// The messages answered with a result (answer)
+const ANSWERED = new Set<ClientMessage['type']>([
+  'action.cancel',
+  'action.send',
+  'bags.action',
+  'bt.file.save',
+  'bt.record',
+  'interface.get',
+  'network.action',
+  'params.dump',
+  'params.load',
+  'params.set',
+  'plugin.request',
+  'ros.call',
+]);
+
 // A terminal's name, chosen by the page
 const TERMINAL_NAME = /^[\w-]{1,64}$/;
 
@@ -152,25 +173,38 @@ export class Session implements FrameSink, PluginSession {
   private readonly playbacks = new Map<number, BehaviorTreePlayback>();
   // The terminals, for what is typed in them
   private readonly terminals = new Map<number, TerminalView>();
-  // The page is one of the dashboard's own (see ownPage): only those open
-  // terminals and change the networks
-  private readonly ownPage: boolean;
+  // Who signed in on the page
+  readonly user: AuthUser;
+  // Each message: the page is in use, its session not idle
+  private readonly onActivity: () => void;
   // The server's address the page reached: the interface it comes through
   private readonly localAddress: string | null;
   private lastError = { message: '', at: 0 };
 
-  constructor(ws: WebSocket, services: SessionServices, ownPage: boolean, localAddress: string | null) {
+  constructor(
+    ws: WebSocket,
+    services: SessionServices,
+    user: AuthUser,
+    onActivity: () => void,
+    localAddress: string | null,
+  ) {
     this.ws = ws;
     this.services = services;
-    this.ownPage = ownPage;
+    this.user = user;
+    this.onActivity = onActivity;
     this.localAddress = localAddress;
     ws.on('message', (data, isBinary) => {
       if (!isBinary) {
         this.onMessage(data.toString());
       }
     });
-    this.send({ type: 'hello', clientId: this.id, hostname: services.hostname, time: Date.now() });
-    this.send({ type: 'commands', states: services.commands.snapshot() });
+    this.send({ type: 'hello', clientId: this.id, hostname: services.hostname, time: Date.now(), user });
+    this.send({
+      type: 'commands',
+      states: services.commands
+        .snapshot()
+        .filter((state) => seesPanel(user.role, services.panelRoles.known(state.panelId))),
+    });
   }
 
   send(message: ServerMessage): void {
@@ -195,6 +229,12 @@ export class Session implements FrameSink, PluginSession {
     header.writeUInt16BE(Math.min(frame.height, 0xffff), 7);
     header.writeUInt16BE(meta.length, 9);
     this.ws.send(Buffer.concat([header, meta, frame.data]));
+  }
+
+  // Closes the connection, e.g. when its user signed out (code 4401) or got
+  // another role (4403): the page connects again, or signs in
+  end(code: number, reason: string): void {
+    this.ws.close(code, reason);
   }
 
   // The connection closed
@@ -227,10 +267,34 @@ export class Session implements FrameSink, PluginSession {
       this.reportError('Malformed message');
       return;
     }
+    this.onActivity();
+    const needed = requiredRole(message);
+    if (!roleAtLeast(this.user.role, needed)) {
+      this.refuse(message, notAllowedMessage(needed));
+      return;
+    }
     try {
       this.dispatch(message);
     } catch (e) {
       this.reportError(errorMessage(e));
+    }
+  }
+
+  // Answers a message refused as its kind is answered: a request's result, a
+  // stream's status, else an error
+  private refuse(message: ClientMessage, reason: string): void {
+    const { id } = message as { id?: unknown };
+    if (message.type === 'service.action' && typeof id === 'number') {
+      this.send({ type: 'service.result', id, error: reason });
+    } else if (message.type === 'topic.publish' && typeof id === 'number') {
+      // Its stream ends at once, failed
+      this.send({ type: 'topic.published', id, count: 0, done: true, error: reason });
+    } else if (ANSWERED.has(message.type) && typeof id === 'number') {
+      this.answer(id, Promise.reject(new Error(reason)));
+    } else if ((message.type.endsWith('.subscribe') || message.type === 'terminal.open') && typeof id === 'number') {
+      this.sendStreamStatus(id, 'error', reason);
+    } else {
+      this.reportError(reason);
     }
   }
 
@@ -506,11 +570,6 @@ export class Session implements FrameSink, PluginSession {
       case 'terminal.open': {
         const id = subscriptionId(message.id);
         this.unsubscribe(id);
-        if (!this.ownPage) {
-          // e.g. another site's page, which a browser lets reach the robot
-          this.sendStreamStatus(id, 'error', 'Terminals open in the dashboard’s own pages only');
-          return;
-        }
         if (typeof message.terminal !== 'string' || !TERMINAL_NAME.test(message.terminal)) {
           throw new Error('Invalid terminal name');
         }
@@ -570,7 +629,7 @@ export class Session implements FrameSink, PluginSession {
                 id,
                 ...state,
                 via: deviceOfAddress(state.devices, this.localAddress),
-                canChange: this.ownPage,
+                canChange: roleAtLeast(this.user.role, 'admin'),
               }),
             message.scan !== false,
           ),
@@ -581,9 +640,7 @@ export class Session implements FrameSink, PluginSession {
       case 'network.action':
         this.answer(
           message.id,
-          this.ownPage
-            ? Promise.resolve(message.request).then((request) => services.networking.act(checkRequest(request)))
-            : Promise.reject(new Error('The networks are changed from the dashboard’s own pages only')),
+          Promise.resolve(message.request).then((request) => services.networking.act(checkRequest(request))),
         );
         return;
 
@@ -780,7 +837,7 @@ export class Session implements FrameSink, PluginSession {
       case 'bags.action':
         this.answer(
           message.id,
-          Promise.resolve().then(() => services.rosbags.act(checkBagsRequest(message.request), this.ownPage)),
+          Promise.resolve().then(() => services.rosbags.act(checkBagsRequest(message.request), roleAtLeast(this.user.role, 'admin'))),
         );
         return;
 
@@ -925,14 +982,26 @@ export class Session implements FrameSink, PluginSession {
       }
 
       case 'command.run':
-        services.commands
-          .run(string(message.panelId, 'panelId'), string(message.widgetId, 'widgetId'))
+      case 'command.stop': {
+        const panelId = string(message.panelId, 'panelId');
+        const widgetId = string(message.widgetId, 'widgetId');
+        const run = message.type === 'command.run';
+        services.panelRoles
+          .of(panelId)
+          .then(async (minRole) => {
+            // A panel they do not see: as if it had no such widget
+            if (!seesPanel(this.user.role, minRole)) {
+              throw new Error(`Panel "${panelId}" has no widget "${widgetId}" running a command: is it saved?`);
+            }
+            if (run) {
+              await services.commands.run(panelId, widgetId);
+            } else {
+              services.commands.stop(panelId, widgetId);
+            }
+          })
           .catch((e: unknown) => this.reportError(errorMessage(e)));
         return;
-
-      case 'command.stop':
-        services.commands.stop(string(message.panelId, 'panelId'), string(message.widgetId, 'widgetId'));
-        return;
+      }
 
       default:
         throw new Error(`Unknown message type "${(message as { type?: unknown }).type}"`);

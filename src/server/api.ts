@@ -8,7 +8,7 @@
 //
 //   export default {
 //     activate(ctx) {
-//       ctx.handle('greet', (params) => `Hello ${String(params)} from ${ctx.node.name()}`);
+//       ctx.handle('greet', (params) => `Hello ${String(params)} from ${ctx.node.name()}`, { role: 'viewer' });
 //     },
 //   } satisfies TasselloPlugin;
 //
@@ -17,6 +17,7 @@
 
 import type rclnodejs from 'rclnodejs';
 
+import type { AuthUser, Role } from '../shared/auth.ts';
 import type { Logger } from './util.ts';
 
 export type { Logger };
@@ -24,6 +25,16 @@ export type { Logger };
 // The page a request or stream comes from: one per open page, until it closes
 export interface PluginSession {
   readonly id: string;
+  // Who signed in on the page (see src/shared/auth.ts): a plugin may refuse
+  // more than its handlers' roles do, e.g. by its params
+  readonly user: AuthUser;
+}
+
+// Who may call a request or open a stream: the server refuses the others
+// before the handler runs, with "Not allowed for your role". Requests are an
+// operator's unless said, streams a viewer's.
+export interface HandlerOptions {
+  role?: Role;
 }
 
 // Answers a request: its result (or a promise of it), sent to the page as
@@ -59,8 +70,8 @@ export interface PluginContext {
   readonly node: rclnodejs.Node;
   readonly rclnodejs: typeof rclnodejs;
   readonly logger: Logger;
-  handle(method: string, handler: RequestHandler): void;
-  stream(name: string, handler: StreamHandler): void;
+  handle(method: string, handler: RequestHandler, options?: HandlerOptions): void;
+  stream(name: string, handler: StreamHandler, options?: HandlerOptions): void;
   commandWidget(type: string, command: CommandWidget): void;
   // Called when the server stops, before the node is destroyed
   onShutdown(callback: () => void | Promise<void>): void;

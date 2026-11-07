@@ -11,7 +11,7 @@ import { EXPLICIT, guessKind } from '../shared/bt_nodes.ts';
 import type { BehaviorTreeInfo, BtNode, BtNodeKind } from '../shared/protocol.ts';
 import { parseXml, type XmlElement } from '../shared/xml.ts';
 import { isUploadName } from './files.ts';
-import { errorMessage, packageShareDirectory, type Logger } from './util.ts';
+import { errorMessage, isSecret, packageShareDirectory, type Logger } from './util.ts';
 
 export interface BehaviorTreeFile {
   treeId: string;
@@ -161,6 +161,9 @@ export async function loadBehaviorTree(file: string): Promise<BehaviorTreeFile> 
     files.push(current);
     let root: XmlElement;
     try {
+      if (await isSecret(current)) {
+        throw new Error('it holds the users’ passwords');
+      }
       root = parseXml(await fs.readFile(current, 'utf8'));
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;

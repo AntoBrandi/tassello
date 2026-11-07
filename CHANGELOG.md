@@ -6,6 +6,37 @@ noted here.
 
 ## Unreleased
 
+- **Sign-in and roles.** Everyone signs in with a username and a password, and is a viewer
+  (watches), an operator (also drives and operates the robot) or an administrator (also the
+  panels, terminals, files, networks and users). The server checks the role of every request and
+  WebSocket message, and what it refuses is said in the widget: *Not allowed for your role*. Edit
+  mode is for administrators. **Breaking:** a robot without users gets one, `admin`, whose random password is in
+  `~/.local/share/tassello/auth/initial-admin-password` (or is `TASSELLO_ADMIN_PASSWORD`), to be
+  changed at the first sign-in; `--no-auth` keeps the old behaviour.
+- Passwords an administrator makes for someone (a new user, a reset) are changed at their first
+  sign-in, before anything else.
+- Passwords hashed with scrypt; sessions in HttpOnly, SameSite=Strict cookies, ending when
+  signed out, unused for 12 hours (`--session-idle`), after 7 days, or when the password changes;
+  failed sign-ins slowed down by username and address; sign-ins and changes of users logged.
+- Users managed in the page (account menu, *Users…*) or on the robot: `tassello users list`,
+  `add`, `passwd`, `role`, `disable`, `enable`, `remove`. Users change their own password.
+- HTTPS: `--tls-cert` and `--tls-key`.
+- Other sites' pages can no longer reach the robot through a visitor's browser: WebSockets open
+  from the dashboard's own pages only (before: terminals, networks and deleting rosbags only),
+  every change of the REST API needs the dashboard's header, and the page cannot be framed (but by the sites of `--frame-ancestors`).
+- Panels say who sees them: `minRole` (*Visible to* in the panel's ⋯ menu: viewers and up,
+  operators and up, administrators only), enforced by the server: its list, the panel, its
+  changes and its commands' states and runs. Panels saved before are everyone's; new panels are
+  administrators' until said otherwise; exported and imported with it.
+- `--anonymous-role viewer`: anyone not signed in watches as a viewer, signing in to operate
+  (kiosks, wall displays, deployments that relied on an open dashboard).
+- `--frame-ancestors`: the sites whose pages may frame the dashboard, e.g. a Web Page widget of
+  another Tassello (before and by default, none).
+- Plugins: handlers declare who may use them, `ctx.handle(name, handler, { role })` and
+  `ctx.stream(name, handler, { role })`, an operator's for requests and a viewer's for streams if
+  not said, the server refusing the others before calling them; `session.user` on the server
+  side; `currentUser()` and `may(role)` of `tassello/sdk`, optional helpers.
+
 - Robot Viewer widget, in place of the Robot Model: the robot in 3D, or from above in 2D (the
   toolbar's **3D** and **2D**), as RViz shows it, made of *displays* drawn in a fixed frame,
   chosen in the toolbar from the TF frames (**Auto**: the robot model's root link, as the Robot

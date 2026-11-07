@@ -6,6 +6,7 @@
 // numbered by the client, in one sequence per connection, and ended with
 // `unsubscribe`.
 
+import type { AuthUser } from './auth.ts';
 import type { BtNodeModel } from './bt_nodes.ts';
 import type { FsDisk } from './file_manager.ts';
 import type {
@@ -719,6 +720,8 @@ export interface Hello {
   // The server's clock (ms since the epoch), against which the page measures
   // the times the server reports: the robot's and the browser's clocks differ
   time: number;
+  // Who signed in on the page
+  user: AuthUser;
 }
 
 // The last run of a button widget's command, running or finished

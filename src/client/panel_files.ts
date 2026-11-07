@@ -6,7 +6,8 @@
 
 import { SMALL_DEVICES, slugify, type Panel } from '../shared/panel.ts';
 
-export type PanelFile = Omit<Panel, 'id'>;
+// minRole: missing in files exported before it, viewers'
+export type PanelFile = Omit<Panel, 'id' | 'minRole'> & { minRole?: Panel['minRole'] };
 
 // What the server keeps of the panel: its device layouts place only the
 // widgets it has (a widget removed leaves its places behind until saved)
@@ -22,7 +23,7 @@ export function panelFile(panel: Panel): PanelFile {
       };
     }
   }
-  const file: PanelFile = { name: panel.name, widgets: panel.widgets };
+  const file: PanelFile = { name: panel.name, minRole: panel.minRole, widgets: panel.widgets };
   if (Object.keys(layouts).length > 0) {
     file.layouts = layouts;
   }

@@ -78,6 +78,11 @@ export {
 } from '../connection.ts';
 export { imageUrl, fsApi, ApiError, type Upload } from '../api.ts';
 
+// Who signed in: currentUser() is null only while signing in; may('operator')
+// tells whether their role allows what an operator does
+export { currentUser, may } from '../auth.ts';
+export { ROLES, ROLE_LABELS, roleAtLeast, type AuthUser, type Role } from '../../shared/auth.ts';
+
 // The page
 export { useDialogs, Modal, type Dialogs, type ConfirmOptions, type PromptOptions } from '../dialogs.tsx';
 export { notify } from '../notifications.tsx';
