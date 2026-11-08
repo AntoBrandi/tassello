@@ -355,10 +355,48 @@ interactive_markers' client does; `serverTopics`, `UpdateSequence`, `menuTree`; 
 `intrinsicsOf` a CameraInfo, `intrinsicsFromFov`, `imageCorners` at a distance in its optical
 frame), and the displays themselves (`RobotModelDisplay`, `TfDisplay`, `OccupancyGridDisplay`,
 `LaserScanDisplay`, `PointCloudDisplay`, `PointsDisplay` for points of another kind,
-`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`, `PoseDisplay`,
+`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`, `PoseDisplay`, `PoseArrayDisplay`,
 `InteractiveMarkersDisplay`), to extend: a display
 registered with `load: () => import('./MyCloud.ts').then((m) => m.MyCloud)`, where `MyCloud`
 extends `PointCloudDisplay`, is a point cloud with something of its own.
+
+#### A viewer in a plugin's widget
+
+`ViewerView`, of `tassello/viewer`, is the Robot Viewer's view for any widget: the displays it is
+given (Tassello's, the plugin's), in a fixed frame, in 3D or 2D, with the viewer's Reset, its notes
+and what it waits for. A display whose frame is the fixed frame needs no TF: a plugin can show
+what it publishes in a frame of its own. Import it lazily, as the Robot Viewer does, so that
+three.js is fetched only when the widget is shown:
+
+```tsx
+import { lazy, Suspense } from 'react';
+
+const ViewerView = lazy(() => import('tassello/viewer').then((m) => ({ default: m.ViewerView })));
+
+const DISPLAYS = [
+  { id: 'map', type: 'grid-display', name: 'Map', enabled: true, config: { topic: '/my_robot/map' } },
+  { id: 'route', type: 'path-display', name: 'Route', enabled: true, config: { topic: '/my_robot/route' } },
+  { id: 'goal', type: 'my-robot.goal-display', name: 'Goal', enabled: true, config: {} },
+];
+
+function MapWidget() {
+  return (
+    <Suspense fallback={<div className="widget-message">Loading the map…</div>}>
+      <ViewerView fixedFrame="map" view="2d" displays={DISPLAYS} />
+    </Suspense>
+  );
+}
+```
+
+| Prop | |
+|---|---|
+| `fixedFrame` | The frame the view is in; `''` for Auto (the robot model's root link, else the root of the TF tree) |
+| `view` | `'3d'` or `'2d'` |
+| `displays` | `{ id, type, name, enabled, config }`, as a Robot Viewer's list, in the order they are drawn (later on top); the config's missing values are the display's defaults |
+| `onViewChange(view)`, `onFixedFrameChange(frame)` | Given: the toolbar has the 3D/2D switch, and the fixed frame's menu |
+| `disabled` | The switch and menu greyed out |
+| `emptyMessage` | Said in the middle while there are no displays |
+| `children` | Drawn over the view, e.g. the widget's own controls |
 
 `three` and `tassello/viewer` are not bundled into the plugin: the page provides them, as it does
 `tassello/sdk`, so that the viewer's renderer draws the plugin's objects. Add `three` and
@@ -484,6 +522,9 @@ Hooks:
 | `notify(message, kind?)` | A short message at the bottom of the page; `kind` `'info'` or `'error'` |
 | `Modal` | The page's modal dialog |
 | `Joystick` | The teleop's pad: `axes` (`'xy'`, `'x'`, `'y'`), `onMove(x, y)` in -1..1 |
+| `PlaybackControls` | A player's controls, as the Rosbags widget's: `playing`, `position` and `duration` (ms), `rate`, `onPlay(playing)`, `onSeek(position)`, `onRate(rate)`, `disabled`, `error` (shown instead of the position), `children` (more buttons) |
+| `FileBrowser` | The robot's directories and files of a kind (`'bag'`, `'yaml'`, `'image'`, `'behavior-tree'`, `'folder'`), in a dialog: `kind`, `start` (a directory, or a file in it), `onChoose(path)`, `onClose()` |
+| `PlotChart` | The Plot widget's chart: `series` (`{ key, name, color, buffer }`, a `SeriesBuffer` of `push(at, value)`), `view` (`PlotView`: live, the latest `span` ms, or `from`-`to`) and `onView`, `defaultSpan`, `range` (fixed, or `null`: fitted), `disabled`, `label`, `message`. Its time is the server's (`chartNow`) unless given `now`, e.g. a replayed bag's time in ms, with `timeText(at, step)` for a view that is not live. Keep the buffers' samples as long as wanted: `trim(before)` drops older ones |
 | `imageUrl(value)` | The URL of an `image` property's value |
 | `currentUser()`, `may(role)` | Optional: who signed in (`username`, `displayName`, `role`), and whether their role is at least `role`, to hide or disable what they cannot do. The server refuses it anyway, and who sees a widget is its panel's choice (*Visible to*) |
 | `*Icon` | Tassello's icons, 24×24 line drawings in the current colour |

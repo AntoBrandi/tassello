@@ -36,6 +36,19 @@ noted here.
   `ctx.stream(name, handler, { role })`, an operator's for requests and a viewer's for streams if
   not said, the server refusing the others before calling them; `session.user` on the server
   side; `currentUser()` and `may(role)` of `tassello/sdk`, optional helpers.
+- Robot Viewer: a **Pose Array** display: a set of poses (`geometry_msgs/PoseArray`), or AMCL's
+  particles (`nav2_msgs/ParticleCloud`), as arrows in the poses' frame, a particle's arrow longer
+  the heavier it is (optional); colour, opacity, line width, arrow length, at most N arrows
+  (evenly through the message), at most N a second. `PoseArrayDisplay` exported from
+  `tassello/viewer`.
+- Plugins: a viewer in their own widgets. `ViewerView` of `tassello/viewer` is the Robot Viewer's
+  view for any widget, given `fixedFrame`, `view` and `displays` (Tassello's and the plugins'),
+  with optionally its 3D/2D switch and fixed frame's menu (`onViewChange`, `onFixedFrameChange`),
+  `emptyMessage` and overlays (`children`). The Robot Viewer widget is one, of its config.
+- `tassello/sdk` exports the Rosbags widget's `PlaybackControls`, the file browser of the
+  properties' file inputs (`FileBrowser`, `FileKind`), and the Plot widget's chart (`PlotChart`,
+  `ChartSeries`, `SeriesBuffer`, `PlotView`, `chartNow`), which takes a clock of its own (`now`,
+  `timeText`): e.g. a replayed bag's time.
 
 - Robot Viewer widget, in place of the Robot Model: the robot in 3D, or from above in 2D (the
   toolbar's **3D** and **2D**), as RViz shows it, made of *displays* drawn in a fixed frame,

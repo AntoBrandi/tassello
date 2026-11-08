@@ -26,6 +26,7 @@ import {
   PATH_DISPLAY,
   POINT_CLOUD_DISPLAY,
   POLYGON_DISPLAY,
+  POSE_ARRAY_DISPLAY,
   POSE_DISPLAY,
   ROBOT_MODEL_DISPLAY,
   TF_DISPLAY,
@@ -131,6 +132,21 @@ export interface PoseDisplayConfig {
   headRadius: number;
   axesLength: number;
   axesRadius: number;
+}
+
+export interface PoseArrayDisplayConfig {
+  topic: string;
+  color: string;
+  alpha: number;
+  // In pixels
+  width: number;
+  // In meters: the heaviest particle's, or every pose's
+  arrowLength: number;
+  // A ParticleCloud's arrows longer the heavier their particle
+  lengthByWeight: boolean;
+  // Drawn at most, evenly through the message
+  maxPoses: number;
+  maxRate: number;
 }
 
 export interface InteractiveMarkersDisplayConfig {
@@ -530,6 +546,38 @@ export const poseDisplay = defineDisplay<PoseDisplayConfig>({
   ],
 });
 
+export const poseArrayDisplay = defineDisplay<PoseArrayDisplayConfig>({
+  type: POSE_ARRAY_DISPLAY,
+  name: 'Pose Array',
+  description:
+    'A set of poses (geometry_msgs/PoseArray), or AMCL’s particles (nav2_msgs/ParticleCloud) with their weights, as arrows, where TF puts their frame',
+  icon: PoseIcon,
+  load: () => import('./PoseArrayDisplay.ts').then((m) => m.PoseArrayDisplay),
+  properties: [
+    {
+      key: 'topic',
+      label: 'Topic',
+      kind: 'topic',
+      default: '/particle_cloud',
+      topicTypes: ['geometry_msgs/msg/PoseArray', 'nav2_msgs/msg/ParticleCloud'],
+      help: 'e.g. AMCL’s particles (/particle_cloud)',
+    },
+    { key: 'color', label: 'Colour', kind: 'color', default: '#ff2a6d' },
+    { key: 'alpha', label: 'Opacity', kind: 'number', default: 0.8, min: 0, max: 1, step: 0.1 },
+    { key: 'width', label: 'Line width (px)', kind: 'number', default: 1, min: 1, max: 10, step: 1 },
+    { key: 'arrowLength', label: 'Arrow length (m)', kind: 'number', default: 0.3, min: 0.01, max: 5, step: 0.05 },
+    {
+      key: 'lengthByWeight',
+      label: 'Length by weight',
+      kind: 'boolean',
+      default: true,
+      help: 'Of a ParticleCloud: the heaviest particle’s arrow at full length, the others shorter',
+    },
+    { key: 'maxPoses', label: 'Max arrows', kind: 'number', default: 5000, min: 10, max: 50000, step: 100 },
+    { key: 'maxRate', label: 'Max rate (Hz)', kind: 'number', default: 5, min: 0.1, max: 30, step: 0.5 },
+  ],
+});
+
 export const interactiveMarkersDisplay = defineDisplay<InteractiveMarkersDisplayConfig>({
   type: INTERACTIVE_MARKERS_DISPLAY,
   name: 'Interactive Markers',
@@ -576,5 +624,6 @@ export const CORE_DISPLAYS: RegisteredDisplay[] = [
   pathDisplay,
   polygonDisplay,
   poseDisplay,
+  poseArrayDisplay,
   interactiveMarkersDisplay,
 ];

@@ -15,6 +15,7 @@ export const POLYGON_DISPLAY = 'polygon-display';
 export const PATH_DISPLAY = 'path-display';
 export const OCTOMAP_DISPLAY = 'octomap-display';
 export const POSE_DISPLAY = 'pose-display';
+export const POSE_ARRAY_DISPLAY = 'pose-array-display';
 export const INTERACTIVE_MARKERS_DISPLAY = 'interactive-markers-display';
 
 // A new viewer's: the robot, its frames ready to be shown
