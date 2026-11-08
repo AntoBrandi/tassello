@@ -355,7 +355,7 @@ interactive_markers' client does; `serverTopics`, `UpdateSequence`, `menuTree`; 
 `intrinsicsOf` a CameraInfo, `intrinsicsFromFov`, `imageCorners` at a distance in its optical
 frame), and the displays themselves (`RobotModelDisplay`, `TfDisplay`, `OccupancyGridDisplay`,
 `LaserScanDisplay`, `PointCloudDisplay`, `PointsDisplay` for points of another kind,
-`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`, `PoseDisplay`,
+`OctomapDisplay`, `CameraDisplay`, `PathDisplay`, `PolygonDisplay`, `PoseDisplay`, `PoseArrayDisplay`,
 `InteractiveMarkersDisplay`), to extend: a display
 registered with `load: () => import('./MyCloud.ts').then((m) => m.MyCloud)`, where `MyCloud`
 extends `PointCloudDisplay`, is a point cloud with something of its own.

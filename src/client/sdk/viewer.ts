@@ -67,6 +67,7 @@ export { PolygonDisplay } from '../widgets/robot_viewer/displays/PolygonDisplay.
 export { PathDisplay } from '../widgets/robot_viewer/displays/PathDisplay.ts';
 export { OctomapDisplay } from '../widgets/robot_viewer/displays/OctomapDisplay.ts';
 export { PoseDisplay } from '../widgets/robot_viewer/displays/PoseDisplay.ts';
+export { PoseArrayDisplay } from '../widgets/robot_viewer/displays/PoseArrayDisplay.ts';
 export { InteractiveMarkersDisplay } from '../widgets/robot_viewer/displays/InteractiveMarkersDisplay.ts';
 export type {
   CameraDisplayConfig,
