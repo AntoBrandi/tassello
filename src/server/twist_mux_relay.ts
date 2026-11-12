@@ -196,13 +196,29 @@ export interface RelayGraph {
   outputTopic: string | null;
 }
 
+// Of a node's topics, the first of this type: one of `preferred` if any is
+// (a node may publish several, e.g. a controller with its own priority)
+export function topicOfType(
+  topics: { name: string; types: string[] }[],
+  type: string,
+  preferred: Set<string>,
+): string | null {
+  const typed = topics.filter((topic) => topic.types.includes(type));
+  return (typed.find((topic) => preferred.has(topic.name)) ?? typed[0])?.name ?? null;
+}
+
 // Of the graph's relays, the one of this mux: the one publishing on one of
-// its inputs, else on one of its locks, else the only one
+// its inputs, else on one of its locks, else the only one. Between those
+// alike, the one serving more of the relay's actions: the joystick relay,
+// with its turbo, rather than another node serving a priority action of its
+// own (e.g. a controller's assisted teleoperation)
 export function pickRelay(relays: RelayGraph[], inputTopics: Set<string>, lockTopics: Set<string>): RelayGraph | null {
   const score = (relay: RelayGraph) =>
     (relay.outputTopic && inputTopics.has(relay.outputTopic) ? 2 : 0) +
     (relay.priorityTopic && lockTopics.has(relay.priorityTopic) ? 1 : 0);
-  const ranked = [...relays].sort((a, b) => score(b) - score(a) || a.node.localeCompare(b.node));
+  const ranked = [...relays].sort(
+    (a, b) => score(b) - score(a) || b.actions.size - a.actions.size || a.node.localeCompare(b.node),
+  );
   if (ranked.length === 0) {
     return null;
   }

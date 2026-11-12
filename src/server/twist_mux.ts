@@ -38,6 +38,7 @@ import {
   pickRelay,
   RelayTracker,
   relayActionOf,
+  topicOfType,
   type RelayGraph,
 } from './twist_mux_relay.ts';
 import { BOOL, isMuxStatus, MuxTracker, outputOf, TWIST, type TopicPublisher } from './twist_mux_state.ts';
@@ -351,7 +352,7 @@ class WatchedMux {
 
   // The graph's joystick relays: the nodes serving their actions, and what
   // they publish and take
-  private findRelays(): RelayGraph[] {
+  private findRelays(inputTopics: Set<string>, lockTopics: Set<string>): RelayGraph[] {
     const relays = new Map<string, RelayGraph>();
     const actions = rclnodejs.getActionNamesAndTypes(this.rosNode) as unknown as { name: string; types: string[] }[];
     for (const { name, types } of actions) {
@@ -377,25 +378,27 @@ class WatchedMux {
       const { base, namespace } = splitNode(relay.node);
       const publications = this.rosNode.getPublisherNamesAndTypesByNode(base, namespace, false);
       const subscriptions = this.rosNode.getSubscriptionNamesAndTypesByNode(base, namespace, false);
-      relay.priorityTopic = publications.find((p) => p.types.includes(BOOL))?.name ?? null;
-      relay.outputTopic = publications.find((p) => p.types.includes(TWIST))?.name ?? null;
-      relay.inputTopic = subscriptions.find((p) => p.types.includes(TWIST))?.name ?? null;
+      relay.priorityTopic = topicOfType(publications, BOOL, lockTopics);
+      relay.outputTopic = topicOfType(publications, TWIST, inputTopics);
+      relay.inputTopic = topicOfType(subscriptions, TWIST, new Set());
     }
     return [...relays.values()];
   }
 
   private pollRelay(): void {
+    const { inputs, locks } = this.tracker.topics();
+    const inputTopics = new Set([...inputs.values()].map((input) => input.topic));
+    const lockTopics = new Set(locks.values());
     let relays: RelayGraph[];
     try {
-      relays = this.findRelays();
+      relays = this.findRelays(inputTopics, lockTopics);
     } catch (e) {
       this.warnOnce(`Cannot look for ${this.name}'s joystick relay: ${errorMessage(e)}`);
       return;
     }
-    const { inputs, locks } = this.tracker.topics();
     const before = this.relay.node;
     this.relay.setGraph(
-      pickRelay(relays, new Set([...inputs.values()].map((input) => input.topic)), new Set(locks.values())),
+      pickRelay(relays, inputTopics, lockTopics),
       relays.map((relay) => relay.node),
       this.tracker.found,
     );

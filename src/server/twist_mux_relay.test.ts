@@ -13,6 +13,7 @@ import {
   stepOfRatio,
   stepsAfter,
   stepsOfCommand,
+  topicOfType,
   turboFromParameters,
   type RelayGraph,
 } from './twist_mux_relay.ts';
@@ -203,6 +204,35 @@ test('pickRelay takes the relay publishing on an input of the mux, else on a loc
   assert.equal(pickRelay([elsewhere], inputs, locks)?.node, '/a_relay');
   assert.equal(pickRelay([elsewhere, relayGraph({ node: '/b', outputTopic: null, priorityTopic: null })], inputs, locks), null);
   assert.equal(pickRelay([], inputs, locks), null);
+});
+
+test('pickRelay prefers the joystick relay to another node serving only a priority action, on the mux too', () => {
+  const inputs = new Set([...MUX_INPUTS.values(), '/assisted_vel']);
+  const locks = new Set([...MUX_LOCKS.values(), '/assisted_teleop_priority']);
+  // A controller's assisted teleoperation: before the relay by name
+  const assisted = relayGraph({
+    node: '/controller_server',
+    actions: new Map([['priority', '/assisted_teleop_priority_action']]),
+    priorityTopic: '/assisted_teleop_priority',
+    inputTopic: '/joy_vel',
+    outputTopic: '/assisted_vel',
+  });
+  assert.equal(pickRelay([assisted, relayGraph()], inputs, locks)?.node, '/joystick_relay');
+  assert.equal(pickRelay([relayGraph(), assisted], inputs, locks)?.node, '/joystick_relay');
+  // Still, the one on the mux first
+  assert.equal(pickRelay([assisted, relayGraph({ outputTopic: '/elsewhere' })], inputs, locks)?.node, '/controller_server');
+});
+
+test('topicOfType takes a topic of the type, one preferred if any', () => {
+  const topics = [
+    { name: '/cmd_vel', types: ['geometry_msgs/msg/Twist'] },
+    { name: '/is_charging', types: ['std_msgs/msg/Bool'] },
+    { name: '/assisted_vel', types: ['geometry_msgs/msg/Twist'] },
+  ];
+  assert.equal(topicOfType(topics, 'geometry_msgs/msg/Twist', new Set(['/assisted_vel'])), '/assisted_vel');
+  assert.equal(topicOfType(topics, 'geometry_msgs/msg/Twist', new Set()), '/cmd_vel');
+  assert.equal(topicOfType(topics, 'std_msgs/msg/Bool', new Set(['/joy_priority'])), '/is_charging');
+  assert.equal(topicOfType(topics, 'std_msgs/msg/String', new Set()), null);
 });
 
 test('the tracker says the relay’s priority, its lock and input on the mux, and its turbo', () => {
