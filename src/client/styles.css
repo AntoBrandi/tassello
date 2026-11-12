@@ -1361,6 +1361,7 @@ textarea {
 /* ── Teleop ────────────────────────────────────────────────────────────────── */
 
 .teleop {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1368,6 +1369,16 @@ textarea {
   min-width: 0;
   min-height: 0;
   padding: 8px;
+}
+
+/* On rails: in a corner, clear of the round pads */
+.teleop-rail {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
 }
 
 .teleop-pads {

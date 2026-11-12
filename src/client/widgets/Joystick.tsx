@@ -21,13 +21,18 @@ export interface JoystickProps {
   onMove: (x: number, y: number) => void;
   disabled: boolean;
   label: string;
+  // An 'xy' pad moves along one axis at a time: the one it is first pushed
+  // along, until it is released
+  rail?: boolean;
 }
 
-export function Joystick({ axes, onMove, disabled, label }: JoystickProps) {
+export function Joystick({ axes, onMove, disabled, label, rail = false }: JoystickProps) {
   const ref = useRef<HTMLDivElement>(null);
   const pointerId = useRef<number | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const [active, setActive] = useState(false);
+  // The axis a rail pad is held on, chosen once out of the dead zone
+  const railAxis = useRef<'x' | 'y' | null>(null);
   const onMoveRef = useRef(onMove);
   onMoveRef.current = onMove;
 
@@ -41,6 +46,18 @@ export function Joystick({ axes, onMove, disabled, label }: JoystickProps) {
     const travel = (rect.width * TRAVEL_PERCENT) / 100;
     let x = axes === 'y' ? 0 : (event.clientX - (rect.left + rect.width / 2)) / travel;
     let y = axes === 'x' ? 0 : -(event.clientY - (rect.top + rect.height / 2)) / travel;
+    if (rail && axes === 'xy') {
+      if (railAxis.current === null && Math.hypot(x, y) >= DEAD_ZONE) {
+        railAxis.current = Math.abs(x) > Math.abs(y) ? 'x' : 'y';
+      }
+      if (railAxis.current === 'x') {
+        y = 0;
+      } else if (railAxis.current === 'y') {
+        x = 0;
+      }
+    } else {
+      railAxis.current = null;
+    }
     const length = Math.hypot(x, y);
     if (length > 1) {
       x /= length;
@@ -54,6 +71,7 @@ export function Joystick({ axes, onMove, disabled, label }: JoystickProps) {
       return;
     }
     pointerId.current = null;
+    railAxis.current = null;
     setActive(false);
     move(0, 0);
   };
