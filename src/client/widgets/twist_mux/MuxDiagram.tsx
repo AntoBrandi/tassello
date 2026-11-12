@@ -9,14 +9,16 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 
-import type { MuxFate, MuxInput, MuxLock, TwistMuxState } from '../../../shared/twist_mux.ts';
+import type { MuxFate, MuxInput, MuxLock, MuxRelay, TwistMuxState } from '../../../shared/twist_mux.ts';
 import { LockIcon, UnlockIcon, WarningIcon } from '../../icons.tsx';
+import { useConfirm, type MuxControls } from './MuxControls.tsx';
 import {
   activity,
   displayOrder,
   formatSpeed,
   formatTimeout,
   inputStatus,
+  lockControl,
   lockLine,
   lockStatus,
   muxLayout,
@@ -146,7 +148,53 @@ function InputCard({
   );
 }
 
-function LockCard({ lock, state, now, rect, compact }: { lock: MuxLock; state: TwistMuxState; now: number; rect: MuxLayout['locks'][number]; compact: boolean }) {
+// Locks it, or releases it: its icon, what it will be. A release asks twice
+// (but the relay's priority, toggled as a joystick's button does), saying so.
+function LockButton({ lock, relay, controls }: { lock: MuxLock; relay: MuxRelay | null; controls: MuxControls }) {
+  const control = lockControl(lock, relay);
+  const { armed, arm, disarm } = useConfirm();
+  const key = `lock ${lock.name}`;
+  const why = controls.allowed ? control.disabled : 'Takes an operator';
+  const confirm = !control.locked && !control.viaRelay;
+  const Icon = control.locked ? LockIcon : UnlockIcon;
+  return (
+    <button
+      type="button"
+      className={`mux-lock-button${armed ? ' armed' : ''}${controls.pending === key ? ' pending' : ''}`}
+      disabled={controls.pending !== null || why !== ''}
+      title={why || (armed ? `Click again to release ${lock.name}` : control.title)}
+      aria-label={armed ? `Confirm: ${control.label} ${lock.name}` : `${control.label} ${lock.name}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (confirm && !armed) {
+          arm();
+          return;
+        }
+        disarm();
+        controls.send(key, { kind: 'lock', lock: lock.name, locked: control.locked });
+      }}
+    >
+      <Icon width={12} height={12} />
+      {armed && <span>{control.label}?</span>}
+    </button>
+  );
+}
+
+function LockCard({
+  lock,
+  state,
+  now,
+  rect,
+  compact,
+  controls,
+}: {
+  lock: MuxLock;
+  state: TwistMuxState;
+  now: number;
+  rect: MuxLayout['locks'][number];
+  compact: boolean;
+  controls: MuxControls | null;
+}) {
   const status = lockStatus(lock, now);
   const title = [
     `Lock ${lock.name}: priority ${lock.priority}, timeout ${formatTimeout(lock.timeout)}`,
@@ -160,7 +208,7 @@ function LockCard({ lock, state, now, rect, compact }: { lock: MuxLock; state: T
   const Icon = lock.locked ? LockIcon : UnlockIcon;
   return (
     <div
-      className={`mux-card mux-lock ${lock.locked ? 'locked' : 'free'}${compact ? ' compact' : ''}`}
+      className={`mux-card mux-lock ${lock.locked ? 'locked' : 'free'}${compact ? ' compact' : ''}${controls ? ' controlled' : ''}`}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
       title={title}
     >
@@ -182,6 +230,9 @@ function LockCard({ lock, state, now, rect, compact }: { lock: MuxLock; state: T
           </span>
           <code className="mux-dim"> {lock.topic}</code>
         </span>
+      )}
+      {controls && (
+        <LockButton lock={lock} relay={state.relay} controls={controls} />
       )}
     </div>
   );
@@ -226,7 +277,18 @@ function OutputCard({ state, now, rect, compact }: { state: TwistMuxState; now: 
   );
 }
 
-export function MuxDiagram({ state, now, animate }: { state: TwistMuxState; now: number; animate: boolean }) {
+export function MuxDiagram({
+  state,
+  now,
+  animate,
+  controls,
+}: {
+  state: TwistMuxState;
+  now: number;
+  animate: boolean;
+  // Its locks' buttons; null: none
+  controls: MuxControls | null;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { width, height } = useSize(scrollRef);
   const order = useMemo(() => displayOrder(state.inputs), [state.inputs]);
@@ -478,7 +540,15 @@ export function MuxDiagram({ state, now, animate }: { state: TwistMuxState; now:
           </svg>
           {state.locks.map((lock, i) =>
             layout.locks[i] ? (
-              <LockCard key={lock.name} lock={lock} state={state} now={now} rect={layout.locks[i]} compact={layout.compactSides} />
+              <LockCard
+                key={lock.name}
+                lock={lock}
+                state={state}
+                now={now}
+                rect={layout.locks[i]}
+                compact={layout.compactSides}
+                controls={controls}
+              />
             ) : null,
           )}
           {ordered.map((input, i) => (

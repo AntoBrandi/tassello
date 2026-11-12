@@ -134,6 +134,104 @@ export interface TwistMuxState {
   diagnostics: MuxDiagnostics | null;
   // What is wrong with its configuration, or why it is not followed
   problems: string[];
+  // twist_mux's joystick relay feeding it, if one runs: its turbo and its
+  // priority, which the inspector controls
+  relay: MuxRelay | null;
   // Of the update, on the server's clock
   time: number;
 }
+
+// ── The joystick relay ───────────────────────────────────────────────────────
+//
+// twist_mux's joystick_relay scales a joystick's commands (joy_vel_in, each
+// in [-1, 1]) into velocities (joy_vel_out, an input of the mux) by its turbo
+// step, and passes them only while it has the priority, which it publishes,
+// latched, on joy_priority: a lock of the mux, usually, masking the inputs
+// below the joystick's while it is true (Manual), none (Autonomous). Both are
+// changed by its actions, as a joystick's buttons do, through joy_teleop.
+
+// What its actions do: toggle the priority; the turbo step up or down, the
+// linear and the angular one together, or the angular one alone; both back
+// to the initial step
+export type RelayAction =
+  | 'priority'
+  | 'turbo-increase'
+  | 'turbo-decrease'
+  | 'turbo-angular-increase'
+  | 'turbo-angular-decrease'
+  | 'turbo-reset';
+
+export const RELAY_ACTIONS: readonly RelayAction[] = [
+  'priority',
+  'turbo-increase',
+  'turbo-decrease',
+  'turbo-angular-increase',
+  'turbo-angular-decrease',
+  'turbo-reset',
+];
+
+// At full stick: at step 1, and at the last step (m/s, rad/s); evenly between
+export interface TurboAxis {
+  min: number;
+  max: number;
+}
+
+// Its turbo.* parameters, as it read them when it started
+export interface RelayTurbo {
+  steps: number;
+  // The step it starts with, and resets to
+  initStep: number;
+  forward: TurboAxis;
+  backward: TurboAxis;
+  lateral: TurboAxis;
+  angular: TurboAxis;
+}
+
+// A turbo step, as far as the dashboard knows it: between low and high, known
+// when they are equal. The relay does not publish it: it is seen in the
+// velocities it publishes for the joystick's, or worked out from its actions'
+// goals (whoever sent them) once known, or known when it starts or resets.
+export interface StepRange {
+  low: number;
+  high: number;
+}
+
+export interface MuxRelay {
+  // Its full name
+  node: string;
+  // Its actions it serves, by what they do
+  actions: RelayAction[];
+  // What it publishes its priority on (joy_priority as remapped)
+  priorityTopic: string | null;
+  // Its latest priority: true, Manual (the joystick's commands pass); null:
+  // not heard of
+  manual: boolean | null;
+  // The mux's lock listening to its priority, and the input taking its
+  // velocities; null: none
+  lock: string | null;
+  input: string | null;
+  // The joystick's commands it takes, the velocities it publishes
+  inputTopic: string | null;
+  outputTopic: string | null;
+  // null: its parameters not read
+  turbo: RelayTurbo | null;
+  // null while turbo is
+  linearStep: StepRange | null;
+  angularStep: StepRange | null;
+  // Why it is not followed as it should be: '' if it is
+  error: string;
+}
+
+// The velocity at full stick on an axis at a step (1 to steps), as the relay
+// works it out
+export function turboAt(axis: TurboAxis, steps: number, step: number): number {
+  return steps > 1 ? axis.min + ((axis.max - axis.min) * (step - 1)) / (steps - 1) : axis.min;
+}
+
+// What the inspector asks of a twist_mux: one of its relay's actions; or one
+// of its locks locked (true published on its topic) or released (false), or,
+// for the lock listening to the relay's priority, the relay's priority
+// toggled to it
+export type MuxControl =
+  | { kind: 'relay'; action: RelayAction }
+  | { kind: 'lock'; lock: string; locked: boolean };

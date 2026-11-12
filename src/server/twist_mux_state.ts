@@ -449,6 +449,12 @@ export class MuxTracker {
     };
   }
 
+  // A lock's topic, resolved, and timeout; null: no such lock
+  lockHandle(name: string): { topic: string; timeout: number } | null {
+    const track = this.locks.find((t) => t.config.name === name);
+    return track ? { topic: track.topic, timeout: track.config.timeout } : null;
+  }
+
   // Its parameters (null: not read, with why)
   setParameters(params: ParamInfo[] | null, error = ''): void {
     this.fromParameters = params ? configFromParameters(params) : null;
@@ -820,6 +826,8 @@ export class MuxTracker {
       selected: selected?.config.name ?? null,
       diagnostics: this.status?.diagnostics ?? null,
       problems,
+      // twist_mux.ts's
+      relay: null,
       time: now,
     };
   }

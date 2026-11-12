@@ -173,7 +173,7 @@ after the others on the devices already arranged.
 |---|---|
 | **Teleop** | Publishes velocity commands (`Twist` or `TwistStamped`) while its pads are held: one pad (x, z), or two in omnidirectional mode (x and y, z). Then one zero, and nothing, so that the lower priorities of a twist_mux, e.g. navigation, take over again |
 | **Speedometer** | The robot's speed on a dial, from its velocity commands (`Twist` or `TwistStamped`, e.g. `cmd_vel`): the linear speed (x, and y for omnidirectional robots), with a minus going backwards, on a scale up to a max speed (faster ones in red), and the angular velocity. A command not renewed within the timeout (0.5 s, as base controllers' `cmd_vel_timeout`) shows as a stop |
-| **Twist Mux** | A twist_mux live, as the multiplexer it is: its inputs by priority, with their topics, timeouts and rates; its locks above it, locked or free, and the priority below which they mask the inputs; the input that has the priority, joined to the output by the mux's arm; the output, its rate, its latest command and where it came from. Every message moves along its wire: on to the output if it passes, stopped at the mux if outranked or locked out. Nodes publishing on the output, bypassing the mux, and publishers of a type the mux does not take are pointed out |
+| **Twist Mux** | A twist_mux live, as the multiplexer it is: its inputs by priority, with their topics, timeouts and rates; its locks above it, locked or free, and the priority below which they mask the inputs; the input that has the priority, joined to the output by the mux's arm; the output, its rate, its latest command and where it came from. Every message moves along its wire: on to the output if it passes, stopped at the mux if outranked or locked out. Nodes publishing on the output, bypassing the mux, and publishers of a type the mux does not take are pointed out. Operators lock and release its locks, and switch its joystick relay between Autonomous and Manual and its turbo steps up and down |
 | **Navigation** | The map, optionally the global and local costmaps and the planned path, the laser scan, and the robot where TF puts it, drawn with Nav2's footprint. Its tools set the pose estimate and send navigation goals, as RViz's do: press where the robot is or should go, drag towards where it faces. Pan, zoom, fit the map or follow the robot |
 | **Robot Viewer** | The robot in 3D, or from above in 2D, as RViz shows it: *displays* drawn in a fixed frame (chosen in its toolbar, or Auto: the robot), each a kind of thing with its own properties. **Robot Model**: the robot from its URDF and meshes, posed by the joint states, the links of moving joints orange with an arrow at the joint in the direction of the motion. **TF**: the frames' axes and names, and the links to their parents. **Occupancy Grid**: a map or a costmap on the ground. **Laser Scan** and **Point Cloud**: their points, thinned on the robot, coloured by intensity, height or their own colours. **Octomap**: an octomap's occupied voxels as cubes, coloured by height or by its own colours. **Camera**: a camera's images, raw or compressed, in front of it as it sees, with its frustum. **Path**: a path, e.g. Nav2's plan, with arrows or axes at its poses. **Polygon**: a polygon, e.g. Nav2's footprint. **Pose**: a pose, e.g. a goal or AMCL's estimate, as an arrow or axes. **Interactive Markers**: an interactive marker server's markers, as in RViz: dragged along their arrows, around their rings, in their planes or freely, clicked, their menus opened, the server told. Plugins add displays of their own. It replaces the Robot Model widget, whose panels open as viewers of the same robot |
 | **Arm Teleop** | Jogs an arm driven by ros2_control `JointTrajectoryController`s: a slider per joint, or pads moving the end effector in a straight line (damped least squares on the URDF's kinematics, collision checked by MoveIt's move_group when it runs) |
@@ -218,6 +218,23 @@ Notes on some of them:
   between the inputs it leaves and those it masks. The cards' tooltips say why, and who
   publishes. Messages are drawn at most 9 a second a wire; *Animate the messages* off, or with
   reduced motion, the wires only. Timeouts run on the server's clock, not a simulation's.
+
+  Its *Controls* (on by default; the server refuses them below an operator): each lock has a
+  button that locks it (`true` published on its topic, once) or releases it (`false`, after a
+  second click to confirm). A lock with a timeout is not released from here: a `false` once
+  would lock it again when its timeout passes, so its own publisher must keep publishing it.
+  When twist_mux's joystick relay (`joystick_relay.py`) feeds the mux, found by its actions
+  (`twist_mux_msgs`), a bar under the toolbar has its priority, *Autonomous* or *Manual*
+  (`joy_priority`, usually a lock of the mux: in Manual, the joystick's lock masks the inputs
+  below it), and its turbo: *Speed* steps the linear velocities (and turning with them) up and
+  down, *Turn* turning alone, ↺ resets both to the initial step, and the velocities at full
+  stick at those steps. These send goals to the relay's actions, as a joystick's buttons do
+  through joy_teleop; the lock it publishes is toggled through it too. The relay does not
+  publish its steps: they are read in the velocities it publishes for the joystick's commands,
+  followed through its actions' goals, whoever sends them, and known when it starts or resets;
+  until then, the steps they may be are shown hatched (`?/4`, `3–4/4`). twist_mux's own
+  priorities are read once, when it starts: they cannot be changed while it runs, but a lock
+  masks those below it.
 - **Navigation** publishes goals as `geometry_msgs/PoseStamped` (`/goal_pose`, which Nav2's
   bt_navigator follows) and pose estimates as `geometry_msgs/PoseWithCovarianceStamped`
   (`/initialpose`, with RViz's covariance, which AMCL starts from). Layers in another frame, like
@@ -630,7 +647,7 @@ of every request and of every message of the page; the page only hides what a ro
 | Role | Can |
 |---|---|
 | **Viewer** | Watch: cameras, maps, the robot model, logs, diagnostics, plots, the ROS graph and its messages, parameters, rosbags, the system monitor, behavior trees |
-| **Operator** | Also operate the robot: drive it (Teleop, Arm Teleop), send navigation goals and pose estimates, press buttons, publish on topics, call services, send and cancel goals, set and load parameters, start and stop services, record and play rosbags, plugins' requests; see the robot's files and networks |
+| **Operator** | Also operate the robot: drive it (Teleop, Arm Teleop), send navigation goals and pose estimates, press buttons, lock a twist_mux's locks and switch its joystick relay, publish on topics, call services, send and cancel goals, set and load parameters, start and stop services, record and play rosbags, plugins' requests; see the robot's files and networks |
 | **Administrator** | Also everything about the robot's system: edit the panels, open terminals, change the files (File Manager, behavior tree files), change the networks and read their passwords, delete rosbags, manage the users |
 
 **Who sees a panel** is its choice: in edit mode, ⋯ → *Visible to*: viewers and up, operators and
@@ -730,7 +747,8 @@ Safety and bandwidth are the server's concern:
   subscribed best effort, as twist_mux subscribes (every publisher matches), each message read
   to tell which input passes and found again on the output. Each page gets its state at most
   10 times a second while anything changes, about 1 KB, with the messages since the last time
-  by what became of them.
+  by what became of them. Its joystick relay, if one runs, is looked for with the graph, every
+  2 seconds; the joystick's commands and the relay's velocities are subscribed only then.
 - Behavior tree logs, streams of transitions, are followed whole, none dropped: each page gets
   the nodes that changed, at most 10 times a second, however fast the tree ticks.
 - The ROS log is followed once for every page: each gets the new messages at most 10 times a

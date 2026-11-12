@@ -24,7 +24,7 @@ import type { ParamInfo, ParamValue } from './parameters.ts';
 import type { PointsLayout } from './points.ts';
 import type { BagCapabilities, BagInfo, BagsRequest, Playback, Recording, RecordOptions } from './rosbag.ts';
 import type { SystemInfo, SystemSample, TrendPoint } from './system.ts';
-import type { TwistMuxState } from './twist_mux.ts';
+import type { MuxControl, TwistMuxState } from './twist_mux.ts';
 
 // How the camera widget reads a topic: 'auto' detects the type from the ROS
 // graph, 'compressed' appends /compressed to the topic unless it ends with it.
@@ -577,6 +577,16 @@ export interface TwistMuxSubscribe {
   node: string;
 }
 
+// Of a twist_mux followed (a page subscribed to it): one of its joystick
+// relay's actions, or one of its locks locked or released (see MuxControl).
+// Answered by a result with the same id: what was done, in words.
+export interface TwistMuxControl {
+  type: 'twistmux.control';
+  id: number;
+  node: string;
+  control: MuxControl;
+}
+
 // A terminal on the robot: the user's login shell, or a command, on a
 // pseudo-terminal, as the server's user. It outlives the page: the page opens
 // it again by its name after a reload or a reconnection, and gets what it
@@ -707,7 +717,8 @@ export type ClientMessage =
   | BagsSubscribe
   | BagsAction
   | SystemSubscribe
-  | TwistMuxSubscribe;
+  | TwistMuxSubscribe
+  | TwistMuxControl;
 
 // ── Server → client ──────────────────────────────────────────────────────────
 

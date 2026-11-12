@@ -11,18 +11,36 @@
 //   the locks the same, or latched as their publishers if they all are (their
 //   state then comes at once), the output reliable if its publishers are.
 //
+// - twist_mux's joystick relay feeding it, if one runs (RelayTracker,
+//   twist_mux_relay.ts): found by its actions, every GRAPH_PERIOD_MS; its
+//   parameters (its turbo); its priority (latched, as it publishes it); the
+//   joystick's commands it takes and the velocities it publishes, which say
+//   its turbo steps; its actions' status topics, which say who changed them.
+//
 // Its pages get its state at most TWIST_MUX_RATE times a second, while
 // anything changes, with what became of the messages since the last time.
+// Operators lock and release its locks (std_msgs/Bool on their topics) and
+// send goals to its relay's actions (Actions, actions.ts).
 
 import rclnodejs from 'rclnodejs';
 
 import type { ParamInfo } from '../shared/parameters.ts';
 import type { DiagnosticEntry } from '../shared/protocol.ts';
-import { TWIST_MUX_RATE, type TwistMuxState } from '../shared/twist_mux.ts';
+import { TWIST_MUX_RATE, type MuxControl, type RelayAction, type TwistMuxState } from '../shared/twist_mux.ts';
+import type { Actions } from './actions.ts';
 import type { Diagnostics } from './diagnostics.ts';
 import { nodeName, type Parameters } from './parameters.ts';
 import { nodeFullName } from './ros_graph_format.ts';
-import { BOOL, isMuxStatus, MuxTracker, outputOf, type TopicPublisher } from './twist_mux_state.ts';
+import {
+  GOAL_STATUS_ARRAY,
+  JOY_PRIORITY,
+  JOY_TURBO,
+  pickRelay,
+  RelayTracker,
+  relayActionOf,
+  type RelayGraph,
+} from './twist_mux_relay.ts';
+import { BOOL, isMuxStatus, MuxTracker, outputOf, TWIST, type TopicPublisher } from './twist_mux_state.ts';
 import { errorMessage, type Logger } from './util.ts';
 
 const { HistoryPolicy, ReliabilityPolicy, DurabilityPolicy } = rclnodejs.QoS;
@@ -34,6 +52,20 @@ const PARAMS_RETRY_MS = 5000;
 const LINGER_MS = 10_000;
 const DIAGNOSTICS_TOPIC = '/diagnostics';
 const QUEUE_DEPTH = 10;
+// A lock's new publisher waits this long, at most, for the mux to match it:
+// a first message is often lost to discovery
+const MATCH_TIMEOUT_MS = 1000;
+const MATCH_POLL_MS = 50;
+
+// In words, of what a relay's action did
+const RELAY_DONE: Record<RelayAction, string> = {
+  priority: 'Priority toggled',
+  'turbo-increase': 'Turbo up',
+  'turbo-decrease': 'Turbo down',
+  'turbo-angular-increase': 'Angular turbo up',
+  'turbo-angular-decrease': 'Angular turbo down',
+  'turbo-reset': 'Turbo reset',
+};
 
 export interface TwistMuxWatcher {
   onUpdate: (state: TwistMuxState) => void;
@@ -59,6 +91,52 @@ interface Followed extends Wanted {
   subscription: rclnodejs.Subscription | null;
 }
 
+interface LockPublisher {
+  publish(message: unknown): void;
+  readonly subscriptionCount: number;
+}
+
+type Kind = 'input' | 'lock' | 'output' | 'relay';
+
+// A subscription's key: its kind, then its name ("input joystick", "relay
+// status turbo-reset")
+function splitKey(key: string): { kind: Kind; name: string } {
+  const space = key.indexOf(' ');
+  return space < 0 ? { kind: key as Kind, name: '' } : { kind: key.slice(0, space) as Kind, name: key.slice(space + 1) };
+}
+
+function splitNode(node: string): { base: string; namespace: string } {
+  const slash = node.lastIndexOf('/');
+  return { base: node.slice(slash + 1), namespace: node.slice(0, slash) || '/' };
+}
+
+// The parameters of a node, as Parameters.watch tells them, whole
+function collectParameters(
+  parameters: Parameters,
+  node: string,
+  onParams: (params: ParamInfo[]) => void,
+  onError: (message: string) => void,
+): () => void {
+  let params = new Map<string, ParamInfo>();
+  return parameters.watch(node, {
+    onStatus: (state, message) => {
+      if (state === 'error') {
+        onError(message);
+      }
+    },
+    onUpdate: (update) => {
+      params = update.reset ? new Map() : params;
+      for (const param of update.parameters) {
+        params.set(param.name, param);
+      }
+      for (const deleted of update.deleted) {
+        params.delete(deleted);
+      }
+      onParams([...params.values()]);
+    },
+  });
+}
+
 function same(a: Wanted | undefined, b: Wanted | null): boolean {
   return !!a && !!b && a.topic === b.topic && a.type === b.type && a.reliable === b.reliable && a.latched === b.latched;
 }
@@ -74,22 +152,35 @@ class WatchedMux {
   private readonly rosNode: rclnodejs.Node;
   private readonly logger: Logger;
   private readonly parameters: Parameters;
+  private readonly actions: Actions;
   private readonly name: string;
   private readonly tracker: MuxTracker;
+  private readonly relay = new RelayTracker();
   private readonly followed = new Map<string, Followed>();
   private stopParams: (() => void) | null = null;
-  private params = new Map<string, ParamInfo>();
   private paramsFailedAt = 0;
+  private stopRelayParams: (() => void) | null = null;
+  private relayParamsFailedAt = 0;
+  // By topic: kept, as the mux matched them
+  private readonly lockPublishers = new Map<string, LockPublisher>();
   private readonly stopDiagnostics: () => void;
   private readonly graphTimer: NodeJS.Timeout;
   private readonly tickTimer: NodeJS.Timeout;
   private lastSent = '';
   private lastWarning = '';
 
-  constructor(rosNode: rclnodejs.Node, logger: Logger, parameters: Parameters, diagnostics: Diagnostics, name: string) {
+  constructor(
+    rosNode: rclnodejs.Node,
+    logger: Logger,
+    parameters: Parameters,
+    diagnostics: Diagnostics,
+    actions: Actions,
+    name: string,
+  ) {
     this.rosNode = rosNode;
     this.logger = logger;
     this.parameters = parameters;
+    this.actions = actions;
     this.name = name;
     this.tracker = new MuxTracker(name, nodeFullName(rosNode.name(), rosNode.namespace()), Date.now());
     this.watchParameters();
@@ -117,7 +208,78 @@ class WatchedMux {
     }
     this.watchers.add(watcher);
     // Its messages so far are the others'
-    watcher.onUpdate(this.tracker.snapshot(Date.now(), false));
+    watcher.onUpdate(this.state(Date.now(), false));
+  }
+
+  // What an operator asks of it: resolves with what was done, in words
+  async control(control: MuxControl): Promise<string> {
+    const relay = this.relay.relay;
+    if (control.kind === 'relay') {
+      if (!relay) {
+        throw new Error(`No joystick relay feeds ${this.name}`);
+      }
+      return this.sendRelay(relay, control.action);
+    }
+    const lock = this.tracker.lockHandle(control.lock);
+    if (!lock) {
+      throw new Error(`${this.name} has no lock ${control.lock}`);
+    }
+    // The relay's priority: toggled by the relay, which publishes it
+    if (relay && relay.priorityTopic === lock.topic && relay.actions.has('priority')) {
+      const manual = this.relay.manual;
+      if (manual === control.locked) {
+        return `Already ${manual ? 'Manual' : 'Autonomous'}`;
+      }
+      await this.sendRelay(relay, 'priority');
+      return control.locked ? 'Manual: the joystick has the priority' : 'Autonomous: the joystick has no priority';
+    }
+    if (!control.locked && lock.timeout > 0) {
+      throw new Error(
+        `${control.lock} has a ${lock.timeout} s timeout: a false once would lock it again, its own publisher must keep publishing false`,
+      );
+    }
+    await this.publishLock(lock.topic, control.locked);
+    return `${control.lock} ${control.locked ? 'locked' : 'released'}: ${String(control.locked)} published on ${lock.topic}`;
+  }
+
+  private async sendRelay(relay: RelayGraph, action: RelayAction): Promise<string> {
+    const name = relay.actions.get(action);
+    if (!name) {
+      throw new Error(`${relay.node} serves no ${action} action`);
+    }
+    await this.actions.send(name, action === 'priority' ? JOY_PRIORITY : JOY_TURBO, {});
+    return RELAY_DONE[action];
+  }
+
+  private async publishLock(topic: string, locked: boolean): Promise<void> {
+    let publisher = this.lockPublishers.get(topic);
+    if (!publisher) {
+      // Volatile: a latched value would come again to those subscribing
+      // later, after others' since
+      const type: string = BOOL;
+      // @ts-expect-error: the type is a runtime string, not one of the literal types
+      publisher = this.rosNode.createPublisher(type, topic, {
+        qos: new rclnodejs.QoS(
+          HistoryPolicy.RMW_QOS_POLICY_HISTORY_KEEP_LAST,
+          1,
+          ReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE,
+          DurabilityPolicy.RMW_QOS_POLICY_DURABILITY_VOLATILE,
+        ),
+      }) as unknown as LockPublisher;
+      this.lockPublishers.set(topic, publisher);
+    }
+    const deadline = Date.now() + MATCH_TIMEOUT_MS;
+    while (Date.now() < deadline && publisher.subscriptionCount < Math.max(1, this.rosNode.countSubscribers(topic))) {
+      await new Promise((resolve) => setTimeout(resolve, MATCH_POLL_MS));
+    }
+    publisher.publish({ data: locked });
+  }
+
+  private state(now: number, take: boolean): TwistMuxState {
+    const state = this.tracker.snapshot(now, take);
+    const { inputs, locks } = this.tracker.topics();
+    const inputTopics = new Map([...inputs].map(([name, input]) => [name, input.topic]));
+    return { ...state, relay: this.relay.snapshot(inputTopics, locks) };
   }
 
   remove(watcher: TwistMuxWatcher): void {
@@ -131,37 +293,117 @@ class WatchedMux {
       clearTimeout(this.lingerTimer);
     }
     this.stopParams?.();
+    this.stopRelayParams?.();
     this.stopDiagnostics();
     for (const followed of this.followed.values()) {
       this.unsubscribe(followed);
     }
     this.followed.clear();
+    for (const publisher of this.lockPublishers.values()) {
+      try {
+        this.rosNode.destroyPublisher(publisher as unknown as rclnodejs.Publisher<never>);
+      } catch {
+        // Gone with the node
+      }
+    }
+    this.lockPublishers.clear();
   }
 
   // Read once, and again when they change: twist_mux only reads them when it
   // starts, but its diagnostics take a second to come
   private watchParameters(): void {
     this.stopParams?.();
-    this.stopParams = this.parameters.watch(this.name, {
-      onStatus: (state, message) => {
-        if (state === 'error') {
-          this.paramsFailedAt = Date.now();
-          this.tracker.setParameters(null, message);
-        }
-      },
-      onUpdate: (update) => {
+    this.stopParams = collectParameters(
+      this.parameters,
+      this.name,
+      (params) => {
         this.paramsFailedAt = 0;
-        this.params = update.reset ? new Map() : this.params;
-        for (const param of update.parameters) {
-          this.params.set(param.name, param);
-        }
-        for (const deleted of update.deleted) {
-          this.params.delete(deleted);
-        }
-        this.tracker.setParameters([...this.params.values()]);
+        this.tracker.setParameters(params);
         this.resubscribe();
       },
-    });
+      (message) => {
+        this.paramsFailedAt = Date.now();
+        this.tracker.setParameters(null, message);
+      },
+    );
+  }
+
+  // The relay's: its turbo, read once
+  private watchRelayParameters(node: string | null): void {
+    this.stopRelayParams?.();
+    this.stopRelayParams = null;
+    this.relayParamsFailedAt = 0;
+    if (node) {
+      this.stopRelayParams = collectParameters(
+        this.parameters,
+        node,
+        (params) => {
+          this.relayParamsFailedAt = 0;
+          this.relay.setParameters(params);
+        },
+        (message) => {
+          this.relayParamsFailedAt = Date.now();
+          this.relay.setParameters(null, message);
+        },
+      );
+    }
+  }
+
+  // The graph's joystick relays: the nodes serving their actions, and what
+  // they publish and take
+  private findRelays(): RelayGraph[] {
+    const relays = new Map<string, RelayGraph>();
+    const actions = rclnodejs.getActionNamesAndTypes(this.rosNode) as unknown as { name: string; types: string[] }[];
+    for (const { name, types } of actions) {
+      const type = types.find((t) => t === JOY_TURBO || t === JOY_PRIORITY);
+      const action = type ? relayActionOf(name, type) : null;
+      if (!action) {
+        continue;
+      }
+      // Its server publishes its status
+      for (const info of this.rosNode.getPublishersInfoByTopic(`${name}/_action/status`, false) as PublisherInfo[]) {
+        const node = nodeFullName(info.node_name, info.node_namespace);
+        let relay = relays.get(node);
+        if (!relay) {
+          relay = { node, actions: new Map(), priorityTopic: null, inputTopic: null, outputTopic: null };
+          relays.set(node, relay);
+        }
+        if (!relay.actions.has(action)) {
+          relay.actions.set(action, name);
+        }
+      }
+    }
+    for (const relay of relays.values()) {
+      const { base, namespace } = splitNode(relay.node);
+      const publications = this.rosNode.getPublisherNamesAndTypesByNode(base, namespace, false);
+      const subscriptions = this.rosNode.getSubscriptionNamesAndTypesByNode(base, namespace, false);
+      relay.priorityTopic = publications.find((p) => p.types.includes(BOOL))?.name ?? null;
+      relay.outputTopic = publications.find((p) => p.types.includes(TWIST))?.name ?? null;
+      relay.inputTopic = subscriptions.find((p) => p.types.includes(TWIST))?.name ?? null;
+    }
+    return [...relays.values()];
+  }
+
+  private pollRelay(): void {
+    let relays: RelayGraph[];
+    try {
+      relays = this.findRelays();
+    } catch (e) {
+      this.warnOnce(`Cannot look for ${this.name}'s joystick relay: ${errorMessage(e)}`);
+      return;
+    }
+    const { inputs, locks } = this.tracker.topics();
+    const before = this.relay.node;
+    this.relay.setGraph(
+      pickRelay(relays, new Set([...inputs.values()].map((input) => input.topic)), new Set(locks.values())),
+      relays.map((relay) => relay.node),
+      this.tracker.found,
+    );
+    const node = this.relay.node;
+    const retry = this.relayParamsFailedAt > 0 && Date.now() - this.relayParamsFailedAt > PARAMS_RETRY_MS;
+    if (node !== before || retry) {
+      this.watchRelayParameters(node);
+    }
   }
 
   private poll(): void {
@@ -171,9 +413,7 @@ class WatchedMux {
     let publications = new Map<string, string[]>();
     const publishers = new Map<string, PublisherInfo[]>();
     try {
-      const slash = this.name.lastIndexOf('/');
-      const base = this.name.slice(slash + 1);
-      const namespace = this.name.slice(0, slash) || '/';
+      const { base, namespace } = splitNode(this.name);
       found = this.rosNode
         .getNodeNamesAndNamespaces()
         .some((n) => nodeFullName(n.name, n.namespace) === this.name);
@@ -183,7 +423,13 @@ class WatchedMux {
       }
       const { inputs, locks } = this.tracker.topics();
       const output = found ? outputOf(publications)?.topic : this.tracker.topics().output;
-      const topics = [...[...inputs.values()].map((input) => input.topic), ...locks.values(), ...(output ? [output] : [])];
+      const { priorityTopic } = this.relay.relay ?? {};
+      const topics = [
+        ...[...inputs.values()].map((input) => input.topic),
+        ...locks.values(),
+        ...(output ? [output] : []),
+        ...(priorityTopic ? [priorityTopic] : []),
+      ];
       for (const topic of new Set(topics)) {
         publishers.set(topic, this.rosNode.getPublishersInfoByTopic(topic, false) as PublisherInfo[]);
       }
@@ -208,6 +454,7 @@ class WatchedMux {
       this.paramsFailedAt = 0;
       this.watchParameters();
     }
+    this.pollRelay();
     this.resubscribe(publishers);
   }
 
@@ -255,6 +502,42 @@ class WatchedMux {
       'output',
       output && outputType ? { topic: output, type: outputType, reliable: outputReliable, latched: false } : null,
     );
+    // The relay's: its priority latched, as it publishes it; the joystick's
+    // commands and its velocities as the mux subscribes; its actions' goals
+    // latched, as action servers publish them
+    const relay = this.relay.relay;
+    if (relay) {
+      if (relay.priorityTopic) {
+        let priorityLatched = true;
+        try {
+          priorityLatched = all(relay.priorityTopic, (info) => reliable(info) && latched(info));
+        } catch {
+          // Its publishers next time
+        }
+        wanted.set('relay priority', {
+          topic: relay.priorityTopic,
+          type: BOOL,
+          reliable: priorityLatched,
+          latched: priorityLatched,
+        });
+      }
+      if (relay.inputTopic) {
+        wanted.set('relay in', { topic: relay.inputTopic, type: TWIST, reliable: false, latched: false });
+      }
+      if (relay.outputTopic) {
+        wanted.set('relay out', { topic: relay.outputTopic, type: TWIST, reliable: false, latched: false });
+      }
+      for (const [action, name] of relay.actions) {
+        if (action !== 'priority') {
+          wanted.set(`relay status ${action}`, {
+            topic: `${name}/_action/status`,
+            type: GOAL_STATUS_ARRAY,
+            reliable: true,
+            latched: true,
+          });
+        }
+      }
+    }
 
     for (const [key, followed] of this.followed) {
       if (!same(followed, wanted.get(key) ?? null)) {
@@ -271,8 +554,7 @@ class WatchedMux {
   }
 
   private subscribe(key: string, want: Wanted): void {
-    const [kind, ...rest] = key.split(' ');
-    const name = rest.join(' ');
+    const { kind, name } = splitKey(key);
     const qos = new rclnodejs.QoS(
       HistoryPolicy.RMW_QOS_POLICY_HISTORY_KEEP_LAST,
       QUEUE_DEPTH,
@@ -289,8 +571,16 @@ class WatchedMux {
         this.tracker.input(name, message, now);
       } else if (kind === 'lock') {
         this.tracker.lock(name, message, now);
-      } else {
+      } else if (kind === 'output') {
         this.tracker.outputMessage(message, now);
+      } else if (name === 'priority') {
+        this.relay.priority(message);
+      } else if (name === 'in') {
+        this.relay.command(message, now);
+      } else if (name === 'out') {
+        this.relay.velocity(message, now);
+      } else if (name.startsWith('status ')) {
+        this.relay.goalStatuses(name.slice('status '.length) as RelayAction, message, now);
       }
     };
     let subscription: rclnodejs.Subscription | null = null;
@@ -308,8 +598,12 @@ class WatchedMux {
   }
 
   private setSubscribed(key: string, at: number | null, error = ''): void {
-    const [kind, ...rest] = key.split(' ');
-    this.tracker.setSubscribed(kind as 'input' | 'lock' | 'output', rest.join(' '), at, error);
+    const { kind, name } = splitKey(key);
+    if (kind === 'relay') {
+      this.relay.setSubscribed(name, at, error);
+    } else {
+      this.tracker.setSubscribed(kind, name, at, error);
+    }
   }
 
   private unsubscribe(followed: Followed): void {
@@ -328,7 +622,7 @@ class WatchedMux {
     if (this.tracker.warmingUp(now)) {
       return;
     }
-    const state = this.tracker.snapshot(now, true);
+    const state = this.state(now, true);
     // The same as last sent, but for its time: nothing to say
     const json = JSON.stringify({ ...state, time: 0 });
     if (json === this.lastSent || this.watchers.size === 0) {
@@ -354,13 +648,24 @@ export class TwistMuxes {
   private readonly logger: Logger;
   private readonly parameters: Parameters;
   private readonly diagnostics: Diagnostics;
+  private readonly actions: Actions;
   private readonly muxes = new Map<string, WatchedMux>();
 
-  constructor(rosNode: rclnodejs.Node, logger: Logger, parameters: Parameters, diagnostics: Diagnostics) {
+  constructor(rosNode: rclnodejs.Node, logger: Logger, parameters: Parameters, diagnostics: Diagnostics, actions: Actions) {
     this.rosNode = rosNode;
     this.logger = logger;
     this.parameters = parameters;
     this.diagnostics = diagnostics;
+    this.actions = actions;
+  }
+
+  // Of a twist_mux a page follows: resolves with what was done, in words
+  control(node: string, control: MuxControl): Promise<string> {
+    const mux = this.muxes.get(nodeName(node));
+    if (!mux) {
+      return Promise.reject(new Error(`${node} is not followed`));
+    }
+    return mux.control(control);
   }
 
   // The node's state now, then whenever it changes, until the returned
@@ -369,7 +674,7 @@ export class TwistMuxes {
     const name = nodeName(node);
     let mux = this.muxes.get(name);
     if (!mux) {
-      mux = new WatchedMux(this.rosNode, this.logger, this.parameters, this.diagnostics, name);
+      mux = new WatchedMux(this.rosNode, this.logger, this.parameters, this.diagnostics, this.actions, name);
       this.muxes.set(name, mux);
     }
     const shared = mux;

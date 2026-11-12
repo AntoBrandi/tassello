@@ -3,7 +3,17 @@
 // lock is doing, in words, and the paths the messages take. Kept apart from
 // the widget to be tested without a page.
 
-import type { MuxFate, MuxInput, MuxLock, TwistMuxState } from '../../../shared/twist_mux.ts';
+import {
+  turboAt,
+  type MuxFate,
+  type MuxInput,
+  type MuxLock,
+  type MuxRelay,
+  type RelayTurbo,
+  type StepRange,
+  type TurboAxis,
+  type TwistMuxState,
+} from '../../../shared/twist_mux.ts';
 
 export interface Point {
   x: number;
@@ -441,6 +451,95 @@ export function sampleFates(flow: Record<MuxFate, number>, k: number): MuxFate[]
     return all;
   }
   return Array.from({ length: k }, (_, i) => all[Math.floor(((i + 0.5) * all.length) / k)]);
+}
+
+// ── Its controls ─────────────────────────────────────────────────────────────
+
+// A turbo step: "2/4", "2–3/4" while not known for sure, "?/4" not at all
+export function stepText(range: StepRange | null, steps: number): string {
+  if (!range || (range.low <= 1 && range.high >= steps && steps > 1)) {
+    return `?/${steps}`;
+  }
+  return range.low === range.high ? `${range.low}/${steps}` : `${range.low}–${range.high}/${steps}`;
+}
+
+function velocity(axis: TurboAxis, turbo: RelayTurbo, range: StepRange | null, unit: string): string {
+  const low = turboAt(axis, turbo.steps, range?.low ?? 1);
+  const high = turboAt(axis, turbo.steps, range?.high ?? turbo.steps);
+  const text = (v: number) => v.toFixed(2);
+  return Math.abs(high - low) < 0.005 ? `${text(low)} ${unit}` : `${text(Math.min(low, high))}–${text(Math.max(low, high))} ${unit}`;
+}
+
+// The velocities at full stick at the relay's steps: forward and turning,
+// then all of them, in a sentence
+export function turboSpeeds(relay: MuxRelay): { text: string; title: string } | null {
+  const { turbo, linearStep, angularStep } = relay;
+  if (!turbo) {
+    return null;
+  }
+  const known = (range: StepRange | null) => !!range && range.low === range.high;
+  const step = (range: StepRange | null) => (known(range) ? `step ${range?.low}` : 'a step not known yet');
+  return {
+    text: `${velocity(turbo.forward, turbo, linearStep, 'm/s')} · ${velocity(turbo.angular, turbo, angularStep, 'rad/s')}`,
+    title: [
+      `At full stick, at ${step(linearStep)} of ${turbo.steps}: forward ${velocity(turbo.forward, turbo, linearStep, 'm/s')}, backward ${velocity(turbo.backward, turbo, linearStep, 'm/s')}, sideways ${velocity(turbo.lateral, turbo, linearStep, 'm/s')}`,
+      `Turning, at ${step(angularStep)}: ${velocity(turbo.angular, turbo, angularStep, 'rad/s')}`,
+      known(linearStep) && known(angularStep)
+        ? ''
+        : 'The relay does not publish its steps: they show once the joystick drives, or after a reset',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  };
+}
+
+export interface LockControl {
+  // What a click asks for: locked, or released
+  locked: boolean;
+  // Through the relay's priority: Manual, or Autonomous
+  viaRelay: boolean;
+  label: string;
+  title: string;
+  // Why it cannot: '' if it can
+  disabled: string;
+}
+
+// What a lock's button does: a lock listening to the relay's priority is
+// toggled by the relay; the others get true or false on their topic. A lock
+// with a timeout is not released from here: its publisher's silence locks it
+// again.
+export function lockControl(lock: MuxLock, relay: MuxRelay | null): LockControl {
+  if (relay && relay.lock === lock.name && relay.actions.includes('priority')) {
+    const manual = relay.manual ?? lock.locked;
+    return {
+      locked: !manual,
+      viaRelay: true,
+      label: manual ? 'Autonomous' : 'Manual',
+      title: manual
+        ? `Autonomous: ${relay.node} gives up the priority, releasing ${lock.name}, and its joystick stops passing`
+        : `Manual: ${relay.node} takes the priority, locking ${lock.name}, which masks the inputs below ${lock.priority}`,
+      disabled: relay.manual === null ? `${relay.node}’s priority is not known yet` : '',
+    };
+  }
+  if (lock.locked) {
+    return {
+      locked: false,
+      viaRelay: false,
+      label: 'Release',
+      title: `Release ${lock.name}: publishes false on ${lock.topic}`,
+      disabled:
+        lock.timeout > 0
+          ? `${lock.name} has a ${formatTimeout(lock.timeout)} timeout: a false once would lock it again. Its own publisher must keep publishing false`
+          : '',
+    };
+  }
+  return {
+    locked: true,
+    viaRelay: false,
+    label: 'Lock',
+    title: `Lock ${lock.name}: publishes true on ${lock.topic}, masking the inputs below priority ${lock.priority}`,
+    disabled: '',
+  };
 }
 
 // ── Its node ─────────────────────────────────────────────────────────────────

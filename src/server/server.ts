@@ -159,7 +159,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const parameters = new Parameters(node, logger);
   const rosout = new Rosout(node, logger);
   const diagnostics = new Diagnostics(node, logger);
-  const twistMuxes = new TwistMuxes(node, logger, parameters, diagnostics);
+  const twistMuxes = new TwistMuxes(node, logger, parameters, diagnostics, actions);
   const terminals = new Terminals(logger);
   const networking = new Networking(logger);
   const system = new SystemMonitor(logger);

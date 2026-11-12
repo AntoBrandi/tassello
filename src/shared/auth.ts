@@ -170,6 +170,8 @@ const MESSAGE_ROLES: Record<ClientMessage['type'], Role> = {
   'action.cancel': 'operator',
   'params.set': 'operator',
   'params.load': 'operator',
+  // A twist_mux's locks, its joystick relay's turbo and priority
+  'twistmux.control': 'operator',
   'bt.record': 'operator',
   'bags.action': 'operator',
   // Each plugin handler's own role is checked by the PluginHost: an

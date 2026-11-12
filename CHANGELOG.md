@@ -6,6 +6,19 @@ noted here.
 
 ## Unreleased
 
+- **Twist Mux controls.** Operators lock and release a twist_mux's locks from their cards (a
+  release asks twice; a lock with a timeout is not released from here), and, when twist_mux's
+  joystick relay feeds the mux, switch it between *Autonomous* and *Manual* and step its turbo
+  up and down (the linear velocities, turning alone) or reset it, in a bar under the toolbar,
+  as a joystick's buttons do: goals to the relay's `twist_mux_msgs` actions. The relay does not
+  publish its turbo steps: the widget reads them in the velocities it publishes for the
+  joystick's commands, follows them through its actions' goals, whoever sends them, and knows
+  them when it starts or resets; until then, the steps they may be. The velocities at full
+  stick at those steps, from its `turbo.*` parameters. *Controls* turns them off.
+- `TwistMuxState.relay` (`MuxRelay`, `src/shared/twist_mux.ts`): the joystick relay feeding the
+  mux, found by its actions, with its priority, turbo and steps. A new `twistmux.control`
+  message, an operator's, answered with what was done (`connection.controlTwistMux`).
+
 - **Sign-in and roles.** Everyone signs in with a username and a password, and is a viewer
   (watches), an operator (also drives and operates the robot) or an administrator (also the
   panels, terminals, files, networks and users). The server checks the role of every request and

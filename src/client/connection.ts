@@ -84,6 +84,7 @@ import {
   type TwistMuxSubscribe,
   type TwistMuxUpdate,
 } from '../shared/protocol.ts';
+import type { MuxControl } from '../shared/twist_mux.ts';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
@@ -727,6 +728,14 @@ export class Connection {
   // most TWIST_MUX_RATE times a second while anything changes
   subscribeTwistMux(node: string, callback: (update: TwistMuxUpdate) => void): () => void {
     return this.subscribe({ type: 'twistmux.subscribe', node }, { twistMux: callback });
+  }
+
+  // Of a twist_mux followed: one of its joystick relay's actions, or one of
+  // its locks locked or released. Resolves with what was done, in words.
+  controlTwistMux(node: string, control: MuxControl): Promise<string> {
+    const id = this.nextId++;
+    const sent = this.send({ type: 'twistmux.control', id, node, control });
+    return this.result<string>(id, sent, GOAL_TIMEOUT_MS);
   }
 
   subscribeSystem(callback: (update: SystemUpdate) => void): () => void {

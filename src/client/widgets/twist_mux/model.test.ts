@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { MuxInput, MuxLock, TwistMuxState } from '../../../shared/twist_mux.ts';
+import type { MuxInput, MuxLock, MuxRelay, TwistMuxState } from '../../../shared/twist_mux.ts';
 import {
   activity,
   displayOrder,
@@ -9,6 +9,7 @@ import {
   formatRate,
   formatSpeed,
   inputStatus,
+  lockControl,
   lockLine,
   lockStatus,
   muxCandidates,
@@ -16,7 +17,9 @@ import {
   pointAt,
   polyline,
   sampleFates,
+  stepText,
   summary,
+  turboSpeeds,
   typesText,
   WIDE_PX,
   type Point,
@@ -71,6 +74,7 @@ const muxState = (fields: Partial<TwistMuxState> = {}): TwistMuxState => ({
   selected: null,
   diagnostics: null,
   problems: [],
+  relay: null,
   time: 0,
   ...fields,
 });
@@ -310,4 +314,66 @@ test('numbers in words', () => {
   assert.equal(activity(null, 0, 0), 'no message');
   assert.equal(activity(900, 20, 1000), '20 Hz');
   assert.equal(activity(0, 20, 3000), '3 s ago');
+});
+
+const relay = (fields: Partial<MuxRelay> = {}): MuxRelay => ({
+  node: '/joystick_relay',
+  actions: ['priority', 'turbo-increase', 'turbo-decrease', 'turbo-reset'],
+  priorityTopic: '/joy_priority',
+  manual: true,
+  lock: 'joystick',
+  input: 'joystick',
+  inputTopic: '/input_joy/cmd_vel',
+  outputTopic: '/joy_vel',
+  turbo: {
+    steps: 4,
+    initStep: 2,
+    forward: { min: 0.5, max: 1 },
+    backward: { min: 0.25, max: 0.5 },
+    lateral: { min: 1, max: 1 },
+    angular: { min: 0.7, max: 1.2 },
+  },
+  linearStep: { low: 3, high: 3 },
+  angularStep: { low: 1, high: 1 },
+  error: '',
+  ...fields,
+});
+
+test('stepText says a step, a range of them, or that it is not known', () => {
+  assert.equal(stepText({ low: 2, high: 2 }, 4), '2/4');
+  assert.equal(stepText({ low: 3, high: 4 }, 4), '3–4/4');
+  assert.equal(stepText({ low: 1, high: 4 }, 4), '?/4');
+  assert.equal(stepText(null, 4), '?/4');
+  assert.equal(stepText({ low: 1, high: 1 }, 1), '1/1');
+});
+
+test('turboSpeeds says the velocities at full stick at the steps, a range while not known', () => {
+  assert.equal(turboSpeeds(relay())?.text, '0.83 m/s · 0.70 rad/s');
+  const unknown = turboSpeeds(relay({ linearStep: { low: 1, high: 4 } }));
+  assert.equal(unknown?.text, '0.50–1.00 m/s · 0.70 rad/s');
+  assert.match(unknown?.title ?? '', /does not publish its steps/);
+  assert.match(turboSpeeds(relay())?.title ?? '', /backward 0\.42 m\/s, sideways 1\.00 m\/s/);
+  assert.equal(turboSpeeds(relay({ turbo: null })), null);
+});
+
+test('lockControl: the relay’s lock through its priority, the others by their topic', () => {
+  const joystick = lock('joystick', 100, { topic: '/joy_priority', locked: true });
+  let control = lockControl(joystick, relay());
+  assert.deepEqual([control.locked, control.viaRelay, control.label, control.disabled], [false, true, 'Autonomous', '']);
+  control = lockControl({ ...joystick, locked: false }, relay({ manual: false }));
+  assert.deepEqual([control.locked, control.label], [true, 'Manual']);
+  // Its priority not heard of
+  assert.notEqual(lockControl(joystick, relay({ manual: null })).disabled, '');
+  // A relay without the action: as any lock
+  assert.equal(lockControl(joystick, relay({ actions: ['turbo-reset'] })).viaRelay, false);
+
+  const pause = lock('pause', 100);
+  control = lockControl(pause, relay());
+  assert.deepEqual([control.locked, control.viaRelay, control.label, control.disabled], [true, false, 'Lock', '']);
+  control = lockControl({ ...pause, locked: true }, null);
+  assert.deepEqual([control.locked, control.label, control.disabled], [false, 'Release', '']);
+  // Its timeout would lock it again
+  assert.match(lockControl({ ...pause, locked: true, timeout: 0.5 }, null).disabled, /0\.5 s timeout/);
+  // Locking one with a timeout is fine
+  assert.equal(lockControl({ ...pause, timeout: 0.5 }, null).disabled, '');
 });

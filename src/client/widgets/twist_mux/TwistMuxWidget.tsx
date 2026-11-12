@@ -15,12 +15,14 @@ import { connection, useConnectionStatus } from '../../connection.ts';
 import { TwistMuxIcon } from '../../icons.tsx';
 import { defineWidget, type WidgetProps } from '../types.ts';
 import { isHiddenNode } from '../parameters/model.ts';
+import { RelayBar, useMuxControls } from './MuxControls.tsx';
 import { MuxDiagram } from './MuxDiagram.tsx';
 import { muxCandidates, summary, typesText, typesTitle } from './model.ts';
 
 interface TwistMuxConfig {
   node: string;
   animate: boolean;
+  controls: boolean;
 }
 
 // When nothing else does, the ages of the messages shown
@@ -74,6 +76,9 @@ function TwistMuxWidget({ config, updateConfig }: WidgetProps<TwistMuxConfig>) {
     return connection.subscribeTwistMux(node, setState);
   }, [node]);
   const connected = useConnectionStatus() === 'open';
+  const controls = useMuxControls(node);
+  // Missing in panels saved before it: on
+  const showControls = config.controls !== false;
   const reduced = usePrefersReducedMotion();
   useTicker(TICK_MS);
   const now = connection.serverNow();
@@ -90,7 +95,14 @@ function TwistMuxWidget({ config, updateConfig }: WidgetProps<TwistMuxConfig>) {
       </p>
     );
   } else {
-    body = <MuxDiagram state={state} now={now} animate={config.animate && !reduced} />;
+    body = (
+      <MuxDiagram
+        state={state}
+        now={now}
+        animate={config.animate && !reduced}
+        controls={showControls && state.found ? controls : null}
+      />
+    );
   }
   const line = state?.configFrom ? summary(state, now) : null;
   // Of the node running
@@ -135,6 +147,7 @@ function TwistMuxWidget({ config, updateConfig }: WidgetProps<TwistMuxConfig>) {
           </span>
         )}
       </div>
+      {showControls && state?.found && state.relay && <RelayBar relay={state.relay} controls={controls} />}
       <div className="mux-body">{body}</div>
       {line && (
         <div className={`mux-status ${line.tone}`} title={line.text}>
@@ -149,7 +162,8 @@ function TwistMuxWidget({ config, updateConfig }: WidgetProps<TwistMuxConfig>) {
 export const twistMuxWidget = defineWidget<TwistMuxConfig>({
   type: 'twist-mux',
   name: 'Twist Mux',
-  description: 'A twist_mux as a multiplexer: which input passes, its locks, and the messages flowing through it.',
+  description:
+    'A twist_mux as a multiplexer: which input passes, its locks, and the messages flowing through it. Locks its locks, and switches its joystick relay’s priority and turbo.',
   icon: TwistMuxIcon,
   defaultSize: { w: 10, h: 7 },
   minSize: { w: 4, h: 3 },
@@ -170,6 +184,13 @@ export const twistMuxWidget = defineWidget<TwistMuxConfig>({
       kind: 'boolean',
       default: true,
       help: 'Each message moving along its wire, on to the output if it passes. Off, or with reduced motion: the wires only',
+    },
+    {
+      key: 'controls',
+      label: 'Controls',
+      kind: 'boolean',
+      default: true,
+      help: 'For operators: a button on each lock, to lock or release it, and the joystick relay’s priority (Autonomous or Manual) and turbo steps, if one feeds the mux',
     },
   ],
 });

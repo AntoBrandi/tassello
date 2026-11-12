@@ -2209,8 +2209,202 @@ textarea {
   white-space: nowrap;
 }
 
+/* The controls: the joystick relay's, under the toolbar; the locks', on their
+   cards */
+
+.mux-controls {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.mux-relay {
+  position: relative;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.mux-relay-error {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mux-warn);
+}
+
+.mux-mode {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.mux-mode-button {
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 11px var(--font);
+  cursor: pointer;
+}
+
+.mux-mode-button:hover:not(:disabled, .active) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.mux-mode-button.active {
+  background: var(--accent);
+  color: #fff;
+  cursor: default;
+}
+
+.mux-mode-button:disabled:not(.active) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mux-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mux-control-label {
+  margin-right: 1px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mux-step-button,
+.mux-lock-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 10px var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mux-step-button:hover:not(:disabled),
+.mux-lock-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.mux-step-button:disabled,
+.mux-lock-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+:is(.mux-step-button, .mux-lock-button, .mux-mode).pending {
+  opacity: 1;
+  animation: mux-pending 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes mux-pending {
+  to {
+    opacity: 0.4;
+  }
+}
+
+.mux-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Taller the faster */
+.mux-step-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+
+.mux-step-bar {
+  width: 5px;
+  border-radius: 1.5px;
+  background: var(--surface-3);
+}
+
+.mux-step-bar.on {
+  background: var(--accent);
+}
+
+/* Not known: it may be */
+.mux-step-bar.maybe {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.mux-step-text {
+  min-width: 2.4em;
+  font: 600 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.mux-speeds {
+  margin-left: auto;
+  color: var(--text-muted);
+  font: 11px var(--mono);
+  white-space: nowrap;
+}
+
+.mux-lock.controlled {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'icon name warn act'
+    'sub sub sub act';
+}
+
+.mux-lock.controlled.compact {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-areas: 'icon name warn prio act';
+}
+
+.mux-lock-button {
+  grid-area: act;
+}
+
+.mux-card.compact .mux-lock-button {
+  height: 20px;
+}
+
+/* Asking to be clicked again */
+.mux-lock-button.armed,
+.mux-lock-button.armed:hover:not(:disabled) {
+  border-color: var(--mux-lock);
+  background: var(--mux-lock);
+  color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .mux-status.ok .mux-status-dot {
+  .mux-status.ok .mux-status-dot,
+  :is(.mux-step-button, .mux-lock-button, .mux-mode).pending {
     animation: none;
   }
 }

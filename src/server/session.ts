@@ -9,6 +9,7 @@ import { WebSocket } from 'ws';
 
 import { notAllowedMessage, requiredRole, roleAtLeast, type AuthUser } from '../shared/auth.ts';
 import { MAX_TRUNCATE, MAX_WINDOW } from '../shared/monitor.ts';
+import { RELAY_ACTIONS, type MuxControl, type RelayAction } from '../shared/twist_mux.ts';
 import {
   FRAME_HEADER_BYTES,
   type ClientMessage,
@@ -147,7 +148,20 @@ const ANSWERED = new Set<ClientMessage['type']>([
   'params.set',
   'plugin.request',
   'ros.call',
+  'twistmux.control',
 ]);
+
+// What a page asks of a twist_mux, checked
+function muxControl(value: unknown): MuxControl {
+  const control = (value ?? {}) as Record<string, unknown>;
+  if (control.kind === 'relay' && RELAY_ACTIONS.includes(control.action as RelayAction)) {
+    return { kind: 'relay', action: control.action as RelayAction };
+  }
+  if (control.kind === 'lock' && typeof control.lock === 'string' && typeof control.locked === 'boolean') {
+    return { kind: 'lock', lock: control.lock, locked: control.locked };
+  }
+  throw new Error('Invalid twist_mux control');
+}
 
 // A terminal's name, chosen by the page
 const TERMINAL_NAME = /^[\w-]{1,64}$/;
@@ -566,6 +580,15 @@ export class Session implements FrameSink, PluginSession {
         );
         return;
       }
+
+      case 'twistmux.control':
+        this.answer(
+          message.id,
+          Promise.resolve().then(() =>
+            services.twistMuxes.control(string(message.node, 'node'), muxControl(message.control)),
+          ),
+        );
+        return;
 
       case 'terminal.open': {
         const id = subscriptionId(message.id);
