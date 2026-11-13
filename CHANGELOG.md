@@ -6,6 +6,12 @@ noted here.
 
 ## Unreleased
 
+- **Robot Viewer zoom.** The viewer opens, and Reset goes back, at a zoom saved with the panel:
+  *Zoom* in its properties (1 fits the robot, 2 is twice as close), or, in edit mode, scrolling
+  on the viewer, which shows the zoom it opens at (a scroll is one change, undone at once; a
+  drag still moves the widget). Restored after a reload or a restart of the server.
+- `ViewerView` (`tassello/viewer`): `zoom` and `onZoomChange(zoom)`, for a plugin's viewer to do
+  the same.
 - **Teleop on rails.** A button in the Teleop widget locks the pads to one axis at a time, as on
   a track: the one first pushed, until the pads are released. Going forward does not turn,
   turning does not move (nor, omnidirectional, x with y). *On rails* is how the widget starts.

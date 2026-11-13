@@ -2881,6 +2881,25 @@ textarea {
   color: #ffd2a6;
 }
 
+/* Edit mode: the wheel chooses the zoom (ViewerView.tsx), over the whole view
+   (its body takes no pointer then); a press goes on to the widget, dragged.
+   The zoom is said after the notes. */
+.robot-zoom-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.robot-zoom-chip {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 55%);
+  color: #e5e7eb;
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Reset, 3D or 2D, the fixed frame: within the widget, however narrow */
 .robot-toolbar {
   max-width: calc(100% - 16px);

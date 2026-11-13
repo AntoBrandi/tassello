@@ -2,7 +2,8 @@
 // fixed frame, each a kind of thing (the robot model, TF, a map, a laser scan,
 // a point cloud, or a plugin's), with its own properties, in a list edited in
 // the side panel. Drag to orbit (pan in 2D), right drag (two fingers) to pan,
-// scroll (pinch) to zoom.
+// scroll (pinch) to zoom. It opens fitting the robot, at its zoom, saved with
+// the panel: chosen in edit mode by scrolling on it.
 //
 // It replaces the Robot Model widget, whose type it keeps: the panels' robot
 // models open as viewers of the robot model, its frames as a TF display.
@@ -16,12 +17,15 @@ import type { DisplayInstance } from '../../../shared/panel.ts';
 import { useTfFrames } from '../../connection.ts';
 import { CubeIcon } from '../../icons.tsx';
 import { defineWidget, type WidgetProps } from '../types.ts';
-import { DEFAULT_DISPLAYS, migrateRobotModelConfig } from './model.ts';
+import { DEFAULT_DISPLAYS, MAX_ZOOM, MIN_ZOOM, migrateRobotModelConfig } from './model.ts';
 
 export interface RobotViewerConfig {
   // '' for Auto: the robot model's root link, else the root of the TF tree
   fixedFrame: string;
   view: '3d' | '2d';
+  // Where the view opens, and Reset goes back to: 1 fits the robot, 2 is
+  // twice as close
+  zoom: number;
   displays: DisplayInstance[];
 }
 
@@ -70,6 +74,15 @@ export const robotViewerWidget = defineWidget<RobotViewerConfig>({
         { value: '3d', label: '3D' },
         { value: '2d', label: '2D, from above' },
       ],
+    },
+    {
+      key: 'zoom',
+      label: 'Zoom',
+      kind: 'number',
+      default: 1,
+      min: MIN_ZOOM,
+      max: MAX_ZOOM,
+      help: 'Where the view opens, and Reset goes back to: 1 fits the robot, 2 is twice as close, 0.5 twice as far. Or scroll on the view, in edit mode',
     },
     {
       key: 'displays',

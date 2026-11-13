@@ -394,6 +394,8 @@ function MapWidget() {
 | `view` | `'3d'` or `'2d'` |
 | `displays` | `{ id, type, name, enabled, config }`, as a Robot Viewer's list, in the order they are drawn (later on top); the config's missing values are the display's defaults |
 | `onViewChange(view)`, `onFixedFrameChange(frame)` | Given: the toolbar has the 3D/2D switch, and the fixed frame's menu |
+| `zoom` | How close the home view is (where the view opens, and Reset goes back to): `1` (the default) fits what the displays focus on, `2` twice as close |
+| `onZoomChange(zoom)` | Given: scrolling on the view chooses the zoom, told once a scroll ends, while the view stays at its home and a press goes through to what is under it; e.g. `editing ? (zoom) => updateConfig({ zoom }) : undefined`, as the Robot Viewer does |
 | `disabled` | The switch and menu greyed out |
 | `emptyMessage` | Said in the middle while there are no displays |
 | `children` | Drawn over the view, e.g. the widget's own controls |

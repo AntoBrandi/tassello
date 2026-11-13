@@ -3,18 +3,23 @@ import { test } from 'node:test';
 
 import {
   cameraInfoTopic,
+  clampZoom,
   DEFAULT_DISPLAYS,
   effectiveFixedFrame,
   frameFilter,
   imageCorners,
   intrinsicsFromFov,
   intrinsicsOf,
+  MAX_ZOOM,
   migrateRobotModelConfig,
+  MIN_ZOOM,
   moveItem,
   newDisplayId,
   parseColor,
   rainbow,
+  roundZoom,
   treeRoot,
+  wheelZoom,
 } from './model.ts';
 
 test("the Robot Model widget's config becomes displays", () => {
@@ -124,4 +129,36 @@ test("the image's corners in front of the camera, in its optical frame", () => {
   // An off-centre principal point shifts the image
   const [topLeft] = imageCorners({ width: 100, height: 100, fx: 100, fy: 100, cx: 25, cy: 50 }, 1);
   assert.deepEqual(topLeft, [-0.25, -0.5, 1]);
+});
+
+test('the zoom stays within its limits, 1 for what is not one', () => {
+  assert.equal(clampZoom(2.5), 2.5);
+  assert.equal(clampZoom(1e6), MAX_ZOOM);
+  assert.equal(clampZoom(1e-6), MIN_ZOOM);
+  assert.equal(clampZoom(0), 1);
+  assert.equal(clampZoom(-3), 1);
+  assert.equal(clampZoom(Number.NaN), 1);
+  assert.equal(clampZoom(Infinity), 1);
+});
+
+test('the zoom is saved with 3 significant digits', () => {
+  assert.equal(roundZoom(1.23456), 1.23);
+  assert.equal(roundZoom(0.0123456), 0.0123);
+  assert.equal(roundZoom(42.987), 43);
+  assert.equal(roundZoom(500), MAX_ZOOM);
+});
+
+test('the wheel zooms in up, out down, a notch as much either way', () => {
+  const zoomedIn = wheelZoom(1, -100);
+  const zoomedOut = wheelZoom(1, 100);
+  assert.ok(zoomedIn > 1.05 && zoomedIn < 1.2);
+  assert.ok(zoomedOut < 1 && zoomedOut > 0.8);
+  assert.ok(Math.abs(wheelZoom(zoomedIn, 100) - 1) < 1e-12);
+  // Lines and pages, as some mice and browsers give them
+  assert.ok(Math.abs(wheelZoom(1, -100 / 16, 1) - zoomedIn) < 1e-12);
+  assert.ok(wheelZoom(1, -1, 2) > zoomedIn);
+  // A touchpad's pinch: small steps, faster
+  assert.ok(wheelZoom(1, -10, 0, true) > wheelZoom(1, -10));
+  assert.equal(wheelZoom(MAX_ZOOM, -1000), MAX_ZOOM);
+  assert.equal(wheelZoom(MIN_ZOOM, 1000), MIN_ZOOM);
 });

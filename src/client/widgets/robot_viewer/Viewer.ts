@@ -54,7 +54,7 @@ import {
   type ViewCamera,
   type ViewMode,
 } from './display.ts';
-import { effectiveFixedFrame } from './model.ts';
+import { clampZoom, effectiveFixedFrame } from './model.ts';
 
 // TF updates a second: what moves in the fixed frame, e.g. the robot in odom
 const TF_RATE = 15;
@@ -221,6 +221,8 @@ export class Viewer {
   private frameError: string | null = null;
   private unsubscribeFrames: (() => void) | null = null;
   private scale = DEFAULT_SCALE;
+  // The home view's: 1 fits the focus, 2 is twice as close
+  private zoom = 1;
   private userMoved = false;
   private renderQueued = 0;
   private stateKey = '';
@@ -387,7 +389,22 @@ export class Viewer {
     this.render();
   }
 
-  // The view back to what the displays focus on (the robot)
+  // How close the home view is (where the view opens, and Reset goes back
+  // to): 1 fits what the displays focus on (the robot), 2 is twice as close.
+  // The view goes there, unless moved by the user.
+  setZoom(zoom: number): void {
+    const clamped = clampZoom(zoom);
+    if (clamped === this.zoom) {
+      return;
+    }
+    this.zoom = clamped;
+    if (!this.userMoved) {
+      this.fit();
+    }
+  }
+
+  // The view back to its home: what the displays focus on (the robot), at
+  // the zoom
   resetView(): void {
     this.userMoved = false;
     this.fit();
@@ -744,11 +761,11 @@ export class Viewer {
       const aspect = this.ortho.right / this.ortho.top;
       this.pan.target.copy(sphere.center);
       this.ortho.position.set(sphere.center.x, sphere.center.y + ORTHO_HEIGHT, sphere.center.z);
-      this.ortho.zoom = Math.min(1, aspect) / (radius * 1.15);
+      this.ortho.zoom = (Math.min(1, aspect) / (radius * 1.15)) * this.zoom;
       this.ortho.updateProjectionMatrix();
       this.pan.update();
     } else {
-      const distance = (radius / Math.sin(((this.perspective.fov / 2) * Math.PI) / 180)) * 1.05;
+      const distance = ((radius / Math.sin(((this.perspective.fov / 2) * Math.PI) / 180)) * 1.05) / this.zoom;
       // From the front left, above: ROS (1, 0.8, 0.7)
       const direction = new Vector3(1, 0.7, -0.8).normalize();
       this.perspective.position.copy(sphere.center).addScaledVector(direction, distance);

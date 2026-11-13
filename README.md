@@ -258,7 +258,9 @@ Notes on some of them:
   the TF tree without a robot model). Laser scans and point clouds are placed as each message
   arrives, on the server: a scan lands on the map's walls when the localization is right. Drag
   to orbit (in 2D, to pan), right drag (two fingers) to pan, scroll (pinch) to zoom; Reset
-  fits the robot. A press on an interactive marker's control is the marker's: dragged, it moves
+  fits the robot. It opens, and Reset goes back, at its *Zoom*, saved with the panel: 1 fits the
+  robot, 2 is twice as close. In edit mode, scrolling on the viewer chooses it (the view shows
+  the zoom it opens at); a drag still moves the widget. A press on an interactive marker's control is the marker's: dragged, it moves
   or turns as its control says (with Ctrl, a 3D control turns), clicked, a button is pressed or a
   menu opens; a right click (a long touch) opens the marker's menu.
 - **Arm Teleop** streams its controllers one-point trajectories just ahead of the arm, 20 times

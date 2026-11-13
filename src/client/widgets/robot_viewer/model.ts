@@ -1,6 +1,7 @@
 // What the Robot Viewer works out without three.js: its displays as saved by
 // the Robot Model widget it replaces, the frame Auto stands for, new
-// displays' ids, the colour scale of points, and where a camera's image is.
+// displays' ids, its zoom, the colour scale of points, and where a camera's
+// image is.
 
 import type { DisplayInstance } from '../../../shared/panel.ts';
 
@@ -89,6 +90,28 @@ export function newDisplayId(taken: Iterable<string>): string {
       return id;
     }
   }
+}
+
+// The zoom of a viewer's home view (where it opens, and Reset goes back to):
+// 1 fits what its displays focus on (the robot), 2 is twice as close
+export const MIN_ZOOM = 0.01;
+export const MAX_ZOOM = 100;
+
+export function clampZoom(zoom: number): number {
+  return Number.isFinite(zoom) && zoom > 0 ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)) : 1;
+}
+
+// As saved: 3 significant digits, e.g. 1.5 or 0.0125
+export function roundZoom(zoom: number): number {
+  return Number(clampZoom(zoom).toPrecision(3));
+}
+
+// The zoom after a turn of the wheel: about 10% a mouse's notch (100 pixels),
+// up to zoom in. A touchpad's pinch comes as the wheel with Ctrl, in small
+// steps: faster. deltaMode as WheelEvent's: pixels, lines, pages.
+export function wheelZoom(zoom: number, deltaY: number, deltaMode = 0, pinch = false): number {
+  const pixels = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 400 : deltaY;
+  return clampZoom(clampZoom(zoom) * Math.exp(-pixels * (pinch ? 0.01 : 0.001)));
 }
 
 export function moveItem<T>(list: T[], index: number, delta: number): T[] {
