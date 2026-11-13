@@ -2,11 +2,14 @@
 // (forward x, rotation z), or two in omnidirectional mode (forward x and
 // sideways y, rotation z). Streams at the configured rate while a pad is
 // held, then one zero; see the server's watchdog in src/server/teleop.ts.
+// On rails (its toggle), one axis at a time, as on a track: the one first
+// pushed, until the pads are released. Going forward does not turn, turning
+// does not move.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { connection, useConnectionStatus } from '../connection.ts';
-import { GamepadIcon } from '../icons.tsx';
+import { GamepadIcon, RailIcon } from '../icons.tsx';
 import { Joystick } from './Joystick.tsx';
 import { defineWidget, type WidgetProps } from './types.ts';
 
@@ -18,6 +21,7 @@ interface TeleopConfig {
   maxLinear: number;
   maxAngular: number;
   rate: number;
+  rail: boolean;
 }
 
 // Normalized -1..1: x forward, y to the left, z counterclockwise
@@ -51,9 +55,25 @@ function TeleopWidget({ config, editing }: WidgetProps<TeleopConfig>) {
   const configRef = useRef(config);
   configRef.current = config;
   const moving = useRef(false);
+  // Starts as configured; the operator's choice lasts as long as the page
+  const [rail, setRail] = useState(config.rail);
+  const railRef = useRef(rail);
+  railRef.current = rail;
+  useEffect(() => setRail(config.rail), [config.rail]);
 
   const update = useCallback((change: Partial<Axes>) => {
-    const next = { ...axesRef.current, ...change };
+    const current = axesRef.current;
+    const next = { ...current, ...change };
+    // On rails, a pad does not join the one already moving the robot (each
+    // pad keeps to one axis of its own: see Joystick)
+    if (railRef.current && (next.x !== 0 || next.y !== 0) && next.z !== 0) {
+      if (current.z !== 0) {
+        next.x = 0;
+        next.y = 0;
+      } else {
+        next.z = 0;
+      }
+    }
     axesRef.current = next;
     setAxes(next);
     // Starting and stopping go out at once, the rest at the rate
@@ -89,23 +109,46 @@ function TeleopWidget({ config, editing }: WidgetProps<TeleopConfig>) {
 
   const disabled = editing || !online;
   const { maxLinear, maxAngular } = config;
+  // On rails, the pad that is not driving waits for the other
+  const translating = axes.x !== 0 || axes.y !== 0;
+  const railTitle = rail
+    ? 'On rails: one axis at a time. Click to move freely'
+    : 'Lock to one axis at a time, as on rails';
   return (
     <div className="teleop">
+      <button
+        type="button"
+        className="overlay-button teleop-rail"
+        aria-pressed={rail}
+        title={railTitle}
+        aria-label="On rails"
+        disabled={editing}
+        onClick={() => setRail((on) => !on)}
+      >
+        <RailIcon width={17} height={17} />
+      </button>
       <div className={`teleop-pads${config.omnidirectional ? ' two' : ''}`}>
         {config.omnidirectional ? (
           <>
             <Joystick
               axes="xy"
               label="x · y"
-              disabled={disabled}
+              rail={rail}
+              disabled={disabled || (rail && axes.z !== 0)}
               onMove={(px, py) => update({ x: py, y: -px })}
             />
-            <Joystick axes="x" label="z" disabled={disabled} onMove={(px) => update({ z: -px })} />
+            <Joystick
+              axes="x"
+              label="z"
+              disabled={disabled || (rail && translating)}
+              onMove={(px) => update({ z: -px })}
+            />
           </>
         ) : (
           <Joystick
             axes="xy"
             label="x · z"
+            rail={rail}
             disabled={disabled}
             onMove={(px, py) => update({ x: py, y: 0, z: -px })}
           />
@@ -190,6 +233,13 @@ export const teleopWidget = defineWidget<TeleopConfig>({
       max: 50,
       step: 1,
       help: 'How often the command is published while a pad is held',
+    },
+    {
+      key: 'rail',
+      label: 'On rails',
+      kind: 'boolean',
+      default: false,
+      help: 'One axis at a time: going forward does not turn, turning does not move. How the widget starts: its button switches it',
     },
   ],
 });

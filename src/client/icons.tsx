@@ -117,6 +117,8 @@ export const AppsIcon = icon(
 );
 
 // Widget types
+// A track: two rails and their ties
+export const RailIcon = icon(<path d="M8 3v18M16 3v18M8 7h8M8 12h8M8 17h8" />);
 export const GamepadIcon = icon(
   <>
     <rect x="2" y="6" width="20" height="12" rx="6" />

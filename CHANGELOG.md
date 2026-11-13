@@ -6,6 +6,9 @@ noted here.
 
 ## Unreleased
 
+- **Teleop on rails.** A button in the Teleop widget locks the pads to one axis at a time, as on
+  a track: the one first pushed, until the pads are released. Going forward does not turn,
+  turning does not move (nor, omnidirectional, x with y). *On rails* is how the widget starts.
 - **Twist Mux controls.** Operators lock and release a twist_mux's locks from their cards (a
   release asks twice; a lock with a timeout is not released from here), and, when twist_mux's
   joystick relay feeds the mux, switch it between *Autonomous* and *Manual* and step its turbo
