@@ -106,7 +106,9 @@ export const api = {
   createPanel: (panel: PanelFile) => request<Panel>('POST', '/api/panels', panel),
   savePanel: (panel: Panel) => request<Panel>('PUT', panelUrl(panel.id), panel),
   deletePanel: (id: string) => request<void>('DELETE', panelUrl(id)),
-  listTopics: () => request<TopicInfo[]>('GET', '/api/topics'),
+  // Of the ROS domain the widgets reach (the shown panel's)
+  listTopics: () =>
+    request<TopicInfo[]>('GET', connection.domainId === null ? '/api/topics' : `/api/topics?domain=${connection.domainId}`),
   listPlugins: () => request<PluginInfo[]>('GET', '/api/plugins'),
   listFiles: (dir: string, kind: FileKind = 'image') =>
     request<DirectoryListing>('GET', `/api/files/list?dir=${encodeURIComponent(dir)}&kind=${kind}`),

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { slugify } from '../shared/panel.ts';
-import { HttpError, PanelRoles, PanelStore, sanitizePanel, seesPanel } from './panels.ts';
+import { HttpError, mayUseDomain, PanelRoles, PanelStore, sanitizePanel, seesPanel } from './panels.ts';
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -205,4 +205,54 @@ test('who sees each panel is kept as they change', async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('sanitizePanel keeps a ROS domain, none being the server’s, and refuses malformed ones', () => {
+  assert.equal(sanitizePanel({ name: 'Sim', domainId: 42 }, 'sim').domainId, 42);
+  assert.equal(sanitizePanel({ name: 'Sim', domainId: 0 }, 'sim').domainId, 0);
+  assert.equal('domainId' in sanitizePanel({ name: 'Sim' }, 'sim'), false);
+  assert.equal('domainId' in sanitizePanel({ name: 'Sim', domainId: null }, 'sim'), false);
+  for (const domainId of [-1, 233, 1.5, '4', true]) {
+    assert.throws(() => sanitizePanel({ name: 'Sim', domainId }, 'sim'), /domainId must be an integer between 0 and 232/);
+  }
+  // Next to who sees it, in the file
+  assert.deepEqual(Object.keys(sanitizePanel({ name: 'Sim', widgets: [], domainId: 3, minRole: 'admin' }, 'sim')), [
+    'id',
+    'name',
+    'minRole',
+    'domainId',
+    'widgets',
+  ]);
+});
+
+test('the store lists the panels’ ROS domains', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tassello-panels-'));
+  try {
+    const store = new PanelStore(dir, [], silent);
+    await store.create({ name: 'Real', widgets: [] }, null);
+    await store.create({ name: 'Sim', widgets: [], domainId: 42 }, null);
+    assert.deepEqual(await store.list(), [
+      { id: 'real', name: 'Real', minRole: 'viewer' },
+      { id: 'sim', name: 'Sim', minRole: 'viewer', domainId: 42 },
+    ]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a user reaches the server’s domain, and the others of the panels they see', () => {
+  const panels = [
+    { id: 'sim', name: 'Sim', minRole: 'viewer' as const, domainId: 42 },
+    { id: 'lab', name: 'Lab', minRole: 'operator' as const, domainId: 7 },
+  ];
+  assert.equal(mayUseDomain('viewer', 0, 0, panels), true);
+  assert.equal(mayUseDomain('viewer', 42, 0, panels), true);
+  assert.equal(mayUseDomain('viewer', 7, 0, panels), false);
+  assert.equal(mayUseDomain('operator', 7, 0, panels), true);
+  assert.equal(mayUseDomain('operator', 9, 0, panels), false);
+  // Who makes the panels: any, before a panel is on it
+  assert.equal(mayUseDomain('admin', 9, 0, panels), true);
+  // A server started on another domain
+  assert.equal(mayUseDomain('viewer', 5, 5, []), true);
+  assert.equal(mayUseDomain('viewer', 0, 5, []), false);
 });

@@ -23,7 +23,12 @@ export function panelFile(panel: Panel): PanelFile {
       };
     }
   }
-  const file: PanelFile = { name: panel.name, minRole: panel.minRole, widgets: panel.widgets };
+  const file: PanelFile = {
+    name: panel.name,
+    minRole: panel.minRole,
+    ...(panel.domainId !== undefined && { domainId: panel.domainId }),
+    widgets: panel.widgets,
+  };
   if (Object.keys(layouts).length > 0) {
     file.layouts = layouts;
   }

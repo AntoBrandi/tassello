@@ -9,6 +9,11 @@
 //
 // minRole: who sees the panel (src/shared/auth.ts), the server enforcing it;
 // administrators see them all.
+//
+// domainId: the ROS domain (ROS_DOMAIN_ID) its widgets reach, the server's own
+// if missing. The page connects to the server on the panel's domain, and the
+// server keeps a ROS node on each domain a panel asks for (see
+// src/server/domains.ts).
 
 import { isRole, roleAtLeast, type Role } from './auth.ts';
 
@@ -84,12 +89,23 @@ export interface Panel {
   statusBar?: StatusWidgetInstance[];
   // The lowest role that sees it; 'viewer' if missing (panels saved before)
   minRole: Role;
+  // The ROS domain of its widgets; the server's own if missing
+  domainId?: number;
 }
 
 export interface PanelSummary {
   id: string;
   name: string;
   minRole: Role;
+  domainId?: number;
+}
+
+// ROS_DOMAIN_ID: 0 to 232 with DDS (higher ones have no UDP ports). On Linux,
+// 0 to 101 and 215 to 232 never meet the ephemeral ports.
+export const MAX_DOMAIN_ID = 232;
+
+export function isDomainId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_DOMAIN_ID;
 }
 
 // Panels made in the page are for administrators until they say otherwise

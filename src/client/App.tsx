@@ -20,6 +20,7 @@ import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
 import type { Role } from '../shared/auth.ts';
 import { NEW_PANEL_ROLE } from '../shared/panel.ts';
 import { AccountMenu } from './account/AccountMenu.tsx';
+import { domainLabel, PanelDomainDialog } from './PanelDomainDialog.tsx';
 import { PanelVisibilityDialog, VISIBILITY_LABELS } from './PanelVisibilityDialog.tsx';
 import { api } from './api.ts';
 import { may, signInEnabled } from './auth.ts';
@@ -207,8 +208,13 @@ export function App() {
   deviceRef.current = device;
   const layout = useMemo(() => (panel ? layoutFor(panel, device, minSize) : null), [panel, device]);
 
+  // The page reaches the shown panel's ROS domain: connected on it before its
+  // widgets subscribe, so that they never see another's
   const setPanel = useCallback((next: Panel | null) => {
     panelRef.current = next;
+    if (next) {
+      connection.setDomain(next.domainId ?? null);
+    }
     setPanelState(next);
   }, []);
 
@@ -520,6 +526,13 @@ export function App() {
     await refreshPanels();
   };
 
+  const [domainOpen, setDomainOpen] = useState(false);
+  const changeDomain = async (domainId: number | undefined) => {
+    updatePanel(({ domainId: _previous, ...p }) => (domainId === undefined ? p : { ...p, domainId }));
+    await saver.flush();
+    await refreshPanels();
+  };
+
   const renamePanel = async () => {
     setMenuOpen(false);
     const current = panelRef.current;
@@ -685,7 +698,14 @@ export function App() {
     editing && selection.length === 1 ? panel?.widgets.find((w) => w.id === selection[0]) : undefined;
   const selectedStatus = editing ? panel?.statusBar?.find((w) => w.id === statusSelection) : undefined;
   const mayEdit = may('admin');
-  const statusText = { connecting: 'Connecting…', open: `Connected to ${connection.hostname}`, closed: 'Disconnected, reconnecting…' }[status];
+  // Shown when the panel is not on the server's own domain
+  const otherDomain =
+    panel?.domainId !== undefined && panel.domainId !== connection.serverDomainId ? panel.domainId : null;
+  const statusText = {
+    connecting: 'Connecting…',
+    open: `Connected to ${connection.hostname}, ROS domain ${connection.domainId ?? '-'}`,
+    closed: 'Disconnected, reconnecting…',
+  }[status];
 
   return (
     <div className={`app${editing ? ' editing' : ''}`}>
@@ -709,6 +729,15 @@ export function App() {
               </option>
             ))}
           </select>
+        )}
+        {otherDomain !== null && (
+          <span
+            className="domain-badge"
+            title={`This panel’s widgets reach ROS domain ${otherDomain} (ROS_DOMAIN_ID), not the server’s ${connection.serverDomainId ?? ''}`}
+          >
+            <span className="hide-narrow">Domain </span>
+            {otherDomain}
+          </span>
         )}
 
         <div className="topbar-spacer" />
@@ -784,6 +813,16 @@ export function App() {
                       >
                         Visible to: {VISIBILITY_LABELS[panel.minRole].toLowerCase()}…
                       </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setDomainOpen(true);
+                        }}
+                      >
+                        ROS domain: {domainLabel(panel.domainId, connection.serverDomainId)}…
+                      </button>
                       <button type="button" role="menuitem" onClick={duplicatePanel}>
                         Duplicate panel
                       </button>
@@ -812,6 +851,15 @@ export function App() {
         )}
         {signInEnabled() && <AccountMenu />}
       </header>
+      {domainOpen && panel && mayEdit && (
+        <PanelDomainDialog
+          name={panel.name}
+          domainId={panel.domainId}
+          serverDomainId={connection.serverDomainId}
+          onChange={(domainId) => void changeDomain(domainId)}
+          onClose={() => setDomainOpen(false)}
+        />
+      )}
       {visibilityOpen && panel && mayEdit && (
         <PanelVisibilityDialog
           name={panel.name}

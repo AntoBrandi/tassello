@@ -148,3 +148,29 @@ test('a folder that cannot be is said, and the home folder used', async () => {
     terminals.stopAll();
   }
 });
+
+test('a terminal runs on its panel’s ROS domain, and anew on another', async () => {
+  const terminals = new Terminals(logger);
+  try {
+    const command = 'echo "domain:${ROS_DOMAIN_ID:-none}"; sleep 30';
+    const first = new Page();
+    const firstView = terminals.open(request('t6', command, { env: { ROS_DOMAIN_ID: '42' } }), first);
+    await until('its domain', () => first.text.includes('domain:42'));
+    const { started } = first.last;
+    firstView.close();
+
+    // The same terminal, on the same domain: the same program
+    const again = new Page();
+    terminals.open(request('t6', command, { env: { ROS_DOMAIN_ID: '42' } }), again).close();
+    assert.equal(again.last.started, started);
+
+    // Its panel moved to the server's domain: run again, without it
+    const second = new Page();
+    terminals.open(request('t6', command), second);
+    const own = `domain:${process.env.ROS_DOMAIN_ID ?? 'none'}`;
+    await until('the server’s domain', () => second.text.includes(own));
+    assert.notEqual(second.last.started, started);
+  } finally {
+    terminals.stopAll();
+  }
+});

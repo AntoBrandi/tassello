@@ -10,6 +10,7 @@ import {
   diskReading,
   diskShare,
   diskShown,
+  domainReading,
   loadTone,
   signalTone,
   sparkline,
@@ -262,4 +263,16 @@ test('no disk to show: why', () => {
   assert.deepEqual(reading([disk('/', 1, 1)], null, '/media/usb'), ['off', '—', '/media/usb', 'No disk is mounted at /media/usb', null]);
   // Read before: kept
   assert.equal(reading([disk('/', 1, 1)], 'Failed to fetch')[1], '50%');
+});
+
+test('the ROS domain: the connection’s, marked when not the server’s if asked', () => {
+  assert.deepEqual(domainReading(false, 42, 0, true), { tone: 'off', value: '…', title: 'Connecting to the robot…' });
+  assert.equal(domainReading(true, null, null, false).tone, 'off');
+  assert.deepEqual(domainReading(true, 0, 0, true), { tone: 'ok', value: '0', title: 'ROS_DOMAIN_ID 0, the server’s' });
+  assert.deepEqual(domainReading(true, 42, 0, true), {
+    tone: 'warn',
+    value: '42',
+    title: 'ROS_DOMAIN_ID 42, this panel’s: not the server’s (0)',
+  });
+  assert.equal(domainReading(true, 42, 0, false).tone, 'ok');
 });

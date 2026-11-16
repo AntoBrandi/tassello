@@ -7,7 +7,8 @@
 //   GET    /api/panels/<id>   the panel
 //   PUT    /api/panels/<id>   {name, widgets}   -> saves (or creates) the panel
 //   DELETE /api/panels/<id>
-//   GET    /api/topics        [{name, types}] of the ROS graph
+//   GET    /api/topics        [{name, types}] of the ROS graph (?domain=<id>: of that
+//                             ROS domain's, else the server's own)
 //   GET    /api/packages/<package>/<path>  a file of the package's share
 //          directory, as package://<package>/<path> names it: the meshes of
 //          the robot description
@@ -47,7 +48,7 @@ import { gzip } from 'node:zlib';
 
 import sharp from 'sharp';
 
-import type { Role } from '../shared/auth.ts';
+import type { AuthUser, Role } from '../shared/auth.ts';
 import type { FsConflict, FsResult } from '../shared/file_manager.ts';
 import { maySeePanel, type TopicInfo } from '../shared/panel.ts';
 import { DASHBOARD_CLIENT_HEADER } from '../shared/protocol.ts';
@@ -98,7 +99,9 @@ export interface HttpServices {
   store: PanelStore;
   // The built page, null when not built (development: Vite serves it)
   wwwDir: string | null;
-  topics: () => TopicInfo[];
+  // Of a domain the user may reach (src/server/domains.ts), its id as the
+  // query gives it: null, the server's own
+  topics: (user: AuthUser, domain: string | null) => Promise<TopicInfo[]>;
   // Where uploaded images and behavior trees are kept
   uploadsDir: string;
   plugins: PluginHost;
@@ -274,7 +277,8 @@ async function api(
   } else if (resource === 'plugins' && id === undefined && method === 'GET') {
     return sendJson(res, 200, plugins.info());
   } else if (resource === 'topics' && id === undefined && method === 'GET') {
-    return sendJson(res, 200, topics());
+    const domain = new URL(req.url ?? '/', 'http://localhost').searchParams.get('domain');
+    return sendJson(res, 200, await topics(user, domain));
   } else if (resource === 'packages' && id && rest.length > 0) {
     const share = PACKAGE_NAME.test(id) ? packageShareDirectory(id) : null;
     if (!share) {

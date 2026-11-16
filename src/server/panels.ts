@@ -9,6 +9,9 @@ import path from 'node:path';
 
 import { isRole, roleAtLeast, type Role } from '../shared/auth.ts';
 import {
+  isDomainId,
+  MAX_DOMAIN_ID,
+  maySeePanel,
   PANEL_ID_PATTERN,
   panelRole,
   SMALL_DEVICES,
@@ -70,11 +73,16 @@ export function sanitizePanel(value: unknown, id: string): Panel {
   if (value.minRole !== undefined && !isRole(value.minRole)) {
     throw new HttpError(400, 'minRole must be viewer, operator or admin');
   }
+  // null: the server's own, as missing
+  if (value.domainId !== undefined && value.domainId !== null && !isDomainId(value.domainId)) {
+    throw new HttpError(400, `domainId must be an integer between 0 and ${MAX_DOMAIN_ID}`);
+  }
   const ids = new Set<string>();
   const sanitized: Panel = {
     id,
     name,
     minRole: panelRole(value.minRole),
+    ...(isDomainId(value.domainId) && { domainId: value.domainId }),
     widgets: widgets.map((widget: unknown, index): WidgetInstance => {
       const where = `widgets[${index}]`;
       if (!isObject(widget)) {
@@ -258,7 +266,12 @@ export class PanelStore extends EventEmitter<PanelEvents> {
       try {
         const panel = await this.get(id);
         if (panel) {
-          panels.push({ id, name: panel.name, minRole: panel.minRole });
+          panels.push({
+            id,
+            name: panel.name,
+            minRole: panel.minRole,
+            ...(panel.domainId !== undefined && { domainId: panel.domainId }),
+          });
         }
       } catch (e) {
         this.logger.warn((e as Error).message);
@@ -395,4 +408,20 @@ export class PanelRoles {
 // Whether a role sees a panel of that minRole: no panel, administrators only
 export function seesPanel(role: Role, minRole: Role | null | undefined): boolean {
   return roleAtLeast(role, minRole ?? 'admin');
+}
+
+// Whether a user may reach a ROS domain (a page connects on its panel's): the
+// server's own, any for administrators (who make the panels), else those of
+// the panels they see. A domain is a ROS node on it: not made for whoever asks.
+export function mayUseDomain(
+  role: Role,
+  domainId: number,
+  serverDomainId: number,
+  panels: readonly PanelSummary[],
+): boolean {
+  return (
+    domainId === serverDomainId ||
+    role === 'admin' ||
+    panels.some((panel) => panel.domainId === domainId && maySeePanel(role, panel))
+  );
 }

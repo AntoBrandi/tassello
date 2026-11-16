@@ -58,6 +58,8 @@ export interface TerminalRequest {
   // The output the page shows
   started: number | null;
   offset: number | null;
+  // Over the server's environment: the ROS_DOMAIN_ID of the page's panel
+  env?: Record<string, string>;
 }
 
 export interface TerminalWatcher {
@@ -104,9 +106,10 @@ function workingFolder(folder: string): { cwd: string; problem: string | null } 
   }
 }
 
-function programEnvironment(): NodeJS.ProcessEnv {
+function programEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    ...extra,
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
     TERM_PROGRAM: 'tassello',
@@ -162,6 +165,7 @@ class Terminal {
   readonly name: string;
   command: string;
   folder: string;
+  env: Record<string, string>;
   // While no page shows it: since when
   hiddenSince: number | null = null;
   // The pages showing it, and what each was sent
@@ -178,6 +182,7 @@ class Terminal {
     this.name = request.terminal;
     this.command = request.command;
     this.folder = request.folder;
+    this.env = request.env ?? {};
     this.cols = request.cols;
     this.rows = request.rows;
     this.logger = logger;
@@ -249,9 +254,10 @@ class Terminal {
   }
 
   // Its program anew, from a clean screen; with another command or folder
-  restart(command = this.command, folder = this.folder): void {
+  restart(command = this.command, folder = this.folder, env = this.env): void {
     this.command = command;
     this.folder = folder;
+    this.env = env;
     this.run.dispose();
     this.start();
     for (const watcher of this.watchers.keys()) {
@@ -276,7 +282,7 @@ class Terminal {
     const { cwd, problem } = workingFolder(this.folder);
     const shell = loginShell();
     const args = this.command ? ['-l', '-c', this.command] : ['-l'];
-    const pty = new Pty({ file: shell, args, cwd, env: programEnvironment(), cols: this.cols, rows: this.rows });
+    const pty = new Pty({ file: shell, args, cwd, env: programEnvironment(this.env), cols: this.cols, rows: this.rows });
     // Unique to this terminal: what tells the pages it is another program
     const started = Math.max(Date.now(), (this.run?.started ?? 0) + 1);
     const run = new Run(started, pty, this.cols, this.rows);
@@ -364,6 +370,11 @@ class Terminal {
   }
 }
 
+function sameEnv(a: Record<string, string>, b: Record<string, string>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
 const IDLE_VIEW: TerminalView = { input() {}, resize() {}, ack() {}, restart() {}, close() {} };
 
 export class Terminals {
@@ -376,9 +387,15 @@ export class Terminals {
 
   open(request: TerminalRequest, watcher: TerminalWatcher): TerminalView {
     let terminal = this.terminals.get(request.terminal);
-    if (terminal && (terminal.command !== request.command || terminal.folder !== request.folder)) {
-      // Its widget's properties changed
-      terminal.restart(request.command, request.folder);
+    const env = request.env ?? {};
+    if (
+      terminal &&
+      (terminal.command !== request.command ||
+        terminal.folder !== request.folder ||
+        !sameEnv(terminal.env, env))
+    ) {
+      // Its widget's properties changed, or its panel's ROS domain
+      terminal.restart(request.command, request.folder, env);
     }
     if (!terminal) {
       if (this.terminals.size >= MAX_TERMINALS && !this.hangUpUnseen()) {

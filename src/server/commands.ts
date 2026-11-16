@@ -96,7 +96,13 @@ export class CommandRunner extends EventEmitter<CommandEvents> {
       cwd: os.homedir(),
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUNBUFFERED: '1', RCUTILS_COLORIZED_OUTPUT: '0' },
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: '1',
+        RCUTILS_COLORIZED_OUTPUT: '0',
+        // On the panel's ROS domain, as its widgets
+        ...(panel.domainId !== undefined && { ROS_DOMAIN_ID: String(panel.domainId) }),
+      },
     });
     const run: Run = { child, state, outputTimer: null, stopTimers: [] };
     this.runs.set(key, run);

@@ -269,6 +269,19 @@ textarea {
   flex: 1;
 }
 
+/* The panel's ROS domain, when not the server's own */
+.domain-badge {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
 .save-state {
   color: var(--text-muted);
   font-size: 12px;
@@ -1204,6 +1217,49 @@ textarea {
 .modal.resizable > .modal-body {
   flex: 1;
   min-height: 0;
+}
+
+/* A dialog's choice of one: who sees a panel, its ROS domain */
+.visibility-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.visibility-choices legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.visibility-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.visibility-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.visibility-choice input {
+  flex: none;
+  width: auto;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
+.visibility-choice > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .modal-header {

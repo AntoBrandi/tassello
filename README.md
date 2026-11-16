@@ -137,7 +137,8 @@ Above its board, each panel has a **status bar** of readings at a glance, its ow
 disconnected), the **CPU**'s load, of all the cores or of the busiest, with its last minute, a
 **Disk**'s use (one chosen, or the fullest: the share used or the space free, with a bar, in
 yellow when filling and red when full, as the File Manager colours it; its details and the other
-disks under the pointer). It is one row of 24 columns stretched to the window's width, so that
+disks under the pointer), the **ROS domain** its widgets reach (see [ROS domains](#ros-domains):
+the panel's own or the server's, in yellow when not the server's if asked). It is one row of 24 columns stretched to the window's width, so that
 what is at its right end stays there on any screen; narrower, a status widget shows less (the
 icon or the value, then both, the network's name or the disk's mount point, the CPU's chart or
 the disk's bar). In edit mode, as on the board, **＋ Status** at its end adds
@@ -149,6 +150,20 @@ status widget selected a column at a time. Hidden in view mode while empty.
 The status bar is part of the panel: saved in its file (`statusBar`), exported, imported and
 duplicated with it. The example panels have the Wi-Fi and the CPU; plugins add status widgets of
 their own (see [docs/plugins.md](docs/plugins.md)).
+
+### ROS domains
+
+A panel's widgets reach the ROS nodes of the server's domain (the `ROS_DOMAIN_ID` Tassello was
+started with), unless the panel is on another: **⋯ → ROS domain…** in edit mode. A robot and its
+simulation, or two robots each on its own domain, then each have their panels, on one dashboard.
+The page connects to the server on the domain of the panel it shows, and moves to another's when
+another panel is shown; the top bar shows the domain of a panel that is not on the server's.
+
+The server joins a domain with a node of its own (of the same name) the first time a page asks
+for it, and keeps it until it stops. A panel's terminals, button commands and rosbags run with
+its `ROS_DOMAIN_ID` too. Administrators may open any domain, 0 to 232; the others only the
+server's and those of the panels they see. The domain is saved in the panel's file (`domainId`),
+exported, imported and duplicated with it.
 
 ### Phones and tablets
 
@@ -351,7 +366,9 @@ Notes on some of them:
   as ROS prints them (`[WARN] [1729435407.512346] [robot1.amcl]: ...`). The widget's properties
   set its nodes (names or globs, e.g. `amcl, *_server`: one widget per subsystem), the levels and
   filters it opens with, and the time shown: the clock, ROS stamps, or none. The server follows the
-  log for every page, keeping its latest 10,000 messages, and for 10 minutes after the last page
+  log for every page, keeping its latest 10,000 messages shared fairly among the nodes (a node
+  flooding the log loses its own oldest messages first, never a quiet node's: of N nodes, each
+  keeps at least its latest 10,000 / N, or all it logged), and for 10 minutes after the last page
   closes: a page opened later sees what was logged meanwhile, and when first opened, what each
   node logged in its last 10 seconds (rosout's own history).
 - **Diagnostics** follows a `diagnostic_msgs/msg/DiagnosticArray` topic: `/diagnostics`, on which
@@ -714,7 +731,7 @@ Only on a network you trust.
 ```
  browser ── HTTP: page, /api (panels, topics, files), /plugins ────┐
          └─ WebSocket /ws: twists, poses, images, maps, TF, ───────┤
-                           topics, services, commands, plugins     └─ server (Node.js, one ROS node)
+                           topics, services, commands, plugins     └─ server (Node.js, a ROS node per domain)
                                                                         ├─ rclnodejs: ROS
                                                                         ├─ sharp: raw images to JPEG, maps to PNG
                                                                         ├─ bash: the buttons' commands
@@ -754,12 +771,16 @@ Safety and bandwidth are the server's concern:
 - Behavior tree logs, streams of transitions, are followed whole, none dropped: each page gets
   the nodes that changed, at most 10 times a second, however fast the tree ticks.
 - The ROS log is followed once for every page: each gets the new messages at most 10 times a
-  second, at most 500 at a time (a node logging faster has some skipped, which the page shows).
+  second, at most 500 at a time (the nodes logging faster have some of theirs skipped, not the
+  others', which the page shows).
   Only the rows in sight are drawn.
 - Diagnostics are followed once for every page: each gets the statuses that changed, at most 4
   times a second, not those received the same again. Subscribed best effort, they come from
   every publisher, whatever its QoS.
 - A button runs the command saved in its panel, never one sent by the page.
+- A page reaches one ROS domain, its panel's (`/ws?domain=<id>`), and the server keeps a node on
+  each domain its pages asked for: what is said above of a topic, a map or a log is said of each
+  domain's.
 - A terminal's pseudo-terminal is opened by a few lines of Python (ROS 2's own), no native module
   to build. Its output is also played on a terminal of the server's own (xterm.js, headless), which
   paces the program, never the pages: a page gets at most 256 KB ahead of what it has drawn, and a

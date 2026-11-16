@@ -6,6 +6,26 @@ noted here.
 
 ## Unreleased
 
+- **A ROS domain per panel.** A panel's widgets may reach the nodes of another ROS domain than
+  the server's (**⋯ → ROS domain…** in edit mode, `domainId` in its file): a robot and its
+  simulation, or two robots, each with its panels on one dashboard. The page connects on the
+  domain of the panel it shows (`/ws?domain=<id>`), and the server joins each domain asked for
+  with a node of its own, kept until it stops. The panel's terminals, button commands and
+  rosbags run with its `ROS_DOMAIN_ID`. Administrators may open any domain, the others the
+  server's and those of the panels they see. The top bar shows a panel's domain when it is not
+  the server's. `/api/topics?domain=<id>` lists a domain's topics.
+- **Logs: a fair share for each node.** The 10,000 messages of the ROS log the server and the
+  page keep are shared among the nodes that logged them: a node flooding the log loses its own
+  oldest messages first, never those of a quiet node (of N nodes, each keeps at least its latest
+  10,000 / N, or all it logged). A burst over 500 messages in a tenth of a second skips the
+  flooding node's the same way.
+- **Status bar: ROS domain.** The `ROS_DOMAIN_ID` the panel's widgets reach, its own or the
+  server's, with a label of your own; *Mark another domain* shows it in yellow when it is not
+  the server's.
+- Plugin API: `PluginSession.domainId` and `ctx.nodeOf(session)` (`tassello/server`), the node
+  on a page's domain; `connection.domainId` and `connection.serverDomainId` (`tassello/sdk`).
+  The `hello` message has `domainId` and `serverDomainId`.
+- The *Visible to* dialog's choices are laid out as cards, as the *ROS domain* one's.
 - **Robot Viewer zoom.** The viewer opens, and Reset goes back, at a zoom saved with the panel:
   *Zoom* in its properties (1 fits the robot, 2 is twice as close), or, in edit mode, scrolling
   on the viewer, which shows the zoom it opens at (a scroll is one change, undone at once; a

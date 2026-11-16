@@ -326,10 +326,17 @@ export class Connection {
   // Given by the server on every connection
   clientId: string | null = null;
   hostname = '';
+  // The ROS domain (ROS_DOMAIN_ID) the widgets reach, and the server's own:
+  // null until connected
+  domainId: number | null = null;
+  serverDomainId: number | null = null;
   // Server clock minus ours
   private clockOffsetMs = 0;
 
   private ws: WebSocket | null = null;
+  // The domain to connect on (the shown panel's), null: the server's own
+  private requestedDomain: number | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retryMs = MIN_RETRY_MS;
   private readonly statusListeners = new Set<() => void>();
   private readonly messageListeners = new Set<(message: ServerMessage) => void>();
@@ -345,10 +352,16 @@ export class Connection {
   private readonly interfaces = new Map<string, Promise<InterfaceInfo>>();
 
   connect(): void {
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    this.retryTimer = null;
+    const query = this.requestedDomain === null ? '' : `?domain=${this.requestedDomain}`;
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${query}`);
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     ws.onmessage = (event) => {
+      // One left for another domain: what it still says is of the other's
+      if (this.ws !== ws) {
+        return;
+      }
       if (typeof event.data === 'string') {
         this.onMessage(JSON.parse(event.data) as ServerMessage);
       } else {
@@ -361,14 +374,42 @@ export class Connection {
       }
       this.ws = null;
       this.setStatus('closed');
-      // Their answers went with the connection
-      this.requests.forEach((answer) => answer('Disconnected from the robot'));
-      this.requests.clear();
-      this.results.forEach(({ reject }) => reject(new Error('Disconnected from the robot')));
-      this.results.clear();
-      setTimeout(() => this.connect(), this.retryMs);
+      this.dropAnswers();
+      this.retryTimer = setTimeout(() => this.connect(), this.retryMs);
       this.retryMs = Math.min(MAX_RETRY_MS, this.retryMs * 2);
     };
+  }
+
+  // Connects on that ROS domain (null: the server's own), at once if it is
+  // another: the subscriptions are made again there, the requests waiting
+  // fail. The page does it for the panel it shows.
+  setDomain(domainId: number | null): void {
+    if (domainId === this.requestedDomain) {
+      return;
+    }
+    this.requestedDomain = domainId;
+    if (!this.ws && !this.retryTimer) {
+      // Not started yet: connect() will
+      return;
+    }
+    const previous = this.ws;
+    this.ws = null;
+    previous?.close();
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+    }
+    this.dropAnswers();
+    this.retryMs = MIN_RETRY_MS;
+    this.setStatus('connecting');
+    this.connect();
+  }
+
+  // Their answers went with the connection
+  private dropAnswers(): void {
+    this.requests.forEach((answer) => answer('Disconnected from the robot'));
+    this.requests.clear();
+    this.results.forEach(({ reject }) => reject(new Error('Disconnected from the robot')));
+    this.results.clear();
   }
 
   // false if not connected: the message is dropped, not queued
@@ -856,6 +897,8 @@ export class Connection {
       case 'hello':
         this.clientId = message.clientId;
         this.hostname = message.hostname;
+        this.domainId = message.domainId;
+        this.serverDomainId = message.serverDomainId;
         this.clockOffsetMs = message.time - Date.now();
         this.retryMs = MIN_RETRY_MS;
         this.setStatus('open');

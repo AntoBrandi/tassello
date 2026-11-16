@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { LogEntry, RosoutUpdate } from '../../../shared/protocol.ts';
+import { ROSOUT_HISTORY, type LogEntry, type RosoutUpdate } from '../../../shared/protocol.ts';
 import {
   EMPTY,
   filterLog,
@@ -65,6 +65,22 @@ test('paused, the new messages wait until resumed', () => {
   model = reduce(model, { type: 'resume' });
   assert.deepEqual(seqs(model.entries), [1, 2, 3]);
   assert.deepEqual(model.pending, []);
+});
+
+test('a page keeps the log as the server does: a flood drops its own oldest, not a quiet node’s', () => {
+  let model = opened([entry(1, 'robot1.amcl')]);
+  // Over ten thousand from one node, in bursts
+  let last = 1;
+  while (last <= ROSOUT_HISTORY) {
+    const burst = Array.from({ length: 500 }, (_, i) => entry(last + 1 + i, 'chatty'));
+    last += 500;
+    model = reduce(model, { type: 'update', update: update({ entries: burst }) });
+  }
+  assert.equal(model.entries.length, ROSOUT_HISTORY);
+  assert.deepEqual(model.entries[0], entry(1, 'robot1.amcl'));
+  // Then the chatty node's latest, in order
+  assert.deepEqual(seqs(model.entries.slice(1, 3)), [last - (ROSOUT_HISTORY - 2), last - (ROSOUT_HISTORY - 3)]);
+  assert.equal(model.entries.at(-1)?.seq, last);
 });
 
 test('a reconnection keeps what was cleared away, and what paused shows', () => {

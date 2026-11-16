@@ -28,6 +28,9 @@ export interface PluginSession {
   // Who signed in on the page (see src/shared/auth.ts): a plugin may refuse
   // more than its handlers' roles do, e.g. by its params
   readonly user: AuthUser;
+  // The ROS domain (ROS_DOMAIN_ID) of the page's panel: ctx.nodeOf(session)
+  // is the server's node on it
+  readonly domainId: number;
 }
 
 // Who may call a request or open a stream: the server refuses the others
@@ -66,8 +69,13 @@ export interface PluginContext {
   // The plugin's directory, where its package.json is
   readonly dir: string;
   // The server's ROS node, shared by every plugin: create publishers,
-  // subscriptions and clients on it
+  // subscriptions and clients on it. On the server's own ROS domain: a panel
+  // may be on another (see nodeOf)
   readonly node: rclnodejs.Node;
+  // The server's node on the ROS domain of a page's panel, for a request or
+  // a stream to reach what that page's widgets do: `node` for a panel on the
+  // server's own domain
+  nodeOf(session: PluginSession): rclnodejs.Node;
   readonly rclnodejs: typeof rclnodejs;
   readonly logger: Logger;
   handle(method: string, handler: RequestHandler, options?: HandlerOptions): void;

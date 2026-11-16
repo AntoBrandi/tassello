@@ -733,6 +733,11 @@ export interface Hello {
   time: number;
   // Who signed in on the page
   user: AuthUser;
+  // The ROS domain (ROS_DOMAIN_ID) the page reaches, which it asked for when
+  // connecting (/ws?domain=<id>, its panel's), and the server's own, which it
+  // reaches when it asks for none
+  domainId: number;
+  serverDomainId: number;
 }
 
 // The last run of a button widget's command, running or finished
@@ -1406,7 +1411,8 @@ export const OVERLAY_RATE = 5;
 export const ARM_STATE_RATE = 10;
 export const BT_RATE = 10;
 export const ROSOUT_RATE = 10;
-// Messages of the ROS log kept by the server, and by the page
+// Messages of the ROS log kept by the server, and by the page, shared fairly
+// among their loggers (log_share.ts)
 export const ROSOUT_HISTORY = 10_000;
 // Diagnostics come about once a second
 export const DIAGNOSTICS_RATE = 4;

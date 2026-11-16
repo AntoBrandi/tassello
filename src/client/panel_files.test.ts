@@ -65,3 +65,9 @@ test('free names', () => {
   assert.equal(freeName(' Drive ', ['Drive']), 'Drive (2)');
   assert.equal(freeName('Drive', ['Drive', 'Drive (2)']), 'Drive (3)');
 });
+
+test('a panel file keeps its ROS domain, and has none when the panel has none', () => {
+  assert.equal(panelFile({ ...panel, domainId: 7 }).domainId, 7);
+  assert.equal(readPanelFile(panelFileText({ ...panel, domainId: 7 })).domainId, 7);
+  assert.equal('domainId' in panelFile(panel), false);
+});

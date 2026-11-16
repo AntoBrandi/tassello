@@ -44,7 +44,7 @@ test('the server: its page for anyone, the API for its users by role, never fram
   await users.add({ username: 'vic', role: 'viewer', password: PASSWORD });
   const plugins = { info: () => [], clientDir: () => null } as unknown as PluginHost;
   const server = createServer(
-    createRequestHandler({ store, wwwDir: www, topics: () => [], uploadsDir: path.join(dir, 'images'), plugins, auth, tls: false, logger: silent }),
+    createRequestHandler({ store, wwwDir: www, topics: async () => [], uploadsDir: path.join(dir, 'images'), plugins, auth, tls: false, logger: silent }),
   );
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

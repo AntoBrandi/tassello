@@ -72,10 +72,13 @@ export class Rosbags {
   private capabilities: BagCapabilities | null = null;
   private capabilitiesAsked = false;
   private sizeTimer: NodeJS.Timeout | null = null;
+  // What ros2 bag runs with, over the server's: its ROS domain's
+  private readonly env: Record<string, string>;
 
-  constructor(ros: Ros, logger: Logger) {
+  constructor(ros: Ros, logger: Logger, env: Record<string, string> = {}) {
     this.ros = ros;
     this.logger = logger;
+    this.env = env;
   }
 
   // The bags of a folder, the recordings and the playback, again whenever
@@ -160,7 +163,7 @@ export class Rosbags {
     this.recordings.set(location, entry);
     try {
       await newBagFolder(location);
-      entry.process = await Ros2Bag.record(entry.recording, this.distro);
+      entry.process = await Ros2Bag.record(entry.recording, this.distro, this.env);
     } catch (e) {
       this.recordings.delete(location);
       throw e;
@@ -257,7 +260,7 @@ export class Rosbags {
     this.playback = playback;
     this.changed();
     try {
-      playback.process = await Ros2Bag.play({ ...request, path: location });
+      playback.process = await Ros2Bag.play({ ...request, path: location }, this.env);
     } catch (e) {
       Object.assign(state, { state: 'ended', error: errorMessage(e), at: Date.now() });
       this.changed();

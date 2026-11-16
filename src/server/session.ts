@@ -18,67 +18,35 @@ import {
   type PointsChannel,
   type ServerMessage,
 } from '../shared/protocol.ts';
-import type { Actions } from './actions.ts';
 import type { PluginSession } from './api.ts';
-import type { Arm, ArmWatcher } from './arm.ts';
+import type { ArmWatcher } from './arm.ts';
 import type { BehaviorTreeFiles } from './behavior_tree_files.ts';
 import type { BehaviorTreePlayback } from './behavior_tree_playback.ts';
-import type { BehaviorTrees } from './behavior_trees.ts';
 import type { CommandRunner } from './commands.ts';
+import type { RosServices } from './domains.ts';
 import { seesPanel, type PanelRoles } from './panels.ts';
-import type { Diagnostics } from './diagnostics.ts';
 import type { Consumer, EncodedFrame, FrameSink, StreamState } from './frame_stream.ts';
-import type { Interfaces } from './interfaces.ts';
 import type { Networking } from './networking.ts';
 import { checkRequest, deviceOfAddress } from './networking_format.ts';
-import type { Overlays } from './overlays.ts';
-import type { Parameters } from './parameters.ts';
-import type { Poses } from './poses.ts';
-import type { Paths } from './paths.ts';
 import type { PluginHost } from './plugins.ts';
-import type { Ros } from './ros.ts';
 import { checkBagsRequest, checkRecordOptions } from './rosbag_format.ts';
-import type { Rosbags } from './rosbags.ts';
-import type { RosGraph } from './ros_graph.ts';
-import type { Rosout } from './rosout.ts';
-import type { FrameStreams } from './streams.ts';
 import type { SystemMonitor } from './system.ts';
 import type { SystemdServices } from './systemd.ts';
-import type { Teleop } from './teleop.ts';
 import type { Terminals, TerminalView } from './terminals.ts';
-import type { Tf } from './tf.ts';
-import type { TopicMonitors } from './topic_monitor.ts';
-import type { TopicPublishing } from './topic_publishing.ts';
-import type { Topics } from './topics.ts';
-import type { TwistMuxes } from './twist_mux.ts';
 import { errorMessage, toJson } from './util.ts';
 
-export interface SessionServices {
-  teleop: Teleop;
-  streams: FrameStreams;
-  tf: Tf;
-  paths: Paths;
-  overlays: Overlays;
-  topics: Topics;
-  poses: Poses;
+// What a page reaches: the ROS side of its panel's domain, the rest shared
+export interface SessionServices extends RosServices {
+  // Its panel's ROS domain (ROS_DOMAIN_ID), and what its programs run with
+  domainId: number;
+  domainEnv: Record<string, string>;
+  // The server's own domain
+  serverDomainId: number;
   commands: CommandRunner;
   systemd: SystemdServices;
-  arm: Arm;
-  ros: Ros;
-  rosout: Rosout;
-  diagnostics: Diagnostics;
-  twistMuxes: TwistMuxes;
   terminals: Terminals;
   networking: Networking;
-  behaviorTrees: BehaviorTrees;
   behaviorTreeFiles: BehaviorTreeFiles;
-  graph: RosGraph;
-  topicMonitors: TopicMonitors;
-  publishing: TopicPublishing;
-  interfaces: Interfaces;
-  actions: Actions;
-  parameters: Parameters;
-  rosbags: Rosbags;
   system: SystemMonitor;
   plugins: PluginHost;
   // Who sees each panel: its commands are theirs only
@@ -175,6 +143,8 @@ function subscriptionId(value: unknown): number {
 
 export class Session implements FrameSink, PluginSession {
   readonly id = randomUUID();
+  // Its panel's ROS domain
+  readonly domainId: number;
   private readonly ws: WebSocket;
   private readonly services: SessionServices;
   // Every subscription, by id: what ends it
@@ -204,6 +174,7 @@ export class Session implements FrameSink, PluginSession {
   ) {
     this.ws = ws;
     this.services = services;
+    this.domainId = services.domainId;
     this.user = user;
     this.onActivity = onActivity;
     this.localAddress = localAddress;
@@ -212,7 +183,15 @@ export class Session implements FrameSink, PluginSession {
         this.onMessage(data.toString());
       }
     });
-    this.send({ type: 'hello', clientId: this.id, hostname: services.hostname, time: Date.now(), user });
+    this.send({
+      type: 'hello',
+      clientId: this.id,
+      hostname: services.hostname,
+      time: Date.now(),
+      user,
+      domainId: services.domainId,
+      serverDomainId: services.serverDomainId,
+    });
     this.send({
       type: 'commands',
       states: services.commands
@@ -606,6 +585,7 @@ export class Session implements FrameSink, PluginSession {
             rows: number(message.rows, 1, 500, 24),
             started: point(message.started),
             offset: point(message.offset),
+            env: services.domainEnv,
           },
           {
             onOutput: (output) => this.send({ type: 'terminal.output', id, ...output }),

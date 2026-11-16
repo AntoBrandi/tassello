@@ -4,10 +4,12 @@
 // A log is followed whole, like the behavior trees' (behavior_trees.ts): each
 // topic is subscribed once, with its publishers' QoS (rcl's: reliable and
 // transient local, so that each node's latest messages arrive first) and a
-// deep queue. The server keeps its latest ROSOUT_HISTORY messages, and sends
-// its pages the new ones at most ROSOUT_RATE times a second, at most
-// MAX_BATCH at a time: a node logging faster than that has the oldest of each
-// batch skipped, which the page is told. The log outlives its last page for
+// deep queue. The server keeps its latest ROSOUT_HISTORY messages, shared
+// fairly among their loggers (a node flooding the log drops its own oldest,
+// not a quiet one's: ../shared/log_share.ts), and sends its pages the new ones
+// at most ROSOUT_RATE times a second, at most MAX_BATCH at a time, shared the
+// same way: a node logging faster than that has its oldest of each batch
+// skipped, which the page is told. The log outlives its last page for
 // LINGER_MS: a page reloaded, or a panel shown again, finds what was logged
 // meanwhile.
 

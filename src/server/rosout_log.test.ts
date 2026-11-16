@@ -100,3 +100,43 @@ test('the nodes of the graph, by full name, without the hidden ones', () => {
     ['/robot1/amcl', '/robot1/nav/planner_server', '/talker'],
   );
 });
+
+const from = (name: string, msg: string) => ({ ...log(msg), name });
+
+test('a node flooding the log drops its own oldest messages, not a quiet node’s', () => {
+  const history = new LogHistory(10);
+  history.add(from('robot1.amcl', 'pose set'));
+  for (let i = 0; i < 100; i++) {
+    history.add(from('chatty', `spam ${i}`));
+  }
+  history.add(from('robot1.amcl', 'pose set again'));
+  const kept = history.snapshot();
+  assert.equal(kept.length, 10);
+  assert.deepEqual(
+    kept.filter((entry) => entry.name === 'robot1.amcl').map((entry) => entry.msg),
+    ['pose set', 'pose set again'],
+  );
+  // The chatty node's latest, in order
+  assert.deepEqual(
+    kept.filter((entry) => entry.name === 'chatty').map((entry) => entry.msg),
+    ['spam 92', 'spam 93', 'spam 94', 'spam 95', 'spam 96', 'spam 97', 'spam 98', 'spam 99'],
+  );
+});
+
+test('a burst skips the flooding node’s messages, not a quiet one’s', () => {
+  const history = new LogHistory(100);
+  history.add(from('chatty', 'before'));
+  history.takeBatch(5);
+  for (let i = 0; i < 20; i++) {
+    history.add(from('chatty', `spam ${i}`));
+    if (i === 3) {
+      history.add(from('robot1.amcl', 'pose set'));
+    }
+  }
+  const batch = history.takeBatch(5);
+  assert.equal(batch?.skipped, 16);
+  assert.deepEqual(
+    batch?.entries.map((entry) => entry.msg),
+    ['pose set', 'spam 16', 'spam 17', 'spam 18', 'spam 19'],
+  );
+});

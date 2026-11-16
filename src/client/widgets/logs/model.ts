@@ -2,6 +2,7 @@
 // them (src/server/rosout.ts), and the nodes running; what the page does with
 // them: pause, clear, filter by node, level and text.
 
+import { keepFairly } from '../../../shared/log_share.ts';
 import { ROSOUT_HISTORY, type LogEntry, type RosoutUpdate } from '../../../shared/protocol.ts';
 
 export type Level = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
@@ -32,7 +33,8 @@ export interface Model {
   received: boolean;
   // Of the server's log: another when it starts over
   started: number;
-  // Oldest first, at most ROSOUT_HISTORY
+  // Oldest first, at most ROSOUT_HISTORY, shared fairly among their loggers
+  // as the server keeps them (keepFairly)
   entries: LogEntry[];
   // Come while paused: shown once resumed
   pending: LogEntry[];
@@ -83,8 +85,9 @@ export function runningNode(name: string, running: ReadonlyMap<string, string>):
   return null;
 }
 
+// A node flooding the log drops its own oldest, not a quiet one's
 function keep(entries: LogEntry[]): LogEntry[] {
-  return entries.length > ROSOUT_HISTORY ? entries.slice(-ROSOUT_HISTORY) : entries;
+  return keepFairly(entries, ROSOUT_HISTORY);
 }
 
 // The seq of the last message shown, or cleared

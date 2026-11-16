@@ -1,7 +1,9 @@
 // The ROS log (rcl_interfaces/msg/Log) as the server keeps it for the logs
-// widgets (rosout.ts): its latest messages, numbered as they come, and those
-// its pages have yet to get.
+// widgets (rosout.ts): its latest messages, numbered as they come, shared
+// fairly among their loggers (../shared/log_share.ts), and those its pages
+// have yet to get.
 
+import { keepFairly } from '../shared/log_share.ts';
 import type { LogEntry } from '../shared/protocol.ts';
 
 function text(value: unknown): string {
@@ -36,7 +38,9 @@ export interface LogBatch {
   skipped: number;
 }
 
-// The latest messages, at most capacity, and the batches of those not yet sent
+// The latest messages, at most capacity, shared fairly among their loggers:
+// a node flooding the log drops its own oldest, not a quiet one's. And the
+// batches of those not yet sent.
 export class LogHistory {
   private readonly capacity: number;
   // Oldest first, with up to an eighth of capacity more: dropped in chunks,
@@ -53,24 +57,30 @@ export class LogHistory {
   add(raw: unknown): void {
     this.entries.push(logEntry(raw, ++this.last));
     if (this.entries.length >= this.capacity + Math.ceil(this.capacity / 8)) {
-      this.entries.splice(0, this.entries.length - this.capacity);
+      this.entries = keepFairly(this.entries, this.capacity);
     }
   }
 
   // The messages kept, oldest first: what a new page gets
   snapshot(): LogEntry[] {
-    return this.entries.slice(-this.capacity);
+    return keepFairly(this.entries, this.capacity).slice();
   }
 
-  // Those added since the last batch, at most max (the latest); null if none
+  // Those added since the last batch, at most max, shared fairly as the
+  // history is (a burst of one node skips its own); null if none
   takeBatch(max: number): LogBatch | null {
     const fresh = this.last - this.taken;
     if (fresh === 0) {
       return null;
     }
+    // Those still kept: a flood may have dropped some already
+    let first = this.entries.length;
+    while (first > 0 && this.entries[first - 1].seq > this.taken) {
+      first--;
+    }
     this.taken = this.last;
-    const kept = Math.min(fresh, max, this.capacity);
-    return { entries: kept > 0 ? this.entries.slice(-kept) : [], skipped: fresh - kept };
+    const entries = keepFairly(this.entries.slice(first), Math.min(max, this.capacity));
+    return { entries, skipped: fresh - entries.length };
   }
 }
 

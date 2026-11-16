@@ -1,6 +1,6 @@
 // What the status widgets show, worked out from the robot's updates: the
 // Wi-Fi network joined and its signal, the CPU's load and its last minute,
-// a disk's use. Kept apart from the components, to be tested.
+// a disk's use, the ROS domain. Kept apart from the components, to be tested.
 
 import type { FsDisk } from '../../../shared/file_manager.ts';
 import {
@@ -273,4 +273,32 @@ export function sparkline(points: ChartPoint[], end: number, spanMs: number, wid
     previous = point;
   }
   return path;
+}
+
+export interface DomainReading {
+  tone: StatusTone;
+  // 42, or … while connecting
+  value: string;
+  title: string;
+}
+
+// The ROS domain the panel's widgets reach: the connection's (null until
+// connected), against the server's own. markOther: in yellow when another.
+export function domainReading(
+  connected: boolean,
+  domainId: number | null,
+  serverDomainId: number | null,
+  markOther: boolean,
+): DomainReading {
+  if (!connected || domainId === null) {
+    return { tone: 'off', value: '…', title: 'Connecting to the robot…' };
+  }
+  if (serverDomainId === null || domainId === serverDomainId) {
+    return { tone: 'ok', value: String(domainId), title: `ROS_DOMAIN_ID ${domainId}, the server’s` };
+  }
+  return {
+    tone: markOther ? 'warn' : 'ok',
+    value: String(domainId),
+    title: `ROS_DOMAIN_ID ${domainId}, this panel’s: not the server’s (${serverDomainId})`,
+  };
 }

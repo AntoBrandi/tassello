@@ -46,20 +46,31 @@ export class Ros2Bag {
     });
   }
 
-  // Resolves once it records, rejects with why it could not
-  static record(request: RecordRequest, distro: string): Promise<Ros2Bag> {
-    return Ros2Bag.start(recordArguments(request, distro), RECORDING, RECORD_START_MS, false);
+  // Resolves once it records, rejects with why it could not. env: over the
+  // server's, e.g. the ROS_DOMAIN_ID of the domain it records
+  static record(request: RecordRequest, distro: string, env: Record<string, string> = {}): Promise<Ros2Bag> {
+    return Ros2Bag.start(recordArguments(request, distro), RECORDING, RECORD_START_MS, false, env);
   }
 
   // Resolves once it plays (or played a short bag whole), rejects with why
   // it could not
-  static play(request: PlayRequest): Promise<Ros2Bag> {
-    return Ros2Bag.start(playArguments(request), PLAYING, PLAY_START_MS, true);
+  static play(request: PlayRequest, env: Record<string, string> = {}): Promise<Ros2Bag> {
+    return Ros2Bag.start(playArguments(request), PLAYING, PLAY_START_MS, true, env);
   }
 
-  private static start(args: string[], ready: RegExp, timeoutMs: number, quickExitOk: boolean): Promise<Ros2Bag> {
+  private static start(
+    args: string[],
+    ready: RegExp,
+    timeoutMs: number,
+    quickExitOk: boolean,
+    env: Record<string, string>,
+  ): Promise<Ros2Bag> {
     return new Promise((resolve, reject) => {
-      const child = spawn('ros2', args, { cwd: os.homedir(), stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn('ros2', args, {
+        cwd: os.homedir(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...env },
+      });
       const bag = new Ros2Bag(child);
       let settled = false;
       const settle = (error: Error | null) => {

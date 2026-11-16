@@ -243,6 +243,8 @@ export async function readPlugin(location: PluginLocation): Promise<Plugin> {
 // What the server side needs to activate the plugins
 export interface PluginHostServices {
   node: rclnodejs.Node;
+  // The node on a domain a page connected on
+  nodeOf: (domainId: number) => rclnodejs.Node;
   rclnodejs: typeof rclnodejs;
   logger: Logger;
   commandWidget: (type: string, command: CommandWidget) => void;
@@ -294,6 +296,7 @@ export class PluginHost {
         name: plugin.name,
         dir: plugin.dir,
         node: services.node,
+        nodeOf: (session) => services.nodeOf(session.domainId),
         rclnodejs: services.rclnodejs,
         logger,
         handle: (method, handler, options) =>

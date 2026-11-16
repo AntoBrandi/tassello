@@ -129,6 +129,7 @@ test('the host activates the server sides and dispatches to them', async () => {
     ]);
     await host.activate({
       node: {} as rclnodejs.Node,
+      nodeOf: () => ({}) as rclnodejs.Node,
       rclnodejs: {} as typeof rclnodejs,
       logger: silent,
       commandWidget: (type) => commands.push(type),
@@ -137,7 +138,7 @@ test('the host activates the server sides and dispatches to them', async () => {
     assert.equal(host.info()[0].error, null);
     assert.match(host.info()[1].error ?? '', /no activate/);
 
-    const session = { id: 'page', user: { username: 'ada', displayName: 'Ada', role: 'operator' as const, provider: 'local' } };
+    const session = { id: 'page', domainId: 0, user: { username: 'ada', displayName: 'Ada', role: 'operator' as const, provider: 'local' } };
     assert.deepEqual(await host.request('good', 'echo', 1, session), { params: 1, session: 'page', plugin: 'good' });
     await assert.rejects(host.request('good', 'fail', null, session), /no/);
     await assert.rejects(host.request('good', 'other', null, session), /has no request "other"/);

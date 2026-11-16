@@ -543,7 +543,7 @@ Prefix the plugin's own classes: they apply to the whole page.
 ### Defaults
 
 A plugin can change the defaults of any widget's properties, Tassello's or another plugin's, of
-any status widget's (`'wifi-status'`, `'cpu-status'`, `'disk-status'`), and of any display's
+any status widget's (`'wifi-status'`, `'cpu-status'`, `'disk-status'`, `'ros-domain-status'`), and of any display's
 (`'robot-model-display'`, `'tf-display'`, `'grid-display'`, `'laser-scan-display'`,
 `'point-cloud-display'`, `'octomap-display'`, `'camera-display'`, `'path-display'`,
 `'polygon-display'`, `'pose-display'`, `'interactive-markers-display'`).
@@ -600,7 +600,8 @@ the plugin's widgets still load, and its requests report why it did not start.
 | `ctx` | |
 |---|---|
 | `name`, `dir` | The plugin's name and folder |
-| `node` | The server's ROS node (rclnodejs), shared by every plugin: create publishers, subscriptions, clients on it |
+| `node` | The server's ROS node (rclnodejs), shared by every plugin: create publishers, subscriptions, clients on it. On the server's ROS domain |
+| `nodeOf(session)` | The server's node on the ROS domain of a page's panel (`session.domainId`): `node` for a panel on the server's domain. To reach what that page's widgets do |
 | `rclnodejs` | The rclnodejs module |
 | `logger` | Logs through the node, prefixed with the plugin's name |
 | `handle(method, (params, session) => result, { role? })` | Answers `connection.request(plugin, method, params)`. The result (or its promise) goes to the page as JSON; what it throws is the page's error. `role`: who may call it, `'operator'` if not given |
@@ -610,7 +611,25 @@ the plugin's widgets still load, and its requests report why it did not start.
 
 `session.id` tells the pages apart: one per open page. `session.user` is who signed in on it
 (`username`, `displayName`, `role`; the roles are `'viewer'`, `'operator'`, `'admin'`, each
-allowed what those before it are).
+allowed what those before it are). `session.domainId` is the ROS domain (`ROS_DOMAIN_ID`) of the
+panel the page shows, which its widgets reach: a panel may be on another domain than the server's
+(see *ROS domains* in the README). A handler that should reach the same nodes as the page's
+widgets uses `ctx.nodeOf(session)` instead of `ctx.node`:
+
+```js
+// A client per node, made once: the nodes live as long as the server
+const docks = new Map();
+ctx.handle('dock', (_params, session) => {
+  const node = ctx.nodeOf(session);
+  if (!docks.has(node)) {
+    docks.set(node, node.createClient('std_srvs/srv/Trigger', '/dock'));
+  }
+  return docks.get(node).sendRequestAsync({});
+});
+```
+
+In the page, `connection.domainId` is the domain the widgets reach, and
+`connection.serverDomainId` the server's.
 
 **Roles.** Each handler declares who may use it, and the server refuses the others before calling
 it, with *Not allowed for your role: it takes an operator*, which the page shows as the request's

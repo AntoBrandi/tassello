@@ -9,6 +9,10 @@
 // Who may do what is auth.ts's: a page's WebSocket opens only for a signed-in
 // user, from the dashboard's own pages, and each of its messages needs a role
 // (src/shared/auth.ts).
+//
+// A page connects on its panel's ROS domain (/ws?domain=<id>, the server's own
+// without one): its widgets reach the ROS node the server keeps on that domain
+// (domains.ts), the rest (terminals, services, files) being shared.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
@@ -19,40 +23,22 @@ import path from 'node:path';
 import rclnodejs from 'rclnodejs';
 import { WebSocketServer } from 'ws';
 
-import type { Role } from '../shared/auth.ts';
-import { Actions } from './actions.ts';
+import type { AuthUser, Role } from '../shared/auth.ts';
+import { isDomainId, MAX_DOMAIN_ID } from '../shared/panel.ts';
 import { Auth, type Identity } from './auth.ts';
-import { Arm } from './arm.ts';
 import { BehaviorTreeFiles } from './behavior_tree_files.ts';
-import { BehaviorTrees } from './behavior_trees.ts';
 import { CommandRunner } from './commands.ts';
-import { Diagnostics } from './diagnostics.ts';
+import { RosDomains, type RosDomain } from './domains.ts';
 import { createRequestHandler } from './http.ts';
-import { Interfaces } from './interfaces.ts';
 import { makeMessageCode } from './message_code.ts';
 import { Networking } from './networking.ts';
-import { Overlays } from './overlays.ts';
-import { PanelRoles, PanelStore, seesPanel } from './panels.ts';
-import { Parameters } from './parameters.ts';
-import { Paths } from './paths.ts';
+import { HttpError, mayUseDomain, PanelRoles, PanelStore, seesPanel } from './panels.ts';
 import { findPlugins, PluginHost, readPlugin, type Plugin } from './plugins.ts';
-import { Poses } from './poses.ts';
-import { Ros } from './ros.ts';
-import { RosGraph } from './ros_graph.ts';
-import { Rosbags } from './rosbags.ts';
-import { Rosout } from './rosout.ts';
 import { Session } from './session.ts';
-import { FrameStreams } from './streams.ts';
 import { SystemMonitor } from './system.ts';
 import { SystemdServices } from './systemd.ts';
-import { Teleop } from './teleop.ts';
 import { Terminals } from './terminals.ts';
-import { Tf } from './tf.ts';
 import { UserStore } from './users.ts';
-import { TopicMonitors } from './topic_monitor.ts';
-import { TopicPublishing } from './topic_publishing.ts';
-import { Topics } from './topics.ts';
-import { TwistMuxes } from './twist_mux.ts';
 import { defaultAuthDirectory, defaultPanelsDirectory, errorMessage, keepSecret, tasselloRoot } from './util.ts';
 
 export interface ServerOptions {
@@ -140,33 +126,17 @@ export async function startServer(options: ServerOptions): Promise<void> {
   }
   logger.info(`Panels in ${panelsDir}`);
 
-  const teleop = new Teleop(node, logger);
-  const tf = new Tf(node, logger);
-  const streams = new FrameStreams(node, logger, tf);
-  const paths = new Paths(node, logger);
-  const overlays = new Overlays(node, logger, tf);
-  const topics = new Topics(node, logger);
-  const poses = new Poses(node);
+  // Next to the panels
+  const uploadsDir = path.join(path.dirname(panelsDir), 'images');
+  // The ROS side of the widgets, on the server's domain and on those of the
+  // panels
+  const domains = new RosDomains(node, logger, uploadsDir);
+  logger.info(`ROS domain ${domains.serverDomainId}`);
   const commands = new CommandRunner(store, logger);
   const systemd = new SystemdServices(logger);
-  const arm = new Arm(node, topics, logger);
-  const interfaces = new Interfaces(node);
-  const ros = new Ros(node, interfaces);
-  const graph = new RosGraph(node, logger);
-  const topicMonitors = new TopicMonitors(node, logger, interfaces);
-  const publishing = new TopicPublishing(node, interfaces);
-  const actions = new Actions(node, interfaces, logger);
-  const parameters = new Parameters(node, logger);
-  const rosout = new Rosout(node, logger);
-  const diagnostics = new Diagnostics(node, logger);
-  const twistMuxes = new TwistMuxes(node, logger, parameters, diagnostics, actions);
   const terminals = new Terminals(logger);
   const networking = new Networking(logger);
   const system = new SystemMonitor(logger);
-  // Next to the panels
-  const uploadsDir = path.join(path.dirname(panelsDir), 'images');
-  const rosbags = new Rosbags(ros, logger);
-  const behaviorTrees = new BehaviorTrees(node, logger, uploadsDir, rosbags);
   const behaviorTreeFiles = new BehaviorTreeFiles(uploadsDir, logger);
   const authDir = options.authDir ?? defaultAuthDirectory();
   const auth = new Auth({
@@ -197,6 +167,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   const host = new PluginHost(plugins);
   await host.activate({
     node,
+    nodeOf: (domainId) => domains.madeDomain(domainId).node,
     rclnodejs,
     logger,
     commandWidget: (type, command) => commands.registerWidget(type, command),
@@ -234,6 +205,31 @@ export async function startServer(options: ServerOptions): Promise<void> {
     }
   });
 
+  // The domain a page asks for (/ws?domain=<id>, /api/topics?domain=<id>),
+  // made the first time: the server's own if none
+  async function domainFor(user: AuthUser, value: string | null): Promise<RosDomain> {
+    if (value === null || value.trim() === '') {
+      return domains.serverDomain;
+    }
+    const id = Number(value);
+    if (!isDomainId(id)) {
+      throw new HttpError(400, `The ROS domain must be an integer between 0 and ${MAX_DOMAIN_ID}`);
+    }
+    const reachable =
+      id === domains.serverDomainId ||
+      user.role === 'admin' ||
+      mayUseDomain(user.role, id, domains.serverDomainId, await store.list());
+    if (!reachable) {
+      throw new HttpError(403, `None of your panels is on ROS domain ${id}`);
+    }
+    try {
+      return await domains.get(id);
+    } catch (e) {
+      logger.error(`ROS domain ${id}: ${errorMessage(e)}`);
+      throw new HttpError(500, `Could not reach ROS domain ${id}: ${errorMessage(e)}`);
+    }
+  }
+
   const handler = createRequestHandler({
     store,
     wwwDir,
@@ -243,8 +239,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
     tls: options.tls !== undefined,
     frameAncestors: options.frameAncestors,
     uploadsDir,
-    topics: () =>
-      node
+    topics: async (user, domain) =>
+      (await domainFor(user, domain)).node
         .getTopicNamesAndTypes()
         .map(({ name, types }) => ({ name, types }))
         .sort((a, b) => a.name.localeCompare(b.name)),
@@ -253,8 +249,8 @@ export async function startServer(options: ServerOptions): Promise<void> {
     ? createTlsServer({ cert: readFileSync(options.tls.cert), key: readFileSync(options.tls.key) }, handler)
     : createServer(handler);
 
-  // Who each connection is, from its upgrade request
-  const identities = new WeakMap<IncomingMessage, Identity>();
+  // Who each connection is, and on which ROS domain, from its upgrade request
+  const identities = new WeakMap<IncomingMessage, { identity: Identity; domain: RosDomain }>();
   // The pages' messages are small: velocities, subscriptions
   const wss = new WebSocketServer({
     server,
@@ -262,12 +258,18 @@ export async function startServer(options: ServerOptions): Promise<void> {
     maxPayload: 1024 * 1024,
     verifyClient: ({ req }, done) => {
       auth.verifyUpgrade(req).then(
-        (result) => {
-          if ('user' in result) {
-            identities.set(req, result);
-            done(true);
-          } else {
+        async (result) => {
+          if (!('user' in result)) {
             done(false, result.status, result.reason);
+            return;
+          }
+          // Before the connection opens: its first messages need the domain
+          try {
+            const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+            identities.set(req, { identity: result, domain: await domainFor(result.user, query.get('domain')) });
+            done(true);
+          } catch (e) {
+            done(false, e instanceof HttpError ? e.status : 500, errorMessage(e));
           }
         },
         () => done(false, 500),
@@ -277,39 +279,24 @@ export async function startServer(options: ServerOptions): Promise<void> {
   // Pages connected, with who they are
   const signedIn = new Map<Session, Identity>();
   wss.on('connection', (ws, req) => {
-    const identity = identities.get(req);
-    if (!identity) {
+    const upgrade = identities.get(req);
+    if (!upgrade) {
       ws.close(4401, 'Sign in first');
       return;
     }
+    const { identity, domain } = upgrade;
     const session = new Session(
       ws,
       {
-        teleop,
-        streams,
-        tf,
-        paths,
-        overlays,
-        topics,
-        poses,
+        ...domain.services,
+        domainId: domain.id,
+        domainEnv: domain.env,
+        serverDomainId: domains.serverDomainId,
         commands,
         systemd,
-        arm,
-        ros,
-        rosout,
-        diagnostics,
-        twistMuxes,
         terminals,
         networking,
-        behaviorTrees,
         behaviorTreeFiles,
-        graph,
-        topicMonitors,
-        publishing,
-        interfaces,
-        actions,
-        parameters,
-        rosbags,
         system,
         plugins: host,
         panelRoles,
@@ -321,7 +308,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     );
     sessions.add(session);
     signedIn.set(session, identity);
-    logger.debug(`Page connected from ${req.socket.remoteAddress}`);
+    logger.debug(`Page connected from ${req.socket.remoteAddress}, on ROS domain ${domain.id}`);
     let alive = true;
     ws.on('pong', () => {
       alive = true;
@@ -388,15 +375,18 @@ export async function startServer(options: ServerOptions): Promise<void> {
     wss.close();
     server.close();
     behaviorTreeFiles.stopAll();
-    actions.stopAll();
+    for (const domain of domains.all()) {
+      domain.services.actions.stopAll();
+    }
     // Time for those last zero velocities to leave, and for the bags being
     // recorded to be completed
     void Promise.all([
       host.shutdown(logger),
-      rosbags.stopAll(),
+      ...domains.all().map((domain) => domain.services.rosbags.stopAll()),
       auth.stop(),
       new Promise((resolve) => setTimeout(resolve, 200)),
     ]).finally(() => {
+      domains.destroyOthers();
       node.destroy();
       rclnodejs.shutdown();
       process.exit(code);
