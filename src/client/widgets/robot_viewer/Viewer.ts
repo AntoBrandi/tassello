@@ -54,7 +54,7 @@ import {
   type ViewCamera,
   type ViewMode,
 } from './display.ts';
-import { clampZoom, effectiveFixedFrame } from './model.ts';
+import { clampPan, clampZoom, effectiveFixedFrame, type ViewPan } from './model.ts';
 
 // TF updates a second: what moves in the fixed frame, e.g. the robot in odom
 const TF_RATE = 15;
@@ -223,6 +223,8 @@ export class Viewer {
   private scale = DEFAULT_SCALE;
   // The home view's: 1 fits the focus, 2 is twice as close
   private zoom = 1;
+  // Its centre, from the focus's: metres along the fixed frame's x and y
+  private homePan: ViewPan = { x: 0, y: 0 };
   private userMoved = false;
   private renderQueued = 0;
   private stateKey = '';
@@ -403,8 +405,51 @@ export class Viewer {
     }
   }
 
+  // Where the home view is centred: this far from what the displays focus on
+  // (the robot), in metres along the fixed frame's x and y. The view goes
+  // there, unless moved by the user.
+  setPan(pan: ViewPan): void {
+    const x = clampPan(pan.x);
+    const y = clampPan(pan.y);
+    if (x === this.homePan.x && y === this.homePan.y) {
+      return;
+    }
+    this.homePan = { x, y };
+    if (!this.userMoved) {
+      this.fit();
+    }
+  }
+
+  // The pan after a drag on the home view of dx, dy pixels (right, down): the
+  // ground follows the pointer, at the view's centre
+  dragPan(pan: ViewPan, dx: number, dy: number): ViewPan {
+    const height = Math.max(1, this.container.clientHeight);
+    // In three.js's axes: ROS's x is x, its y is -z
+    const right = new Vector3();
+    const forward = new Vector3();
+    let perPixel: number;
+    if (this.view === '2d') {
+      perPixel = (this.ortho.top - this.ortho.bottom) / this.ortho.zoom / height;
+      right.set(1, 0, 0);
+      forward.set(0, 0, -1);
+    } else {
+      const distance = this.perspective.position.distanceTo(this.orbit.target);
+      perPixel = (2 * distance * Math.tan(((this.perspective.fov / 2) * Math.PI) / 180)) / height;
+      this.perspective.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() < 1e-9) {
+        // From straight above: up on the screen
+        forward.set(0, 1, 0).applyQuaternion(this.perspective.quaternion).setY(0);
+      }
+      forward.normalize();
+      right.crossVectors(forward, new Vector3(0, 1, 0)).normalize();
+    }
+    const move = right.multiplyScalar(-dx * perPixel).addScaledVector(forward, dy * perPixel);
+    return { x: clampPan(pan.x + move.x), y: clampPan(pan.y - move.z) };
+  }
+
   // The view back to its home: what the displays focus on (the robot), at
-  // the zoom
+  // the zoom and pan
   resetView(): void {
     this.userMoved = false;
     this.fit();
@@ -757,6 +802,9 @@ export class Viewer {
     const sphere = this.focusSphere() ?? new Sphere(new Vector3(0, DEFAULT_SCALE / 2, 0), DEFAULT_SCALE);
     const radius = Math.max(0.05, sphere.radius);
     this.scale = radius;
+    // ROS's x and y are three.js's x and -z
+    sphere.center.x += this.homePan.x;
+    sphere.center.z -= this.homePan.y;
     if (this.view === '2d') {
       const aspect = this.ortho.right / this.ortho.top;
       this.pan.target.copy(sphere.center);

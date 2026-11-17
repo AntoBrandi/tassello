@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   cameraInfoTopic,
+  clampPan,
   clampZoom,
   DEFAULT_DISPLAYS,
   effectiveFixedFrame,
@@ -10,6 +11,7 @@ import {
   imageCorners,
   intrinsicsFromFov,
   intrinsicsOf,
+  MAX_PAN,
   MAX_ZOOM,
   migrateRobotModelConfig,
   MIN_ZOOM,
@@ -17,6 +19,7 @@ import {
   newDisplayId,
   parseColor,
   rainbow,
+  roundPan,
   roundZoom,
   treeRoot,
   wheelZoom,
@@ -161,4 +164,19 @@ test('the wheel zooms in up, out down, a notch as much either way', () => {
   assert.ok(wheelZoom(1, -10, 0, true) > wheelZoom(1, -10));
   assert.equal(wheelZoom(MAX_ZOOM, -1000), MAX_ZOOM);
   assert.equal(wheelZoom(MIN_ZOOM, 1000), MIN_ZOOM);
+});
+
+test('the pan stays within its limits, 0 for what is not a number', () => {
+  assert.equal(clampPan(-2.5), -2.5);
+  assert.equal(clampPan(1e9), MAX_PAN);
+  assert.equal(clampPan(-1e9), -MAX_PAN);
+  assert.equal(clampPan(Number.NaN), 0);
+  assert.equal(clampPan(-Infinity), 0);
+});
+
+test('the pan is saved to the millimetre', () => {
+  assert.equal(roundPan(1.23456), 1.235);
+  assert.equal(roundPan(-0.0004), 0);
+  assert.ok(Object.is(roundPan(-0.0004), 0));
+  assert.equal(roundPan(1e9), MAX_PAN);
 });

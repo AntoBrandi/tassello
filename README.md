@@ -274,8 +274,10 @@ Notes on some of them:
   arrives, on the server: a scan lands on the map's walls when the localization is right. Drag
   to orbit (in 2D, to pan), right drag (two fingers) to pan, scroll (pinch) to zoom; Reset
   fits the robot. It opens, and Reset goes back, at its *Zoom*, saved with the panel: 1 fits the
-  robot, 2 is twice as close. In edit mode, scrolling on the viewer chooses it (the view shows
-  the zoom it opens at); a drag still moves the widget. A press on an interactive marker's control is the marker's: dragged, it moves
+  robot, 2 is twice as close, and centred at its *Pan x* and *Pan y*, metres from the robot
+  along the fixed frame's x and y. In edit mode, scrolling on the viewer chooses the zoom and
+  dragging it with the right button the pan (the view shows where it opens); a left drag still
+  moves the widget. A press on an interactive marker's control is the marker's: dragged, it moves
   or turns as its control says (with Ctrl, a 3D control turns), clicked, a button is pressed or a
   menu opens; a right click (a long touch) opens the marker's menu.
 - **Arm Teleop** streams its controllers one-point trajectories just ahead of the arm, 20 times

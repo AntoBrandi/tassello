@@ -6,6 +6,13 @@ noted here.
 
 ## Unreleased
 
+- **Robot Viewer pan.** Besides its zoom, the viewer opens, and Reset goes back, centred where
+  saved with the panel: *Pan x* and *Pan y* in its properties (metres from the robot along the
+  fixed frame's x and y), or, in edit mode, dragging the viewer with the right (or middle)
+  button, which moves it, in 2D as in 3D, along the ground. Restored after a reload or a restart
+  of the server.
+- `ViewerView` (`tassello/viewer`): `pan` (`{ x, y }`) and `onPanChange(pan)`, for a plugin's
+  viewer to do the same.
 - **A ROS domain per panel.** A panel's widgets may reach the nodes of another ROS domain than
   the server's (**⋯ → ROS domain…** in edit mode, `domainId` in its file): a robot and its
   simulation, or two robots, each with its panels on one dashboard. The page connects on the

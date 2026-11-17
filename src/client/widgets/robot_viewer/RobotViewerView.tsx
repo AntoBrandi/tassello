@@ -1,6 +1,7 @@
 // The Robot Viewer widget's content, loaded with three.js only when a panel
 // shows one (see RobotViewerWidget.tsx): a ViewerView of the widget's config,
-// whose toolbar changes it, and in edit mode, scrolling on it, its zoom.
+// whose toolbar changes it, and in edit mode, scrolling on it, its zoom, and
+// right-dragging it, its pan.
 
 import type { WidgetProps } from '../types.ts';
 import type { RobotViewerConfig } from './RobotViewerWidget.tsx';
@@ -16,6 +17,8 @@ export default function RobotViewerView({ config, editing, updateConfig }: Widge
       onFixedFrameChange={(fixedFrame) => updateConfig({ fixedFrame })}
       zoom={config.zoom}
       onZoomChange={editing ? (zoom) => updateConfig({ zoom }) : undefined}
+      pan={{ x: config.panX, y: config.panY }}
+      onPanChange={editing ? ({ x, y }) => updateConfig({ panX: x, panY: y }) : undefined}
       disabled={editing}
       emptyMessage="No displays: add some in edit mode"
     />

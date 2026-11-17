@@ -2,8 +2,8 @@
 // the view, its toolbar (Reset, and if asked for 3D or 2D and the fixed
 // frame), what it waits for, and its displays' notes. Its home view (where
 // it opens, and Reset goes back to) fits what the displays focus on, at a
-// zoom, which scrolling on it chooses if asked, e.g. while the panel is
-// edited. The Robot Viewer is one
+// zoom and a pan, which scrolling and right-dragging on it choose if asked,
+// e.g. while the panel is edited. The Robot Viewer is one
 // with its widget's config; a plugin embeds one with displays of its choosing
 // (Tassello's, its own), e.g. a map and the paths built on it:
 //
@@ -21,7 +21,7 @@ import type { DisplayInstance } from '../../../shared/panel.ts';
 import { CubeIcon, FitIcon } from '../../icons.tsx';
 import { displayDefinition, resolveConfig } from '../registry.ts';
 import type { DisplayNote, ViewMode } from './display.ts';
-import { clampZoom, roundZoom, wheelZoom } from './model.ts';
+import { clampPan, clampZoom, roundPan, roundZoom, wheelZoom, type ViewPan } from './model.ts';
 import { Viewer, type ViewerDisplay, type ViewerState } from './Viewer.ts';
 
 // A scroll ends when the wheel has been still this long, in ms: its zoom is
@@ -47,6 +47,14 @@ export interface ViewerViewProps {
   // when a scroll ends, while the view stays at its home; dragging does not
   // move it. E.g. while the panel is edited, when the view is not used.
   onZoomChange?: (zoom: number) => void;
+  // Where the home view is centred: this far from what the displays focus
+  // on (the robot), in metres along the fixed frame's x and y; 0, 0 (the
+  // default) on it
+  pan?: ViewPan;
+  // Given: dragging the view with the right button (or the middle one)
+  // chooses the pan, told when the drag ends, while the view stays at its
+  // home. E.g. while the panel is edited, with onZoomChange.
+  onPanChange?: (pan: ViewPan) => void;
   // The toolbar's switch and menu greyed out, e.g. while the panel is edited
   disabled?: boolean;
   // Said in the middle while there are no displays
@@ -63,6 +71,8 @@ export function ViewerView({
   onFixedFrameChange,
   zoom = 1,
   onZoomChange,
+  pan,
+  onPanChange,
   disabled = false,
   emptyMessage = 'No displays',
   children,
@@ -76,6 +86,14 @@ export function ViewerView({
   const zoomChangeRef = useRef(onZoomChange);
   const [shownZoom, setShownZoom] = useState(clampZoom(zoom));
   const choosingZoom = !!onZoomChange;
+  // The pan given, and the one shown while a drag chooses another
+  const panX = clampPan(pan?.x ?? 0);
+  const panY = clampPan(pan?.y ?? 0);
+  const panRef = useRef<ViewPan>({ x: panX, y: panY });
+  const panChangeRef = useRef(onPanChange);
+  const [shownPan, setShownPan] = useState<ViewPan>({ x: panX, y: panY });
+  const choosingPan = !!onPanChange;
+  const choosing = choosingZoom || choosingPan;
   // Gone: a scroll's zoom is not told then, e.g. the widget removed. Before
   // the zoom's effect below, whose cleanup tells it: cleaned up first.
   const unmounted = useRef(false);
@@ -103,7 +121,13 @@ export function ViewerView({
     viewer.current?.setZoom(zoomRef.current);
   }, [zoom]);
   useEffect(() => {
+    panRef.current = { x: panX, y: panY };
+    setShownPan(panRef.current);
+    viewer.current?.setPan(panRef.current);
+  }, [panX, panY]);
+  useEffect(() => {
     zoomChangeRef.current = onZoomChange;
+    panChangeRef.current = onPanChange;
   });
 
   // Choosing the zoom: the view at its home, the wheel's on the surface over
@@ -114,7 +138,6 @@ export function ViewerView({
     if (!choosingZoom || !surface) {
       return;
     }
-    viewer.current?.resetView();
     let chosen = zoomRef.current;
     let settle: ReturnType<typeof setTimeout> | null = null;
     // Whom to tell: the one when the scroll began, even if gone since, e.g.
@@ -152,6 +175,89 @@ export function ViewerView({
       end();
     };
   }, [choosingZoom]);
+
+  // Choosing the pan: the view at its home, a right (or middle) drag on the
+  // surface over it moves it. A left press goes through, as for the zoom.
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!choosingPan || !surface) {
+      return;
+    }
+    let drag: { pointerId: number; x: number; y: number; chosen: ViewPan; tell?: (pan: ViewPan) => void } | null =
+      null;
+    const end = (event?: PointerEvent) => {
+      if (!drag || (event && event.pointerId !== drag.pointerId)) {
+        return;
+      }
+      const { chosen, tell } = drag;
+      drag = null;
+      const value = { x: roundPan(chosen.x), y: roundPan(chosen.y) };
+      if ((value.x !== panRef.current.x || value.y !== panRef.current.y) && !unmounted.current) {
+        panRef.current = value;
+        tell?.(value);
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 1 && event.button !== 2) {
+        return;
+      }
+      // Not the widget's drag, nor the middle button's scroll
+      event.preventDefault();
+      event.stopPropagation();
+      if (drag) {
+        return;
+      }
+      surface.setPointerCapture(event.pointerId);
+      drag = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        chosen: panRef.current,
+        // Whom to tell: the one when the drag began, as for the zoom
+        tell: panChangeRef.current,
+      };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.pointerId || !viewer.current) {
+        return;
+      }
+      drag.chosen = viewer.current.dragPan(drag.chosen, event.clientX - drag.x, event.clientY - drag.y);
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      viewer.current.setPan(drag.chosen);
+      setShownPan(drag.chosen);
+    };
+    const onContextMenu = (event: MouseEvent) => event.preventDefault();
+    // The middle button's autoscroll comes of its mousedown
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button === 1) {
+        event.preventDefault();
+      }
+    };
+    surface.addEventListener('pointerdown', onPointerDown);
+    surface.addEventListener('mousedown', onMouseDown);
+    surface.addEventListener('pointermove', onPointerMove);
+    surface.addEventListener('pointerup', end);
+    surface.addEventListener('pointercancel', end);
+    surface.addEventListener('contextmenu', onContextMenu);
+    return () => {
+      surface.removeEventListener('pointerdown', onPointerDown);
+      surface.removeEventListener('mousedown', onMouseDown);
+      surface.removeEventListener('pointermove', onPointerMove);
+      surface.removeEventListener('pointerup', end);
+      surface.removeEventListener('pointercancel', end);
+      surface.removeEventListener('contextmenu', onContextMenu);
+      end();
+    };
+  }, [choosingPan]);
+
+  // Choosing the home view: the view kept at it
+  useEffect(() => {
+    if (choosing) {
+      viewer.current?.resetView();
+    }
+  }, [choosing]);
+
   const resolved = useMemo<ViewerDisplay[]>(
     () =>
       displays.map((instance) => {
@@ -262,10 +368,30 @@ export function ViewerView({
             {note.text}
           </span>
         ))}
-        {choosingZoom && <span className="robot-zoom-chip">Zoom ×{roundZoom(shownZoom)} · scroll to change</span>}
+        {choosing && (
+          <span className="robot-zoom-chip">
+            {homeChip(
+              roundZoom(shownZoom),
+              { x: roundPan(shownPan.x), y: roundPan(shownPan.y) },
+              choosingZoom,
+              choosingPan,
+            )}
+          </span>
+        )}
       </div>
       {children}
-      {choosingZoom && <div ref={surfaceRef} className="robot-zoom-surface" />}
+      {choosing && <div ref={surfaceRef} className="robot-zoom-surface" />}
     </div>
   );
+}
+
+// What the home view is, and how to choose it: e.g. "Zoom ×1.5 · Pan 2, -0.5 m
+// · scroll to zoom, right-drag to pan"
+function homeChip(zoom: number, pan: ViewPan, choosingZoom: boolean, choosingPan: boolean): string {
+  const parts = [`Zoom ×${zoom}`];
+  if (pan.x !== 0 || pan.y !== 0) {
+    parts.push(`Pan ${Number(pan.x.toFixed(2))}, ${Number(pan.y.toFixed(2))} m`);
+  }
+  const how = [choosingZoom && 'scroll to zoom', choosingPan && 'right-drag to pan'].filter(Boolean);
+  return `${parts.join(' · ')} · ${how.join(', ')}`;
 }

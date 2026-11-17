@@ -2,8 +2,9 @@
 // fixed frame, each a kind of thing (the robot model, TF, a map, a laser scan,
 // a point cloud, or a plugin's), with its own properties, in a list edited in
 // the side panel. Drag to orbit (pan in 2D), right drag (two fingers) to pan,
-// scroll (pinch) to zoom. It opens fitting the robot, at its zoom, saved with
-// the panel: chosen in edit mode by scrolling on it.
+// scroll (pinch) to zoom. It opens fitting the robot, at its zoom and pan,
+// saved with the panel: chosen in edit mode by scrolling on it, and dragging
+// it with the right button.
 //
 // It replaces the Robot Model widget, whose type it keeps: the panels' robot
 // models open as viewers of the robot model, its frames as a TF display.
@@ -17,7 +18,7 @@ import type { DisplayInstance } from '../../../shared/panel.ts';
 import { useTfFrames } from '../../connection.ts';
 import { CubeIcon } from '../../icons.tsx';
 import { defineWidget, type WidgetProps } from '../types.ts';
-import { DEFAULT_DISPLAYS, MAX_ZOOM, MIN_ZOOM, migrateRobotModelConfig } from './model.ts';
+import { DEFAULT_DISPLAYS, MAX_PAN, MAX_ZOOM, MIN_ZOOM, migrateRobotModelConfig } from './model.ts';
 
 export interface RobotViewerConfig {
   // '' for Auto: the robot model's root link, else the root of the TF tree
@@ -26,6 +27,10 @@ export interface RobotViewerConfig {
   // Where the view opens, and Reset goes back to: 1 fits the robot, 2 is
   // twice as close
   zoom: number;
+  // Where the view opens centred, and Reset goes back to: this far from the
+  // robot, in metres along the fixed frame's x and y
+  panX: number;
+  panY: number;
   displays: DisplayInstance[];
 }
 
@@ -83,6 +88,24 @@ export const robotViewerWidget = defineWidget<RobotViewerConfig>({
       min: MIN_ZOOM,
       max: MAX_ZOOM,
       help: 'Where the view opens, and Reset goes back to: 1 fits the robot, 2 is twice as close, 0.5 twice as far. Or scroll on the view, in edit mode',
+    },
+    {
+      key: 'panX',
+      label: 'Pan x',
+      kind: 'number',
+      default: 0,
+      min: -MAX_PAN,
+      max: MAX_PAN,
+      help: "Where the view opens centred, and Reset goes back to: this many metres from the robot along the fixed frame's x. Or drag the view with the right button, in edit mode",
+    },
+    {
+      key: 'panY',
+      label: 'Pan y',
+      kind: 'number',
+      default: 0,
+      min: -MAX_PAN,
+      max: MAX_PAN,
+      help: "Where the view opens centred, and Reset goes back to: this many metres from the robot along the fixed frame's y. Or drag the view with the right button, in edit mode",
     },
     {
       key: 'displays',

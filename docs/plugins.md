@@ -396,6 +396,8 @@ function MapWidget() {
 | `onViewChange(view)`, `onFixedFrameChange(frame)` | Given: the toolbar has the 3D/2D switch, and the fixed frame's menu |
 | `zoom` | How close the home view is (where the view opens, and Reset goes back to): `1` (the default) fits what the displays focus on, `2` twice as close |
 | `onZoomChange(zoom)` | Given: scrolling on the view chooses the zoom, told once a scroll ends, while the view stays at its home and a press goes through to what is under it; e.g. `editing ? (zoom) => updateConfig({ zoom }) : undefined`, as the Robot Viewer does |
+| `pan` | Where the home view is centred: `{ x, y }`, metres from what the displays focus on along the fixed frame's x and y (`{ x: 0, y: 0 }`, the default, on it) |
+| `onPanChange(pan)` | Given: dragging the view with the right (or middle) button chooses the pan, told once the drag ends, while the view stays at its home; e.g. `editing ? ({ x, y }) => updateConfig({ panX: x, panY: y }) : undefined`, as the Robot Viewer does |
 | `disabled` | The switch and menu greyed out |
 | `emptyMessage` | Said in the middle while there are no displays |
 | `children` | Drawn over the view, e.g. the widget's own controls |

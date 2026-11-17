@@ -1,6 +1,6 @@
 // What the Robot Viewer works out without three.js: its displays as saved by
 // the Robot Model widget it replaces, the frame Auto stands for, new
-// displays' ids, its zoom, the colour scale of points, and where a camera's
+// displays' ids, its zoom and pan, the colour scale of points, and where a camera's
 // image is.
 
 import type { DisplayInstance } from '../../../shared/panel.ts';
@@ -112,6 +112,24 @@ export function roundZoom(zoom: number): number {
 export function wheelZoom(zoom: number, deltaY: number, deltaMode = 0, pinch = false): number {
   const pixels = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 400 : deltaY;
   return clampZoom(clampZoom(zoom) * Math.exp(-pixels * (pinch ? 0.01 : 0.001)));
+}
+
+// Where a viewer's home view is centred: this far from what its displays
+// focus on (the robot), in metres along the fixed frame's x and y
+export const MAX_PAN = 10000;
+
+export interface ViewPan {
+  x: number;
+  y: number;
+}
+
+export function clampPan(value: number): number {
+  return Number.isFinite(value) ? Math.min(MAX_PAN, Math.max(-MAX_PAN, value)) : 0;
+}
+
+// As saved: to the millimetre
+export function roundPan(value: number): number {
+  return Math.round(clampPan(value) * 1000) / 1000 || 0;
 }
 
 export function moveItem<T>(list: T[], index: number, delta: number): T[] {
