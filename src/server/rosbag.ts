@@ -38,14 +38,14 @@ export interface BagSource {
 }
 
 // The files of a bag, compressed by rosbag2 (.zstd) or not
-const BAG_FILE = /\.(mcap|db3)(\.zstd)?$/i;
-const COMPRESSED = /\.zstd$/i;
-const METADATA = 'metadata.yaml';
+export const BAG_FILE = /\.(mcap|db3)(\.zstd)?$/i;
+export const COMPRESSED = /\.zstd$/i;
+export const METADATA = 'metadata.yaml';
 // SQLite bags without metadata are counted only up to this size: node:sqlite
 // blocks the server while it reads
 const SQLITE_SCAN_BYTES = 64 * 1024 * 1024;
 
-const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+export const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
 
 // An absolute path from /… or ~/…
 export function bagPath(input: string, home = os.homedir()): string {
@@ -140,12 +140,12 @@ function readFile(file: string, accept: (topic: BagTopic) => boolean): Promise<B
 }
 
 // A file rosbag2 compressed whole, decompressed into a folder of its own for
-// the time of use
-async function withDecompressed<T>(file: string, use: (plain: string) => Promise<T>): Promise<T> {
+// the time of use: in within, the system's temporary folder by default
+export async function withDecompressed<T>(file: string, use: (plain: string) => Promise<T>, within = os.tmpdir()): Promise<T> {
   if (typeof zlib.createZstdDecompress !== 'function') {
     throw new Error('Reading zstd compressed rosbags needs Node.js 22.15 or newer');
   }
-  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'tassello-bag-'));
+  const folder = await fs.mkdtemp(path.join(within, '.tassello-bag-'));
   try {
     const plain = path.join(folder, path.basename(file).replace(COMPRESSED, ''));
     await pipeline(createReadStream(file), zlib.createZstdDecompress(), createWriteStream(plain)).catch((e: unknown) => {
@@ -198,12 +198,15 @@ export async function bagInfo(input: string, home = os.homedir()): Promise<BagIn
     compression: null,
     recording: false,
     problem: null,
+    repairable: false,
+    repair: null,
   };
   let metadata: BagMetadata | null = null;
   let names: string[];
   if (stat.isDirectory()) {
     try {
       metadata = await readMetadata(location);
+      info.repairable = metadata === null;
     } catch (e) {
       info.problem = `Its ${METADATA} cannot be read: ${errorMessage(e)}`;
     }
@@ -285,7 +288,7 @@ export async function bagInfo(input: string, home = os.homedir()): Promise<BagIn
       : null;
   }
   if (stat.isDirectory() && !info.problem) {
-    info.problem = `No ${METADATA}: being recorded, or its recording did not end (ros2 bag reindex makes it)`;
+    info.problem = `No ${METADATA}: being recorded, or its recording did not end, and ros2 bag cannot play it`;
   }
   return info;
 }
@@ -380,7 +383,7 @@ export async function folderSize(folder: string): Promise<number> {
 // Records: opcode (u8), length (u64), content; little endian, strings and
 // maps prefixed with their u32 byte length (https://mcap.dev/spec)
 
-const MCAP_MAGIC = [0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a];
+export const MCAP_MAGIC = [0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a];
 const FOOTER = 0x02;
 const SCHEMA = 0x03;
 const CHANNEL = 0x04;
@@ -393,7 +396,7 @@ const DATA_END = 0x0f;
 const FOOTER_BYTES = 1 + 8 + 8 + 8 + 4;
 
 // Reads a buffer; past its end throws (RangeError)
-class Cursor {
+export class Cursor {
   offset = 0;
   readonly data: Buffer;
 
@@ -443,7 +446,7 @@ class Cursor {
 }
 
 // MCAP's chunks, and rosbag2's messages
-function decompress(compression: string, data: Buffer): Buffer {
+export function decompress(compression: string, data: Buffer): Buffer {
   if (!compression) {
     return data;
   }
@@ -677,7 +680,7 @@ async function readSequentially(records: McapRecords, read: Read, size: number):
 
 // ── SQLite ───────────────────────────────────────────────────────────────────
 
-async function withSqlite<T>(file: string, use: (db: import('node:sqlite').DatabaseSync) => T): Promise<T> {
+export async function withSqlite<T>(file: string, use: (db: import('node:sqlite').DatabaseSync) => T | Promise<T>): Promise<T> {
   let sqlite: typeof import('node:sqlite');
   try {
     sqlite = await import('node:sqlite');
@@ -691,7 +694,7 @@ async function withSqlite<T>(file: string, use: (db: import('node:sqlite').Datab
     throw new Error(`Cannot read ${file}: ${errorMessage(e)}`);
   }
   try {
-    return use(db);
+    return await use(db);
   } catch (e) {
     throw new Error(`Cannot read ${file}: ${errorMessage(e)}`);
   } finally {

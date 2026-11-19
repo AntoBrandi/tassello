@@ -6,6 +6,20 @@ noted here.
 
 ## Unreleased
 
+- **Rosbags: Repair.** A bag whose recording did not end (the recorder killed, the robot turned
+  off) has no `metadata.yaml`, and `ros2 bag` does not play it: *Repair* (beside the bag's
+  warning, or in its **⋯** menu) writes it from the bag's files, as `ros2 bag reindex` does, but
+  for compressed bags too, which Humble's reindex skips. Each file is read whole, as rosbag2 will
+  read it, its messages counted by topic over the bag's time span; the metadata is written in the
+  version of the QoS rosbag2 stored with the topics (Humble's 5, Jazzy's 9), and Humble and
+  Jazzy's `ros2 bag info` and `ros2 bag play` read it. A file cut short counts up to its last
+  whole chunk; one of which nothing can be read is left out, and said so. The file being recorded
+  when a compressed bag's recording stopped is compressed as rosbag2 would have, beside it;
+  nothing else of the bag changes. One bag at a time, its progress shown to every page,
+  cancelled at will; a bag still open in another process, or just written to, is refused.
+- `BagsRequest` (`tassello/sdk`): `repair` and `cancel-repair`; `BagInfo.repairable` and
+  `BagInfo.repair` (the progress), and `BagRepair`.
+
 - **Robot Viewer pan.** Besides its zoom, the viewer opens, and Reset goes back, centred where
   saved with the panel: *Pan x* and *Pan y* in its properties (metres from the robot along the
   fixed frame's x and y), or, in edit mode, dragging the viewer with the right (or middle)

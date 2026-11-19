@@ -1,7 +1,9 @@
 // The robot's rosbags, for the Rosbags widgets and the behavior tree
 // inspectors: the bags of the folders the pages follow (rosbag.ts), the
-// recordings going on (ros2 bag record), and the playback (ros2 bag play),
-// one at a time, paused, sped up and sought through its player's services.
+// recordings going on (ros2 bag record), the playback (ros2 bag play), one
+// at a time, paused, sped up and sought through its player's services, and
+// the repair of a bag whose recording did not end (rosbag_repair.ts), one at
+// a time too.
 // They are the server's, not a page's: every page sees them, any stops them.
 
 import { promises as fs } from 'node:fs';
@@ -12,6 +14,7 @@ import {
   playbackPosition,
   type BagCapabilities,
   type BagInfo,
+  type BagRepair,
   type BagsRequest,
   type Playback,
   type PlayRequest,
@@ -22,6 +25,7 @@ import type { Ros } from './ros.ts';
 import { bagInfo, bagPath, folderSize, listBags, newBagFolder, type BagCache } from './rosbag.ts';
 import { pluginNames } from './rosbag_format.ts';
 import { ros2BagList, Ros2Bag } from './rosbag_process.ts';
+import { repairBag, type RepairProgress } from './rosbag_repair.ts';
 import { errorMessage, type Logger } from './util.ts';
 
 export type BagsWatcher = (update: Omit<BagsUpdate, 'type' | 'id'>) => void;
@@ -30,6 +34,8 @@ export type BagsWatcher = (update: Omit<BagsUpdate, 'type' | 'id'>) => void;
 const LIST_MS = 2000;
 // How often the recordings' sizes are
 const SIZE_MS = 1000;
+// How often a repair's progress is
+const REPAIR_PROGRESS_MS = 500;
 const CALL_TIMEOUT_MS = 3000;
 // ros2 bag play's node
 const PLAYER = '/rosbag2_player';
@@ -65,6 +71,7 @@ export class Rosbags {
   // By folder
   private readonly recordings = new Map<string, RecordingEntry>();
   private playback: { state: Playback; process: Ros2Bag | null } | null = null;
+  private repairing: { path: string; progress: RepairProgress; controller: AbortController; sent: number } | null = null;
   private controls: Promise<unknown> = Promise.resolve();
   private readonly folders = new Map<string, FolderWatch>();
   private readonly cache: BagCache = new Map();
@@ -148,6 +155,11 @@ export class Rosbags {
       }
       case 'stop-playback':
         return this.stopPlayback().then(() => null);
+      case 'repair':
+        return this.repair(request.path);
+      case 'cancel-repair':
+        this.repairing?.controller.abort();
+        return Promise.resolve(null);
       default:
         return this.control(request);
     }
@@ -214,6 +226,9 @@ export class Rosbags {
         if (this.playback?.process && this.playback.state.state !== 'ended' && this.playback.state.path === location) {
           throw new Error(`${path.basename(location)} is being played: stop it first`);
         }
+        if (this.repairing?.path === location) {
+          throw new Error(`${path.basename(location)} is being repaired: cancel it first`);
+        }
         await bagInfo(location);
         if ((await fs.stat(location)).isDirectory()) {
           const entries = await fs.readdir(location, { withFileTypes: true });
@@ -243,6 +258,9 @@ export class Rosbags {
     const location = bagPath(request.path);
     if (this.recordings.has(location)) {
       throw new Error(`${path.basename(location)} is being recorded: stop it first`);
+    }
+    if (this.repairing?.path === location) {
+      throw new Error(`${path.basename(location)} is being repaired: wait for it`);
     }
     const info = await bagInfo(location);
     const duration = info.duration ?? 0;
@@ -291,8 +309,56 @@ export class Rosbags {
     return state;
   }
 
+  // Writes the metadata.yaml of a bag whose recording did not end, from its
+  // files (see rosbag_repair.ts): resolves once written, its progress sent
+  // meanwhile with the bags. One bag at a time, cancelled by cancel-repair.
+  async repair(input: string): Promise<BagRepair> {
+    const location = bagPath(input);
+    const name = path.basename(location);
+    if (this.repairing) {
+      throw new Error(`${path.basename(this.repairing.path)} is being repaired: one bag at a time`);
+    }
+    if (this.recordings.has(location)) {
+      throw new Error(`${name} is being recorded: stopping it completes it`);
+    }
+    if (this.playback?.process && this.playback.state.state !== 'ended' && this.playback.state.path === location) {
+      throw new Error(`${name} is being played: stop it first`);
+    }
+    const repairing = { path: location, progress: { done: 0, total: 0 }, controller: new AbortController(), sent: 0 };
+    this.repairing = repairing;
+    this.changed();
+    try {
+      const repair = await repairBag(location, {
+        distro: this.distro,
+        signal: repairing.controller.signal,
+        onProgress: (progress) => {
+          repairing.progress = progress;
+          if (Date.now() - repairing.sent >= REPAIR_PROGRESS_MS) {
+            repairing.sent = Date.now();
+            this.sendFolders();
+          }
+        },
+      });
+      const left = repair.skipped.length ? `; left out: ${repair.skipped.map((file) => `${file.name} (${file.reason})`).join(', ')}` : '';
+      this.logger.info(`Repaired ${location}: its metadata.yaml written, ${repair.messages} messages in ${repair.files.length} files${left}`);
+      return repair;
+    } catch (e) {
+      if (repairing.controller.signal.aborted) {
+        throw new Error(`The repair of ${name} was cancelled`);
+      }
+      this.logger.warn(`Cannot repair ${location}: ${errorMessage(e)}`);
+      throw e;
+    } finally {
+      this.repairing = null;
+      this.cache.delete(location);
+      this.changed();
+      this.refresh();
+    }
+  }
+
   // The recordings completed and the playback stopped, as the server stops
   async stopAll(): Promise<void> {
+    this.repairing?.controller.abort();
     const processes = [...this.recordings.values()].flatMap((entry) => entry.process ?? []);
     this.recordings.clear();
     if (this.playback?.process) {
@@ -385,9 +451,7 @@ export class Rosbags {
     for (const listener of this.listeners) {
       listener();
     }
-    for (const watch of this.folders.values()) {
-      this.sendAll(watch);
-    }
+    this.sendFolders();
   }
 
   // The folders read again now
@@ -429,22 +493,29 @@ export class Rosbags {
       }
     }
     if (changed) {
-      for (const watch of this.folders.values()) {
-        this.sendAll(watch);
-      }
+      this.sendFolders();
+    }
+  }
+
+  private sendFolders(): void {
+    for (const watch of this.folders.values()) {
+      this.sendAll(watch);
     }
   }
 
   private update(watch: FolderWatch): Omit<BagsUpdate, 'type' | 'id'> {
     const bags =
       watch.bags?.map((bag) => {
+        if (this.repairing?.path === bag.path) {
+          return { ...bag, repairable: false, repair: { ...this.repairing.progress } };
+        }
         const recording = this.recording(bag.path);
         if (!recording) {
           return bag;
         }
         // Its files are being written: what it has so far
         const topics = bag.topics.length ? bag.topics : recording.topics.map((name) => ({ name, type: '', count: null }));
-        return { ...bag, recording: true, size: recording.size, topics, problem: null };
+        return { ...bag, recording: true, size: recording.size, topics, problem: null, repairable: false };
       }) ?? null;
     return {
       folder: watch.folder,

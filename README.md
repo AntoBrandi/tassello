@@ -204,7 +204,7 @@ after the others on the devices already arranged.
 | **ROS Monitor** | The ROS graph, as the `ros2` command line shows it, on three sheets: its topics, services and actions, filtered by name or type, the hidden ones on demand. A topic's messages, their rate, bandwidth and delay, its publishers and subscriptions with their QoS and those that cannot talk, a message to publish once or at a rate (`ros2 topic echo`, `hz`, `bw`, `delay`, `info -v`, `pub`); a service to call, once or at a rate (`ros2 service call`, `info`, `echo`); every goal of an action, whoever sent it, with its feedback, and a goal to send or cancel (`ros2 action send_goal`, `info`); their types' definitions (`ros2 interface show`) |
 | **Plot** | Numbers of any topic over time, as rqt_plot and PlotJuggler plot them: `/odom.twist.twist.linear.x`, a battery's voltage, joints' efforts (named by their joints), up to 8 series on a chart, from every message. Paused, zoomed and scrolled through time, each series shown or hidden; what is shown exported as CSV. Its series are picked in the widget, from the topics of the graph and the fields of their messages, or listed in its properties |
 | **Parameters** | Nodes' parameters, as rqt_reconfigure and `ros2 param` show them: the nodes of the graph, and the parameters of the one chosen grouped by their prefixes, each edited in place (a switch, a slider within its range, a field), live as they change wherever they are set. Their descriptions, ranges and constraints (`ros2 param describe`); new ones set and undeclared ones deleted (`set`, `delete`); all of them dumped as YAML, downloaded or saved on the robot (`dump`), and loaded from a YAML file of the robot or of the page's device (`load`) |
-| **Rosbags** | The robot's rosbags, as `ros2 bag` makes and reads them: those of a folder, the newest first, with when, how long and how big, their storage and compression, each topic's type, count and rate (`ros2 bag info`); downloaded, deleted, or played on the robot's topics (`ros2 bag play`: paused, sought, sped up, looped, some topics only). New ones recorded (`ros2 bag record`): topics chosen from the graph, all of them, or matching an expression, with rosbag2's options: the storage (MCAP, SQLite) and its preset, a new file by size or duration, compression of each file or message. Every page sees the recordings and the playback, the behavior tree inspectors' too |
+| **Rosbags** | The robot's rosbags, as `ros2 bag` makes and reads them: those of a folder, the newest first, with when, how long and how big, their storage and compression, each topic's type, count and rate (`ros2 bag info`); downloaded, deleted, or played on the robot's topics (`ros2 bag play`: paused, sought, sped up, looped, some topics only), and repaired when their recording did not end (their `metadata.yaml` written from their files, compressed bags too). New ones recorded (`ros2 bag record`): topics chosen from the graph, all of them, or matching an expression, with rosbag2's options: the storage (MCAP, SQLite) and its preset, a new file by size or duration, compression of each file or message. Every page sees the recordings and the playback, the behavior tree inspectors' too |
 | **File Manager** | The robot's files: folders unfolded in place, places (home, the ROS workspaces, bookmarks) and the disks' free space, an entry's details and permissions, what takes a folder's space. Make, rename, cut, copy, paste, drag onto folders, delete, download (folders as `.tar.gz`) and upload (drop files and folders onto it). Text files edited in tabs as gedit does: highlighting, search and replace, undo; images and PGM maps shown |
 | **Terminal** | A shell on the robot, or a command (`htop`, `tmux attach`), in a full terminal: colours, full screen programs, the mouse. It outlives the page: reloaded, reconnected or shown again, it is as it was. On touch screens, the keys phones lack, as Termux has them: Esc, Tab, Ctrl, Alt, Home, End, the arrows, Page Up and Down, and while typing the terminal fills the screen above the on-screen keyboard |
 | **System Monitor** | The robot's computer, as top, sensors and a Jetson's jtop show it: the CPU's load, of each core, and their frequencies; the memory and swap; the temperatures by chip, and the fans; a Raspberry Pi's throttling (under-voltage, capped frequency, now and since boot); the GPUs (a Jetson's, NVIDIA's, AMD's) and the power rails (a Jetson's); the disks' traffic and space; the networks' traffic. With charts of the last 5 minutes |
@@ -480,7 +480,19 @@ Notes on some of them:
   another): its folders holding a bag, and its lone `.mcap` and `.db3` files, the newest first,
   read again every 2 s while shown. What a bag holds is read from its `metadata.yaml` (Humble's
   and Jazzy's); a bag without it (its recording killed) from its files: MCAP's summary, SQLite's
-  tables (up to 64 MB), and it says so (`ros2 bag reindex` makes the metadata). A bag's details
+  tables (up to 64 MB), and it says so. *Repair* writes the missing `metadata.yaml`, without which
+  `ros2 bag` plays no bag, as `ros2 bag reindex` does, but for compressed bags too (Humble's
+  reindex skips their `.zstd` files): the robot reads each file whole, as rosbag2 will
+  (decompressed, MCAP's chunks one after the other, SQLite's messages by batches), and counts each
+  topic's messages over the bag's time span, with the QoS rosbag2 stored with them, in the
+  version they are of (Humble's 5, Jazzy's 9). A file cut short counts up to its last whole chunk,
+  as far as rosbag2 plays it; one of which nothing can be read (empty, cut short in its first
+  chunk, compressed only in part) is left out. The file being recorded when a compressed bag's
+  recording stopped is compressed, its `.zstd` made beside it, as rosbag2 would have, and a
+  `.zstd` cut short is made again from its file if still there; nothing else of the bag changes.
+  One bag at a time, its progress shown to every page, and cancelled at will; a bag open in
+  another process, or written to in the last 10 s, is taken as being recorded and refused. A
+  bag's details
   give its path, its time span, its files, and its topics with their types, counts and rates.
   *Download* sends a folder as a `.tar.gz`, a file as it is; *Delete* deletes bags only, a folder
   holding anything else than a bag's files being refused (the File Manager deletes those).
@@ -668,7 +680,7 @@ of every request and of every message of the page; the page only hides what a ro
 | Role | Can |
 |---|---|
 | **Viewer** | Watch: cameras, maps, the robot model, logs, diagnostics, plots, the ROS graph and its messages, parameters, rosbags, the system monitor, behavior trees |
-| **Operator** | Also operate the robot: drive it (Teleop, Arm Teleop), send navigation goals and pose estimates, press buttons, lock a twist_mux's locks and switch its joystick relay, publish on topics, call services, send and cancel goals, set and load parameters, start and stop services, record and play rosbags, plugins' requests; see the robot's files and networks |
+| **Operator** | Also operate the robot: drive it (Teleop, Arm Teleop), send navigation goals and pose estimates, press buttons, lock a twist_mux's locks and switch its joystick relay, publish on topics, call services, send and cancel goals, set and load parameters, start and stop services, record, play and repair rosbags, plugins' requests; see the robot's files and networks |
 | **Administrator** | Also everything about the robot's system: edit the panels, open terminals, change the files (File Manager, behavior tree files), change the networks and read their passwords, delete rosbags, manage the users |
 
 **Who sees a panel** is its choice: in edit mode, ⋯ → *Visible to*: viewers and up, operators and
@@ -794,7 +806,8 @@ Safety and bandwidth are the server's concern:
   the moment it takes to save them, activating a connection being another command.
 - Rosbags are recorded and played by `ros2 bag`, the robot's own, as children of the server:
   one recording per folder, for every page (the behavior tree inspectors' among them), one
-  playback. A folder of bags is read once for every page showing it, every 2 s, a bag's metadata
+  playback. A repair is the server's own, one at a time: its files streamed (zstd decompressed
+  on the way, never whole in memory), its progress sent every half second. A folder of bags is read once for every page showing it, every 2 s, a bag's metadata
   again only when its files change; the recordings' sizes every second.
 - A topic plotted is followed once for every page (the ROS Monitor's subscription, with its
   publishers' QoS): its messages are deserialized only while a page plots it, and each page gets

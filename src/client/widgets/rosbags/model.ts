@@ -2,7 +2,8 @@
 // inspector's: names and paths of new bags, durations, rates, what a bag or a
 // recording holds in a few words, and the units of the record options.
 
-import type { BagInfo, BagTopic, Recording, RecordOptions } from '../../../shared/rosbag.ts';
+import type { BagInfo, BagRepair, BagTopic, Recording, RecordOptions } from '../../../shared/rosbag.ts';
+import { formatSize } from '../file_manager/model.ts';
 
 // 1:05, 1:02:09
 export function elapsed(ms: number): string {
@@ -145,4 +146,33 @@ export function filterBags(bags: readonly BagInfo[], text: string): BagInfo[] {
   return bags.filter((bag) =>
     terms.some((term) => bag.name.toLowerCase().includes(term) || bag.topics.some((topic) => topic.name.toLowerCase().includes(term))),
   );
+}
+
+// How far a repair is: 0 to 100
+export function repairPercent(progress: { done: number; total: number }): number {
+  return progress.total > 0 ? Math.min(100, Math.floor((progress.done / progress.total) * 100)) : 0;
+}
+
+// Reading its files, 45% (1.2 GB of 2.6 GB)
+export function repairStatus(progress: { done: number; total: number }): string {
+  if (progress.total === 0) {
+    return 'Repairing: looking at its files…';
+  }
+  return `Repairing: reading its files, ${repairPercent(progress)}% (${formatSize(progress.done)} of ${formatSize(progress.total)})`;
+}
+
+const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
+// What a repair did, in a sentence
+export function repairSummary(repair: BagRepair): string {
+  const parts = [
+    `Repaired ${baseName(repair.path)}: ${plural(repair.messages, 'message')} over ${formatDuration(repair.duration)}, in ${plural(repair.files.length, 'file')}`,
+  ];
+  if (repair.compressed.length > 0) {
+    parts.push(`${repair.compressed.map((name) => name.replace(/\.zstd$/i, '')).join(', ')} compressed, as its recording would have`);
+  }
+  if (repair.skipped.length > 0) {
+    parts.push(`left out, as nothing of them can be read: ${repair.skipped.map((file) => `${file.name} (${file.reason})`).join(', ')}`);
+  }
+  return parts.join('; ');
 }
