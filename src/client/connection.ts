@@ -18,7 +18,7 @@ import type {
 import type { NetworkRequest, NetworkResult, NetworkSecrets } from '../shared/networking.ts';
 import type { ParamResult, ParamValue } from '../shared/parameters.ts';
 import { unpackPoints, type Points } from '../shared/points.ts';
-import type { BagsRequest, Playback, Recording, RecordOptions } from '../shared/rosbag.ts';
+import type { BagRepair, BagsRequest, Playback, Recording, RecordOptions } from '../shared/rosbag.ts';
 import {
   FRAME_HEADER_BYTES,
   IMAGE_FORMATS,
@@ -300,12 +300,14 @@ const RESULT_MARGIN_MS = 2000;
 // Of ros2 bag record, to start or to complete the bag; of ros2 bag play, to
 // open it
 const RECORD_TIMEOUT_MS = 20_000;
-// Of the rosbags' actions: deleting large ones takes a while
+// Of the rosbags' actions: deleting large ones takes a while, repairing them
+// (reading all their files) longer still
 const BAGS_TIMEOUTS: Partial<Record<BagsRequest['action'], number>> = {
   record: RECORD_TIMEOUT_MS,
   stop: RECORD_TIMEOUT_MS,
   play: RECORD_TIMEOUT_MS,
   delete: 60_000,
+  repair: 6 * 3600_000,
 };
 // Of a network action: NetworkManager is given a minute to activate a
 // connection
@@ -784,12 +786,13 @@ export class Connection {
   }
 
   // Records (ros2 bag record), stops a recording, deletes bags, plays one
-  // (ros2 bag play) and controls its playback: see BagsRequest for what each
-  // resolves with
+  // (ros2 bag play) and controls its playback, repairs one: see BagsRequest
+  // for what each resolves with
   bagsAction(request: Extract<BagsRequest, { action: 'record' }>): Promise<Recording>;
   bagsAction(request: Extract<BagsRequest, { action: 'play' }>): Promise<Playback>;
   bagsAction(request: Extract<BagsRequest, { action: 'stop' }>): Promise<string | null>;
   bagsAction(request: Extract<BagsRequest, { action: 'delete' }>): Promise<string[]>;
+  bagsAction(request: Extract<BagsRequest, { action: 'repair' }>): Promise<BagRepair>;
   bagsAction(request: BagsRequest): Promise<null>;
   bagsAction(request: BagsRequest): Promise<unknown> {
     const id = this.nextId++;

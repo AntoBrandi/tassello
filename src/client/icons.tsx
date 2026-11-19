@@ -265,6 +265,9 @@ export const PauseIcon = icon(
     <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
+export const WrenchIcon = icon(
+  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8Z" />,
+);
 export const FilmIcon = icon(
   <>
     <rect x="3" y="4" width="18" height="16" rx="2" />

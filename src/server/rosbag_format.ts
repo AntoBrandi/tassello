@@ -203,6 +203,125 @@ export function parseMetadata(yaml: string): BagMetadata {
   };
 }
 
+// What a repair writes: a bag's metadata.yaml, as rosbag2 writes it when its
+// recording ends. Times in nanoseconds, beyond a number's integers.
+export interface RepairedTopic {
+  name: string;
+  type: string;
+  serializationFormat: string;
+  // The QoS of its publishers, as rosbag2 stored them with the topic: YAML,
+  // Humble's (numbers) or Jazzy's (names); '' if unknown
+  qos: string;
+  // RIHS01_…, since Jazzy; '' if unknown
+  typeHash: string;
+  count: number;
+}
+
+export interface RepairedFile {
+  // As rosbag2 names it in files: uncompressed
+  path: string;
+  start: bigint;
+  duration: bigint;
+  count: number;
+}
+
+export interface RepairedMetadata {
+  storage: string;
+  start: bigint;
+  duration: bigint;
+  count: number;
+  topics: RepairedTopic[];
+  // rosbag2's: FILE or MESSAGE, zstd
+  compression: { mode: 'FILE' | 'MESSAGE'; format: string } | null;
+  // As they are in its folder, compressed ones too
+  relativePaths: string[];
+  files: RepairedFile[];
+  // Of the rosbag2 that recorded it, if it said: humble, jazzy
+  distro: string;
+}
+
+// Jazzy's QoS name their policies (history: keep_last), Humble's number them
+const NAMED_QOS = /^\s*-?\s*history:\s*[A-Za-z_]/m;
+
+// The version to write: that of the QoS rosbag2 stored with the topics, as
+// the version tells rosbag2 how to read them (5: Humble's, read by every
+// later distribution; 9: Jazzy's); else the distribution's
+export function metadataVersion(topics: readonly RepairedTopic[], distro: string): 5 | 9 {
+  if (topics.some((topic) => NAMED_QOS.test(topic.qos))) {
+    return 9;
+  }
+  if (topics.some((topic) => topic.qos.trim())) {
+    return 5;
+  }
+  return ['', 'foxy', 'galactic', 'humble', 'iron'].includes(distro.toLowerCase()) ? 5 : 9;
+}
+
+// A scalar as yaml-cpp writes it: plain if it can be, else double quoted
+function yamlScalar(value: string): string {
+  return /^[A-Za-z0-9_/~.][\w/~.:-]*$/.test(value) && !/^(~|null|true|false|yes|no|on|off)$/i.test(value)
+    ? value
+    : JSON.stringify(value);
+}
+
+// A metadata.yaml as rosbag2 writes it, in that version (see metadataVersion)
+export function metadataYaml(metadata: RepairedMetadata, version: 5 | 9): string {
+  const lines = [
+    'rosbag2_bagfile_information:',
+    `  version: ${version}`,
+    `  storage_identifier: ${yamlScalar(metadata.storage)}`,
+    '  duration:',
+    `    nanoseconds: ${metadata.duration}`,
+    '  starting_time:',
+    `    nanoseconds_since_epoch: ${metadata.start}`,
+    `  message_count: ${metadata.count}`,
+    '  topics_with_message_count:',
+  ];
+  if (metadata.topics.length === 0) {
+    lines.push('    []');
+  }
+  for (const topic of metadata.topics) {
+    lines.push(
+      '    - topic_metadata:',
+      `        name: ${yamlScalar(topic.name)}`,
+      `        type: ${yamlScalar(topic.type)}`,
+      `        serialization_format: ${yamlScalar(topic.serializationFormat || 'cdr')}`,
+    );
+    const qos = topic.qos.replace(/\s+$/, '');
+    if (version === 5) {
+      lines.push(`        offered_qos_profiles: ${JSON.stringify(qos)}`);
+    } else if (qos && NAMED_QOS.test(qos)) {
+      lines.push('        offered_qos_profiles:', ...qos.split('\n').map((line) => `          ${line}`));
+    } else {
+      lines.push('        offered_qos_profiles: []');
+    }
+    if (version >= 9) {
+      lines.push(`        type_description_hash: ${topic.typeHash ? yamlScalar(topic.typeHash) : '""'}`);
+    }
+    lines.push(`      message_count: ${topic.count}`);
+  }
+  lines.push(
+    `  compression_format: ${metadata.compression ? yamlScalar(metadata.compression.format) : '""'}`,
+    `  compression_mode: ${metadata.compression ? metadata.compression.mode : '""'}`,
+    '  relative_file_paths:',
+    ...metadata.relativePaths.map((file) => `    - ${yamlScalar(file)}`),
+    '  files:',
+  );
+  for (const file of metadata.files) {
+    lines.push(
+      `    - path: ${yamlScalar(file.path)}`,
+      '      starting_time:',
+      `        nanoseconds_since_epoch: ${file.start}`,
+      '      duration:',
+      `        nanoseconds: ${file.duration}`,
+      `      message_count: ${file.count}`,
+    );
+  }
+  if (version >= 9) {
+    lines.push('  custom_data: ~', `  ros_distro: ${yamlScalar(metadata.distro || 'jazzy')}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 // ── Command lines ────────────────────────────────────────────────────────────
 
 // Before Jazzy, ros2 bag record took its topics as arguments, and -a was all
@@ -407,6 +526,10 @@ export function checkBagsRequest(value: unknown): BagsRequest {
       }
       return { action: 'delete', paths: request.paths.map(pathOf) };
     }
+    case 'repair':
+      return { action: 'repair', path: pathOf(request.path) };
+    case 'cancel-repair':
+      return { action: 'cancel-repair' };
     case 'play':
       return { action: 'play', ...checkPlayRequest(request) };
     case 'pause':

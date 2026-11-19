@@ -11,7 +11,7 @@ the roles before it can:
 | Role | Can |
 |---|---|
 | **viewer** | Watch: cameras, maps, the robot model, logs, diagnostics, plots, the ROS graph, parameters, rosbags, the system monitor |
-| **operator** | Also operate the robot: drive, send goals, press buttons, publish, call services, set parameters, record and play rosbags, start and stop services, plugins' requests; read the robot's files and networks |
+| **operator** | Also operate the robot: drive, send goals, press buttons, publish, call services, set parameters, record, play and repair rosbags, start and stop services, plugins' requests; read the robot's files and networks |
 | **admin** | Also the robot's system: edit panels, terminals, change files and networks, save behavior tree files, delete rosbags, manage users |
 
 **The server decides; the page only hides.** Every REST request and every WebSocket message is

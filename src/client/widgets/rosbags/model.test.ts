@@ -10,6 +10,9 @@ import {
   formatDuration,
   inUnit,
   newBagPath,
+  repairPercent,
+  repairStatus,
+  repairSummary,
   optionsSummary,
   recordingWhat,
   SIZE_UNITS,
@@ -64,10 +67,31 @@ test('sizes and durations in the largest unit they are whole numbers of', () => 
 test('bags filtered by their name or their topics', () => {
   const bag = (name: string, topics: string[]): BagInfo => ({
     path: `/bags/${name}`, name, size: 0, modified: 0, storage: 'mcap', start: null, duration: null, messages: null,
-    topics: topics.map((topic) => ({ name: topic, type: '', count: null })), files: [], compression: null, recording: false, problem: null,
+    topics: topics.map((topic) => ({ name: topic, type: '', count: null })), files: [], compression: null, recording: false, problem: null, repairable: false, repair: null,
   });
   const bags = [bag('lab_run', ['/scan']), bag('field_test', ['/gps/fix', '/odom'])];
   assert.deepEqual(filterBags(bags, 'LAB').map((b) => b.name), ['lab_run']);
   assert.deepEqual(filterBags(bags, 'gps; scan').map((b) => b.name), ['lab_run', 'field_test']);
   assert.equal(filterBags(bags, ' ').length, 2);
+});
+
+test('a repair, as the widget says it', () => {
+  assert.equal(repairStatus({ done: 0, total: 0 }), 'Repairing: looking at its files…');
+  assert.equal(repairPercent({ done: 999, total: 1000 }), 99);
+  assert.equal(repairPercent({ done: 5, total: 0 }), 0);
+  assert.match(repairStatus({ done: 1.2e9, total: 2.6e9 }), /^Repairing: reading its files, 46% \(.+ of .+\)$/);
+  const repair = {
+    path: '/bags/run',
+    version: 5,
+    messages: 1653,
+    duration: 6359.78,
+    files: ['run_0.mcap.zstd', 'run_1.mcap.zstd'],
+    skipped: [],
+    compressed: [],
+  };
+  assert.equal(repairSummary(repair), 'Repaired run: 1653 messages over 6.4 s, in 2 files');
+  assert.equal(
+    repairSummary({ ...repair, messages: 1, files: ['run_0.mcap.zstd'], compressed: ['run_0.mcap.zstd'], skipped: [{ name: 'run_1.mcap', reason: 'empty' }] }),
+    'Repaired run: 1 message over 6.4 s, in 1 file; run_0.mcap compressed, as its recording would have; left out, as nothing of them can be read: run_1.mcap (empty)',
+  );
 });

@@ -10939,6 +10939,9 @@ textarea {
 }
 
 .bag-problem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 8px 6px 10px;
   padding: 3px 8px;
   border-left: 3px solid var(--warning);
@@ -10946,6 +10949,50 @@ textarea {
   background: var(--surface-2);
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.bag-problem-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.bag-problem .bag-small {
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.bag-problem .bag-small svg {
+  margin-right: 2px;
+}
+
+/* A repair going on: how far, in the accent's colour */
+.bag-problem.bag-repair {
+  border-left-color: var(--accent);
+}
+
+.bag-repair-meter {
+  flex: 0 1 120px;
+  min-width: 40px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+
+.bag-repair-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bag-repair-meter > span {
+    transition: none;
+  }
 }
 
 .bag-details {

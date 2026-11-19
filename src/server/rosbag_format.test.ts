@@ -7,11 +7,14 @@ import {
   checkPlayRequest,
   checkRecordOptions,
   checkRecordRequest,
+  metadataVersion,
+  metadataYaml,
   parseMetadata,
   parseYaml,
   playArguments,
   pluginNames,
   recordArguments,
+  type RepairedMetadata,
 } from './rosbag_format.ts';
 
 // As Humble writes it, its files compressed whole
@@ -232,4 +235,79 @@ test('where a playback is: on at its rate while playing, looping or stopping at 
   assert.equal(playbackPosition(playback, 60_000), 10_000);
   assert.equal(playbackPosition({ ...playback, loop: true }, 10_000), 1000);
   assert.equal(playbackPosition({ ...playback, state: 'paused' }, 60_000), 1000);
+});
+
+// What rosbag2 stores with a topic: Humble's QoS, numbered; Jazzy's, named
+const HUMBLE_QOS = '- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  avoid_ros_namespace_conventions: false';
+const JAZZY_QOS = '- history: unknown\n  depth: 0\n  reliability: reliable\n  durability: volatile\n  avoid_ros_namespace_conventions: false';
+
+function repaired(qos: string, typeHash = ''): RepairedMetadata {
+  return {
+    storage: 'mcap',
+    start: 1794990573710054968n,
+    duration: 4572440163n,
+    count: 1190,
+    topics: [
+      { name: '/chatter', type: 'std_msgs/msg/String', serializationFormat: 'cdr', qos, typeHash, count: 892 },
+      { name: '/cmd', type: 'geometry_msgs/msg/Twist', serializationFormat: 'cdr', qos: '', typeHash: '', count: 298 },
+    ],
+    compression: { mode: 'FILE', format: 'zstd' },
+    relativePaths: ['run_0.mcap.zstd', 'run_1.mcap.zstd'],
+    files: [
+      { path: 'run_0.mcap', start: 1794990573710054968n, duration: 611264313n, count: 160 },
+      { path: 'run_1.mcap', start: 1794990574326443259n, duration: 3956051872n, count: 1030 },
+    ],
+    distro: 'jazzy',
+  };
+}
+
+test('a repair’s metadata.yaml, as Humble’s rosbag2 writes it and as Jazzy’s does', () => {
+  // The version the QoS stored with the topics are of, else the distribution's
+  assert.equal(metadataVersion(repaired(HUMBLE_QOS).topics, 'jazzy'), 5);
+  assert.equal(metadataVersion(repaired(JAZZY_QOS).topics, 'humble'), 9);
+  assert.equal(metadataVersion(repaired('').topics, 'humble'), 5);
+  assert.equal(metadataVersion(repaired('').topics, 'jazzy'), 9);
+  assert.equal(metadataVersion(repaired('').topics, ''), 5);
+
+  const humble = metadataYaml(repaired(HUMBLE_QOS), 5);
+  assert.match(humble, /^rosbag2_bagfile_information:\n  version: 5\n  storage_identifier: mcap\n/);
+  assert.match(humble, /\n        offered_qos_profiles: "- history: 3\\n  depth: 0\\n/);
+  assert.match(humble, /\n  compression_format: zstd\n  compression_mode: FILE\n  relative_file_paths:\n    - run_0.mcap.zstd\n/);
+  assert.match(humble, /\n  files:\n    - path: run_0.mcap\n      starting_time:\n        nanoseconds_since_epoch: 1794990573710054968\n/);
+  assert.doesNotMatch(humble, /type_description_hash|ros_distro/);
+  // What Tassello reads of it
+  const read = parseMetadata(humble);
+  assert.deepEqual(
+    { version: read.version, storage: read.storage, messages: read.messages, compression: read.compression, files: read.files },
+    { version: 5, storage: 'mcap', messages: 1190, compression: { mode: 'file', format: 'zstd' }, files: ['run_0.mcap.zstd', 'run_1.mcap.zstd'] },
+  );
+  assert.equal(read.start, 1794990573710.054);
+  assert.equal(read.duration, 4572.44);
+  assert.deepEqual(read.topics, [
+    { name: '/chatter', type: 'std_msgs/msg/String', count: 892 },
+    { name: '/cmd', type: 'geometry_msgs/msg/Twist', count: 298 },
+  ]);
+  // The QoS as stored, in a quoted scalar
+  assert.equal((parseYaml(humble) as any).rosbag2_bagfile_information.topics_with_message_count[0].topic_metadata.offered_qos_profiles, HUMBLE_QOS);
+
+  const jazzy = metadataYaml(repaired(JAZZY_QOS, 'RIHS01_df66'), 9);
+  assert.match(jazzy, /\n        offered_qos_profiles:\n          - history: unknown\n            depth: 0\n/);
+  assert.match(jazzy, /\n        type_description_hash: RIHS01_df66\n      message_count: 892\n/);
+  // Unknown: none
+  assert.match(jazzy, /\n        offered_qos_profiles: \[\]\n        type_description_hash: ""\n      message_count: 298\n/);
+  assert.match(jazzy, /\n  custom_data: ~\n  ros_distro: jazzy\n$/);
+  const topics = (parseYaml(jazzy) as any).rosbag2_bagfile_information.topics_with_message_count;
+  assert.equal(topics[0].topic_metadata.offered_qos_profiles[0].reliability, 'reliable');
+  assert.equal(parseMetadata(jazzy).version, 9);
+
+  // Without compression, and names to quote
+  const plain = metadataYaml({ ...repaired(HUMBLE_QOS), compression: null, relativePaths: ['run #1.mcap'] }, 5);
+  assert.match(plain, /\n  compression_format: ""\n  compression_mode: ""\n  relative_file_paths:\n    - "run #1.mcap"\n/);
+  assert.deepEqual(parseMetadata(plain).files, ['run #1.mcap']);
+});
+
+test('a repair is asked for a bag', () => {
+  assert.deepEqual(checkBagsRequest({ action: 'repair', path: ' ~/bags/run ' }), { action: 'repair', path: '~/bags/run' });
+  assert.deepEqual(checkBagsRequest({ action: 'cancel-repair' }), { action: 'cancel-repair' });
+  assert.throws(() => checkBagsRequest({ action: 'repair' }), /A rosbag’s path/);
 });

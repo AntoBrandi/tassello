@@ -2,9 +2,11 @@
 // metadata says (ros2 bag info: when, how long, how big, their storage and
 // compression, each topic's type, count and rate), each downloaded (folders
 // as .tar.gz), deleted or played on the robot (ros2 bag play: paused, sought,
-// sped up, looped, some topics only). New ones recorded (ros2 bag record):
-// chosen topics or all of them, with rosbag2's options (storage and preset,
-// files split by size or duration, compression of each file or message).
+// sped up, looped, some topics only), repaired if their recording did not
+// end (their metadata.yaml written from their files). New ones recorded (ros2
+// bag record): chosen topics or all of them, with rosbag2's options (storage
+// and preset, files split by size or duration, compression of each file or
+// message).
 // The recordings and the playback are the robot's: every page sees them,
 // those of the behavior tree inspectors too (see src/server/rosbags.ts).
 
@@ -16,7 +18,7 @@ import { fsApi } from '../../api.ts';
 import { connection } from '../../connection.ts';
 import { useDialogs } from '../../dialogs.tsx';
 import { FileBrowser } from '../../editor/FileInput.tsx';
-import { CloseIcon, DownloadIcon, FilmIcon, FolderIcon, MoreIcon, PlayIcon, RecordIcon, SearchIcon, StopIcon } from '../../icons.tsx';
+import { CloseIcon, DownloadIcon, FilmIcon, FolderIcon, MoreIcon, PlayIcon, RecordIcon, SearchIcon, StopIcon, WrenchIcon } from '../../icons.tsx';
 import { notify } from '../../notifications.tsx';
 import { copyText, startDownload } from '../file_manager/folders.ts';
 import { formatDate, formatFullDate, formatSize } from '../file_manager/model.ts';
@@ -24,7 +26,19 @@ import { ContextMenu, type MenuItem } from '../file_manager/parts.tsx';
 import { useNow } from '../monitor/parts.tsx';
 import { defineWidget, type WidgetProps } from '../types.ts';
 import { PlayDialog, RecordDialog } from './BagDialogs.tsx';
-import { baseName, elapsed, filterBags, formatDuration, optionsSummary, recordingWhat, storageLabel, topicRate } from './model.ts';
+import {
+  baseName,
+  elapsed,
+  filterBags,
+  formatDuration,
+  optionsSummary,
+  recordingWhat,
+  repairPercent,
+  repairStatus,
+  repairSummary,
+  storageLabel,
+  topicRate,
+} from './model.ts';
 import { FALLBACK_CAPABILITIES, PlaybackControls } from './parts.tsx';
 
 interface RosbagsConfig {
@@ -307,10 +321,36 @@ function RosbagsWidget({ config }: WidgetProps<RosbagsConfig>) {
 
   const download = (bag: BagInfo) => startDownload(fsApi.downloadUrl([bag.path]));
 
+  // Its metadata.yaml written from its files: the server's work, its progress
+  // with the bags, every page seeing it
+  const repair = async (bag: BagInfo) => {
+    const files = bag.files.length === 1 ? 'its file' : `its ${bag.files.length} files`;
+    const confirmed = await dialogs.confirm({
+      title: `Repair ${bag.name}?`,
+      message:
+        `Its recording did not end, so rosbag2 did not write its metadata.yaml, without which ros2 bag does not play it. ` +
+        `The robot reads ${files} (${formatSize(bag.size)}) and writes it, as ros2 bag reindex does, compressed bags too. ` +
+        `The files are left as they are, but for the one being recorded when the recording stopped, compressed if the others are. ` +
+        `Repair it only once it is no longer being recorded.`,
+      confirmLabel: 'Repair',
+    });
+    if (!confirmed) {
+      return;
+    }
+    try {
+      notify(repairSummary(await connection.bagsAction({ action: 'repair', path: bag.path })));
+    } catch (e) {
+      const text = message(e);
+      notify(/was cancelled$/.test(text) ? text : `Could not repair ${bag.name}: ${text}`, /was cancelled$/.test(text) ? 'info' : 'error');
+    }
+  };
+
+  const cancelRepair = () => void act({ action: 'cancel-repair' }, 'Could not cancel the repair');
+
   // Under its button, or where the pointer is
   const bagMenu = (event: MouseEvent<HTMLElement>, bag: BagInfo, pointer = false) => {
     const box = event.currentTarget.getBoundingClientRect();
-    const blocked = bag.recording || busy.has(bag.path);
+    const blocked = bag.recording || bag.repair !== null || busy.has(bag.path);
     setMenu({
       x: pointer ? event.clientX : box.right - 200,
       y: pointer ? event.clientY : box.bottom + 4,
@@ -320,12 +360,17 @@ function RosbagsWidget({ config }: WidgetProps<RosbagsConfig>) {
         { label: bag.path.endsWith('.mcap') || bag.path.endsWith('.db3') ? 'Download' : 'Download as .tar.gz', run: () => download(bag), separated: true },
         { label: 'Copy the path', run: () => copy(bag.path, 'the path') },
         { label: 'Copy ros2 bag play', run: () => copy(playCommand(bag.path), 'the command') },
+        ...(bag.repairable || bag.repair
+          ? [{ label: 'Repair…', run: () => void repair(bag), disabled: !editable || blocked || repairing, separated: true }]
+          : []),
         { label: 'Delete…', run: () => void remove(bag), disabled: !editable || blocked, danger: true, separated: true },
       ],
     });
   };
 
   const recordings = update?.recordings ?? [];
+  // One bag at a time
+  const repairing = (update?.bags ?? []).some((bag) => bag.repair !== null);
   const total = (update?.bags ?? []).reduce((sum, bag) => sum + bag.size, 0);
   let status: { text: string; tone: string };
   if (!update) {
@@ -350,7 +395,7 @@ function RosbagsWidget({ config }: WidgetProps<RosbagsConfig>) {
         {bags.map((bag) => {
           const open = expanded === bag.path;
           const played = playing && playback?.path === bag.path;
-          const blocked = bag.recording || busy.has(bag.path);
+          const blocked = bag.recording || bag.repair !== null || busy.has(bag.path);
           const meta = [
             formatDate(bag.start ?? bag.modified, now),
             bag.recording ? null : formatDuration(bag.duration),
@@ -375,6 +420,7 @@ function RosbagsWidget({ config }: WidgetProps<RosbagsConfig>) {
                     <span className="bag-title-text">{bag.name}</span>
                     {bag.recording && <span className="bag-badge rec">REC</span>}
                     {played && <span className="bag-badge play">playing</span>}
+                    {bag.repair && <span className="bag-badge">repairing</span>}
                   </span>
                   <span className="bag-meta">{meta.join(' · ')}</span>
                 </button>
@@ -404,7 +450,36 @@ function RosbagsWidget({ config }: WidgetProps<RosbagsConfig>) {
                   </button>
                 </div>
               </div>
-              {bag.problem && <p className="bag-problem">{bag.problem}</p>}
+              {bag.repair ? (
+                <div className="bag-problem bag-repair" role="status">
+                  <span className="bag-problem-text">{repairStatus(bag.repair)}</span>
+                  <span className="bag-repair-meter" aria-hidden="true">
+                    <span style={{ width: `${repairPercent(bag.repair)}%` }} />
+                  </span>
+                  {editable && (
+                    <button type="button" className="button bag-small" title="Stop repairing it: nothing is written" onClick={cancelRepair}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              ) : (
+                bag.problem && (
+                  <div className="bag-problem">
+                    <span className="bag-problem-text">{bag.problem}</span>
+                    {bag.repairable && editable && (
+                      <button
+                        type="button"
+                        className="button bag-small"
+                        disabled={blocked || repairing}
+                        title={repairing ? 'Another bag is being repaired: one at a time' : 'Write its metadata.yaml from its files, for ros2 bag to play it'}
+                        onClick={() => void repair(bag)}
+                      >
+                        <WrenchIcon width={12} height={12} /> Repair
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
               {open && <BagDetails bag={bag} />}
             </li>
           );
@@ -502,7 +577,7 @@ function RosbagsWidget({ config }: WidgetProps<RosbagsConfig>) {
 export const rosbagsWidget = defineWidget<RosbagsConfig>({
   type: 'rosbags',
   name: 'Rosbags',
-  description: 'The robot’s rosbags: recorded with rosbag2’s options, listed with their topics, downloaded, deleted and played back.',
+  description: 'The robot’s rosbags: recorded with rosbag2’s options, listed with their topics, downloaded, deleted, played back, and repaired if their recording did not end.',
   icon: FilmIcon,
   defaultSize: { w: 8, h: 7 },
   minSize: { w: 3, h: 4 },
@@ -529,7 +604,7 @@ export const rosbagsWidget = defineWidget<RosbagsConfig>({
       label: 'View only',
       kind: 'boolean',
       default: false,
-      help: 'Lists and downloads the bags, without recording, playing or deleting: the page’s choice, not a protection',
+      help: 'Lists and downloads the bags, without recording, playing, repairing or deleting: the page’s choice, not a protection',
     },
   ],
 });

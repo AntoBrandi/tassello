@@ -108,6 +108,30 @@ export interface BagInfo {
   recording: boolean;
   // What is wrong with it, e.g. it has no metadata: its recording did not end
   problem: string | null;
+  // A bag's folder without its metadata.yaml, which a repair writes from its
+  // files (see BagRepair)
+  repairable: boolean;
+  // Being repaired: of its files' bytes, those read so far, and all
+  repair: { done: number; total: number } | null;
+}
+
+// What a repair did: the metadata.yaml its recording did not write, from
+// what its files hold (ros2 bag reindex, compressed bags too)
+export interface BagRepair {
+  path: string;
+  // Of the metadata written: 5 as Humble's rosbag2 writes it, 9 as Jazzy's
+  version: number;
+  messages: number;
+  // ms
+  duration: number;
+  // Those the metadata names, in order
+  files: string[];
+  // Those left out, nothing of them readable: cut short before their first
+  // message, empty, or compressed only in part
+  skipped: { name: string; reason: string }[];
+  // The file being recorded when the recording ended, compressed as rosbag2
+  // compresses each file of the bag: its .zstd made beside it
+  compressed: string[];
 }
 
 // ros2 bag play
@@ -166,11 +190,15 @@ export interface BagCapabilities {
 //   stop           the bag's path, null if it was not being recorded
 //   delete         the paths deleted: bags only, neither recorded nor played
 //   play           the Playback, once ros2 bag play has opened the bag
+//   repair         the BagRepair, once its metadata.yaml is written: one
+//                  bag at a time, cancel-repair stopping it (null)
 //   pause, resume, seek (ms into the bag), rate, stop-playback: null
 export type BagsRequest =
   | ({ action: 'record' } & RecordRequest)
   | { action: 'stop'; path: string }
   | { action: 'delete'; paths: string[] }
+  | { action: 'repair'; path: string }
+  | { action: 'cancel-repair' }
   | ({ action: 'play' } & PlayRequest)
   | { action: 'pause' }
   | { action: 'resume' }
