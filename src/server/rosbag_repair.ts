@@ -416,8 +416,15 @@ function fileStream(file: string, compressed: boolean, onBytes: (bytes: number) 
   if (typeof zlib.createZstdDecompress !== 'function') {
     throw new Error('Repairing zstd compressed rosbags needs Node.js 22.15 or newer');
   }
-  return pipeline(raw, counter, zlib.createZstdDecompress(), ignore);
+  const decompressor = zlib.createZstdDecompress();
+  // Whatever its code: Node 24.12+ says 'unexpected end of file' of a
+  // compression cut short, older versions end without a word
+  decompressor.on('error', (e) => decompressionErrors.add(e));
+  return pipeline(raw, counter, decompressor, ignore);
 }
+
+// Errors of zstd itself, not of reading its file
+const decompressionErrors = new WeakSet<Error>();
 
 // The messages of a SQLite file, counted a batch at a time
 async function scanSqlite(file: string, scan: FileScan, signal: AbortSignal | undefined, onFraction: (fraction: number) => void): Promise<ScanEnd> {
@@ -606,8 +613,7 @@ export async function repairBag(input: string, options: RepairOptions): Promise<
         const stream = fileStream(file, compressed, onBytes);
         try {
           end = await scanMcapStream(stream, scan, signal).catch((e: unknown) => {
-            const code = (e as NodeJS.ErrnoException).code;
-            throw compressed && typeof code === 'string' && code.startsWith('ZSTD_') ? new Undecompressable(errorMessage(e)) : e;
+            throw e instanceof Error && decompressionErrors.has(e) ? undecompressable(e.message) : e;
           });
         } finally {
           stream.destroy();
@@ -739,9 +745,13 @@ export async function repairBag(input: string, options: RepairOptions): Promise<
 
 function rethrowUndecompressable(e: unknown): never {
   if (e instanceof Error && /Cannot decompress/.test(e.message)) {
-    throw new Undecompressable(e.message.replace(/^Cannot decompress [^:]*: /, ''));
+    throw undecompressable(e.message.replace(/^Cannot decompress [^:]*: /, ''));
   }
   throw e;
+}
+
+function undecompressable(message: string): Undecompressable {
+  return new Undecompressable(/unexpected end/i.test(message) ? 'cut short' : message);
 }
 
 // As rosbag2 compresses a bag's file (zstd, its fastest level): beside it,
